@@ -1,0 +1,2 @@
+VF53 BASE OFICIAL CLAUDE · PWA INSTALACIÓN ANDROID · 30-jul-2026
+Cambio localizado: instalación PWA, service worker, manifest e iconos. Sin cambios en datos, módulos, tablas, gráficos ni impresión.
