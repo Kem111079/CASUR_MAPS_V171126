@@ -61,5 +61,7 @@
     "generated_at": "2026-08-09T23:12:24",
     "nc_rule": "No se inventa NC. NC viene de la columna NC del aforo_2627.xlsx; Planta se muestra cuando DESCRIP/GrCorte indica PLANTILLA/Planta; sin dato = —.",
     "chart": "inline_svg_only_tch_no_table_no_page_navigation"
-  }
+  },
+  "version_fix": "vf_23826_hist_tch_inline_scroll_fix",
+  "hist_tch_inline_fix": "selection sheet scroll + direct inline render"
 }

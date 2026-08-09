@@ -6,7 +6,7 @@ const METRICAS_URL = './data/metricas_lote.json';
 const AFORO_URL = './data/aforo_2627.json';
 const PRODUCCION_HISTORICA_PAGE_URL = './produccion_historica.html';
 const PRODUCCION_HISTORICA_URL = './data/produccion_historica_lote.json';
-const DATA_VERSION = 'vf_23826_hist_tch_inline_nc_fix';
+const DATA_VERSION = 'vf_23826_hist_tch_inline_scroll_fix';
 const HISTORICO_URL = './historico.html';
 let map, polygonsLayer, polygonsHaloLayer, labelsLayer, selectedLayer, DATA, META, METRICAS, AFORO, INITIAL_BOUNDS;
 let activeBaseMapName = 'Mapa claro';
@@ -2573,3 +2573,57 @@ cleanSelectedHtml = function(p, compact=false){
       <button class="share-hallazgo-btn" onclick="openHallazgoModal()" type="button">🟢 Compartir hallazgo</button>
     </div>`;
 };
+
+
+// VF_23826 · FIX visible del histórico TCH inline: no página, no modal, render directo en la tarjeta.
+function prodHistFindInlineBox(btn){
+  if(btn && btn.parentElement){
+    const near = btn.parentElement.querySelector('.prod-hist-inline');
+    if(near) return near;
+  }
+  return document.getElementById('prodHistInlineBox');
+}
+async function toggleProdHistInline(btn, forceClose=false){
+  const box=prodHistFindInlineBox(btn);
+  if(!box){ alert('No encontré el contenedor del histórico TCH en la tarjeta. Seleccione nuevamente el polígono.'); return; }
+  const button = btn || document.getElementById('prodHistToggleBtn');
+  if(forceClose || !box.classList.contains('collapsed')){
+    box.classList.add('collapsed');
+    if(button) button.textContent='📈 Mostrar histórico TCH';
+    return;
+  }
+  box.classList.remove('collapsed');
+  box.style.display='block';
+  box.innerHTML='<div class="prod-hist-inline-card"><div class="prod-hist-empty">Cargando histórico TCH...</div></div>';
+  if(button) button.textContent='Ocultar histórico TCH';
+  try{
+    await loadProduccionHistoricaInline();
+    const item = prodHistInlineFor(selectedProps);
+    box.innerHTML = prodHistInlineHtml(item, selectedProps);
+  }catch(err){
+    console.error('[CASUR] Error mostrando histórico inline:', err);
+    box.innerHTML='<div class="prod-hist-inline-card"><div class="prod-hist-empty">No se pudo mostrar el gráfico histórico TCH. Revise que data/produccion_historica_lote.json esté subido.</div></div>';
+  }
+  setTimeout(()=>{
+    try{
+      const sheet = box.closest('.sheet-content');
+      if(sheet){
+        const top = Math.max(0, box.offsetTop - 12);
+        sheet.scrollTo({top, behavior:'smooth'});
+      }else{
+        box.scrollIntoView({block:'nearest', behavior:'smooth'});
+      }
+    }catch(e){}
+  },80);
+}
+window.toggleProdHistInline=toggleProdHistInline;
+
+// Botón inline final: queda dentro del bloque de aforo, con contenedor inmediatamente debajo.
+aforoBlockHtml = function(p){
+  const a=aforoFor(p);
+  const prodBtn='<button id="prodHistToggleBtn" class="aforo-prod-btn" onclick="toggleProdHistInline(this)" type="button">📈 Mostrar histórico TCH</button><div id="prodHistInlineBox" class="prod-hist-inline collapsed"></div>';
+  const ncTxt = a && a.nc_display && a.nc_display !== '—' ? ` · NC ${escapeHtml(a.nc_display)}` : '';
+  if(!a) return `<div class="aforo-block aforo-missing"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-muted">Sin dato de aforo para este CodLote.</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes</a></div>`;
+  return `<div class="aforo-block"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-grid"><div><span>HHHSSS</span><b>${escapeHtml(a.hhhsss||displayCode(getCodLote(p)))}</b></div><div><span>actTCH</span><b>${escapeHtml(formatNumAforo(a.actTCH,' t/ha'))}</b></div><div><span>Toneladas</span><b>${escapeHtml(formatNumAforo(a.toneladas,' t'))}</b></div></div><div class="aforo-foot">${escapeHtml(a.clasificacion||'')} ${a.zona?`· ${escapeHtml(a.zona)}`:''} ${a.tenencia?`· ${escapeHtml(a.tenencia)}`:''}${ncTxt}</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes Operativo</a></div>`;
+};
+window.aforoBlockHtml=aforoBlockHtml;
