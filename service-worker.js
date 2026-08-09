@@ -1,4 +1,4 @@
-const CACHE_NAME = 'casur-maps-pwa-vf-23826-hist-tch-inline-scroll-fix';
+const CACHE_NAME = 'casur-maps-pwa-vf-23826-shape-ligero-hist-inline-fix';
 const CORE_ASSETS = [
   './', './index.html', './app.js', './styles.css', './manifest.json', './offline.html', './produccion_historica.html',
   './assets/logo_casur.png', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-icon-512.png', './icons/favicon-32.png'
@@ -34,14 +34,22 @@ function isShellRequest(url){
   );
 }
 
+
 self.addEventListener('fetch', event => {
   const req = event.request;
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
-  if(url.origin === self.location.origin && /\/data\//.test(url.pathname)){
-    event.respondWith(fetch(req).catch(()=>caches.match(req)));
+
+  // Data files must be network-first to avoid stale/corrupted JSON after GitHub uploads.
+  if(url.pathname.includes('/data/')){
+    event.respondWith(fetch(req, {cache:'reload'}).then(resp=>{
+      const copy = resp.clone();
+      caches.open(CACHE_NAME).then(cache=>cache.put(req, copy)).catch(()=>{});
+      return resp;
+    }).catch(()=>caches.match(req)));
     return;
   }
+
   if(isShellRequest(url)){
     event.respondWith(fetch(req).then(resp=>{
       const copy = resp.clone();
@@ -50,6 +58,7 @@ self.addEventListener('fetch', event => {
     }).catch(()=>caches.match(req).then(cached=>cached || caches.match('./offline.html'))));
     return;
   }
+
   event.respondWith(caches.match(req).then(cached => cached || fetch(req).then(resp => {
     const copy = resp.clone();
     caches.open(CACHE_NAME).then(cache => cache.put(req, copy)).catch(()=>{});

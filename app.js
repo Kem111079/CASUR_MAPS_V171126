@@ -6,7 +6,7 @@ const METRICAS_URL = './data/metricas_lote.json';
 const AFORO_URL = './data/aforo_2627.json';
 const PRODUCCION_HISTORICA_PAGE_URL = './produccion_historica.html';
 const PRODUCCION_HISTORICA_URL = './data/produccion_historica_lote.json';
-const DATA_VERSION = 'vf_23826_hist_tch_inline_scroll_fix';
+const DATA_VERSION = 'vf_23826_shape_ligero_hist_inline_fix';
 const HISTORICO_URL = './historico.html';
 let map, polygonsLayer, polygonsHaloLayer, labelsLayer, selectedLayer, DATA, META, METRICAS, AFORO, INITIAL_BOUNDS;
 let activeBaseMapName = 'Mapa claro';
@@ -41,7 +41,7 @@ async function fetchJsonSafe(url, label, opts={}){
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(), timeoutMs);
   try{
-    const r = await fetch(versionedUrl(url), {cache:'no-store', signal:controller.signal});
+    const r = await fetch(versionedUrl(url), {cache:'reload', signal:controller.signal});
     if(!r.ok) throw new Error(label + ' respondió HTTP ' + r.status);
     return await r.json();
   }catch(err){
@@ -65,7 +65,7 @@ async function init(){
   setupInstallFlow();
   // VF_23826 carga-fix: registrar service worker después de cargar el mapa para no competir con el GeoJSON grande.
   try{
-    setLoaderText('Cargando shape 26 actualizado...');
+    setLoaderText('Cargando shape 26 actualizado optimizado...');
     const geo = await fetchJsonSafe(GEOJSON_URL, 'shape 26 / polígonos CASUR', {required:true, timeoutMs:70000});
     setLoaderText('Cargando métricas y aforo 26/27...');
     const [meta, metricas, aforo] = await Promise.all([
