@@ -55,5 +55,10 @@
   "aforo_without_shape_count": 9,
   "nota_gps": "El GPS requiere HTTPS o localhost. En celular, publicar en HTTPS para instalar y usar ubicación.",
   "nota_aforo": "actTCH y Toneladas corresponden al aforo/plan esperado de la zafra 2026-2027; no reemplazan TCH histórico.",
-  "generated_at": "2026-08-09T05:00:40"
+  "generated_at": "2026-08-09T05:00:40",
+  "version_app": "VF_23826_HISTORICO_TCH_CORTE_FIX",
+  "produccion_historica_source": "historico.html::window.APP_DATA.lotCompact",
+  "produccion_historica_records": 1540,
+  "produccion_historica_generated_at": "2026-08-09T20:10:08",
+  "nota_historico_tch": "Se agregó vista interna de Producción Histórica con gráfico solo TCH y tabla con número de corte, evitando depender de historico.html pesado para consulta de campo."
 }

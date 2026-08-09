@@ -1,4 +1,4 @@
-const CACHE_NAME = 'casur-maps-pwa-vf-23826-shape26-aforo2627-operativo';
+const CACHE_NAME = 'casur-maps-pwa-vf-23826-historico-tch-corte-fix';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const CORE_ASSETS = [
   './data/metadata.json',
   './data/metricas_lote.json',
   './data/aforo_2627.json',
+  './data/produccion_historica_lote.json',
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
