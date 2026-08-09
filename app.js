@@ -5,7 +5,8 @@ const CASUR_APP_VERSION = 'VF_23826';
 const METRICAS_URL = './data/metricas_lote.json';
 const AFORO_URL = './data/aforo_2627.json';
 const PRODUCCION_HISTORICA_PAGE_URL = './produccion_historica.html';
-const DATA_VERSION = 'vf_23826_carga_fix_hist_tch_corte';
+const PRODUCCION_HISTORICA_URL = './data/produccion_historica_lote.json';
+const DATA_VERSION = 'vf_23826_hist_tch_inline_nc_fix';
 const HISTORICO_URL = './historico.html';
 let map, polygonsLayer, polygonsHaloLayer, labelsLayer, selectedLayer, DATA, META, METRICAS, AFORO, INITIAL_BOUNDS;
 let activeBaseMapName = 'Mapa claro';
@@ -2453,3 +2454,122 @@ cleanSelectedHtml = function(p, compact=false){
 };
 window.renderAforoSummary=renderAforoSummary;
 window.aforoFor=aforoFor;
+
+
+// VF_23826 · Histórico TCH inline + NC seguro (corrección quirúrgica final)
+let PRODUCCION_HISTORICA_INLINE = null;
+async function loadProduccionHistoricaInline(){
+  if(PRODUCCION_HISTORICA_INLINE) return PRODUCCION_HISTORICA_INLINE;
+  try{
+    const url = PRODUCCION_HISTORICA_URL + '?v=' + encodeURIComponent(DATA_VERSION);
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) throw new Error('No se pudo cargar produccion_historica_lote.json');
+    PRODUCCION_HISTORICA_INLINE = await r.json();
+  }catch(err){
+    console.error('[CASUR] Producción histórica inline:', err);
+    PRODUCCION_HISTORICA_INLINE = {lotes:{}};
+  }
+  return PRODUCCION_HISTORICA_INLINE;
+}
+function safeHistCode(p=selectedProps){ return displayCode(getCodLote(p||{})); }
+function prodHistInlineFor(p=selectedProps){
+  const key=safeHistCode(p);
+  const lots=((PRODUCCION_HISTORICA_INLINE||{}).lotes||{});
+  return lots[key] || lots[normalizeCode(key)] || lots[String(key||'').toUpperCase()] || null;
+}
+function histTchFmt(v, suffix=''){
+  const n=Number(v); if(!Number.isFinite(n)) return '—'; return nf.format(n)+suffix;
+}
+function histLast8Rows(item){
+  const rows=(item&&Array.isArray(item.historial)?item.historial:[]).filter(r=>Number.isFinite(Number(r.tch)) && Number(r.tch)>0);
+  rows.sort((a,b)=>Number(a.zafra_code||0)-Number(b.zafra_code||0));
+  return rows.slice(-8);
+}
+function prodHistInlineSvg(item){
+  const rows=histLast8Rows(item);
+  if(!rows.length) return '<div class="prod-hist-empty">Sin datos históricos de TCH para este CodLote.</div>';
+  const vals=rows.map(r=>Number(r.tch));
+  const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+  const W=900,H=430,ml=44,mr=28,mt=38,mb=76;
+  let min=Math.min(...vals,avg), max=Math.max(...vals,avg);
+  min=Math.max(0, Math.floor((min-12)/10)*10); max=Math.ceil((max+12)/10)*10; if(max<=min) max=min+10;
+  const plotW=W-ml-mr, plotH=H-mt-mb;
+  const x=i=> ml + (rows.length===1 ? plotW/2 : i*plotW/(rows.length-1));
+  const y=v=> mt + (max-Number(v))*plotH/(max-min);
+  const yBase=H-mb;
+  const avgY=y(avg);
+  const barColor=(v)=> Number(v)>=avg ? '#cfeadb' : (Number(v)<55 ? '#f0c2c0' : '#eadfc9');
+  const line=rows.map((r,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(r.tch).toFixed(1)}`).join(' ');
+  const bars=rows.map((r,i)=>{ const xx=x(i), yy=y(r.tch), h=Math.max(4,yBase-yy); return `<rect x="${(xx-11).toFixed(1)}" y="${yy.toFixed(1)}" width="22" height="${h.toFixed(1)}" rx="11" fill="${barColor(r.tch)}" opacity=".82"/>`; }).join('');
+  const labels=rows.map((r,i)=>{ const xx=x(i), yy=y(r.tch); const nc=(r.nc_display&&r.nc_display!=='—')?` · NC ${escapeHtml(r.nc_display)}`:''; return `<g><circle cx="${xx.toFixed(1)}" cy="${yy.toFixed(1)}" r="6" fill="#0b7f3a" stroke="#ffffff" stroke-width="3"><title>${escapeHtml(r.zafra||'—')} · TCH ${escapeHtml(histTchFmt(r.tch))}${nc}</title></circle><text x="${xx.toFixed(1)}" y="${(yy-15).toFixed(1)}" text-anchor="middle" font-size="18" font-weight="900" fill="#0b1720" transform="rotate(-8 ${xx.toFixed(1)} ${(yy-15).toFixed(1)})">${escapeHtml(histTchFmt(r.tch))}</text><text x="${xx.toFixed(1)}" y="${(H-39).toFixed(1)}" text-anchor="middle" font-size="16" font-weight="800" fill="#475569">${escapeHtml(r.zafra||'—')}</text></g>`; }).join('');
+  return `<svg class="prod-hist-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Histórico TCH por zafra"><rect x="0" y="0" width="${W}" height="${H}" rx="24" fill="#ffffff"/><line x1="${ml}" y1="${avgY.toFixed(1)}" x2="${W-mr}" y2="${avgY.toFixed(1)}" stroke="#1f6aa5" stroke-width="4" stroke-dasharray="4 10" stroke-linecap="round" opacity=".85"><title>Promedio ${histTchFmt(avg)} TCH</title></line>${bars}<path d="${line}" fill="none" stroke="#07843e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="${line}" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".35"/>${labels}<line x1="${ml}" y1="${yBase}" x2="${W-mr}" y2="${yBase}" stroke="#d1d9d4" stroke-width="2"/></svg>`;
+}
+function prodHistInlineHtml(item, p=selectedProps){
+  const cod=safeHistCode(p);
+  const rows=histLast8Rows(item);
+  if(!item || !rows.length) return `<div class="prod-hist-inline-card"><div class="prod-hist-empty">No encontré histórico TCH para CODLOTE ${escapeHtml(cod)}.</div></div>`;
+  const avg=rows.reduce((s,r)=>s+Number(r.tch||0),0)/rows.length;
+  const hac=item.hacienda || (metricasFor(p).hacienda_productor||'');
+  return `<div class="prod-hist-inline-card"><div class="prod-hist-inline-head"><div><h3>Histórico TCH por zafra</h3><small>Código ${escapeHtml(cod)}${hac?' · '+escapeHtml(hac):''} · Últimas ${rows.length} zafras</small></div><div class="prod-hist-prom">Prom. ${escapeHtml(histTchFmt(avg))} TCH</div></div><div class="prod-hist-svg-wrap">${prodHistInlineSvg(item)}</div><div class="prod-hist-note">Vista rápida: solo evolución de TCH. No se inventa número de corte; NC se conserva únicamente si viene desde la columna NC del Excel o si corresponde Planta.</div><button class="prod-hist-close-inline" type="button" onclick="toggleProdHistInline(null,true)">Ocultar histórico TCH</button></div>`;
+}
+async function toggleProdHistInline(btn, forceClose=false){
+  const box=document.getElementById('prodHistInlineBox');
+  if(!box) return;
+  if(forceClose || !box.classList.contains('collapsed')){
+    box.classList.add('collapsed');
+    const b=document.getElementById('prodHistToggleBtn'); if(b) b.textContent='📈 Mostrar histórico TCH';
+    return;
+  }
+  box.classList.remove('collapsed');
+  box.innerHTML='<div class="prod-hist-inline-card"><div class="prod-hist-empty">Cargando histórico TCH...</div></div>';
+  const b=document.getElementById('prodHistToggleBtn'); if(b) b.textContent='Ocultar histórico TCH';
+  await loadProduccionHistoricaInline();
+  box.innerHTML=prodHistInlineHtml(prodHistInlineFor(selectedProps), selectedProps);
+}
+window.toggleProdHistInline=toggleProdHistInline;
+
+// Reemplazo seguro del bloque de aforo: botón inline, no página externa.
+aforoBlockHtml = function(p){
+  const a=aforoFor(p);
+  const prodBtn='<button id="prodHistToggleBtn" class="aforo-prod-btn" onclick="toggleProdHistInline(this)" type="button">📈 Mostrar histórico TCH</button><div id="prodHistInlineBox" class="prod-hist-inline collapsed"></div>';
+  const ncTxt = a && a.nc_display && a.nc_display !== '—' ? ` · NC ${escapeHtml(a.nc_display)}` : '';
+  if(!a) return `<div class="aforo-block aforo-missing"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-muted">Sin dato de aforo para este CodLote.</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes</a></div>`;
+  return `<div class="aforo-block"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-grid"><div><span>HHHSSS</span><b>${escapeHtml(a.hhhsss||displayCode(getCodLote(p)))}</b></div><div><span>actTCH</span><b>${escapeHtml(formatNumAforo(a.actTCH,' t/ha'))}</b></div><div><span>Toneladas</span><b>${escapeHtml(formatNumAforo(a.toneladas,' t'))}</b></div></div><div class="aforo-foot">${escapeHtml(a.clasificacion||'')} ${a.zona?`· ${escapeHtml(a.zona)}`:''} ${a.tenencia?`· ${escapeHtml(a.tenencia)}`:''}${ncTxt}</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes Operativo</a></div>`;
+};
+window.aforoBlockHtml=aforoBlockHtml;
+
+// Reemplazo final de la tarjeta: elimina acceso a página de histórico; mantiene solo gráfico inline.
+cleanSelectedHtml = function(p, compact=false){
+  const cod=getCodLote(p), codView=displayCode(cod), m=metricasFor(p);
+  const crono=urlFor('crono',p);
+  const areaShape = p.Area_Ha!==undefined ? formatHa(p.Area_Ha) : '—';
+  const totalRaw = Number.isFinite(Number(m.area_shape_total_ha)) ? m.area_shape_total_ha : m.area_total_ha;
+  const areaTotal = Number.isFinite(Number(totalRaw)) ? formatHa(totalRaw) : areaShape;
+  const hacienda = m.hacienda_productor || 'Sin dato histórico';
+  const tablon = getTablon(p) || '—';
+  const tch = Number.isFinite(Number(m.tch_ultima_zafra)) ? formatMetric(m.tch_ultima_zafra,' t/ha') : '—';
+  const edadValor = edadActualMetric(m);
+  const diasEdad = edadActualDays(m);
+  const edad = Number.isFinite(edadValor) ? formatMetric(edadValor,' meses') : '—';
+  const edadNote = Number.isFinite(diasEdad) ? `${nf.format(diasEdad)} días` : '';
+  const variedad = m.variedad || '—';
+  const status = agroStatusFor(m);
+  return `<div class="field-card-kicker">Polígono CASUR seleccionado</div>
+    <div class="field-card-title"><span>CodLote ${escapeHtml(codView)}</span> <em>(${escapeHtml(areaTotal)})</em></div>
+    <div class="field-card-owner">${escapeHtml(hacienda)}</div>
+    <div class="field-card-sub">Tablón ${escapeHtml(tablon)}</div>
+    <div class="agro-status ${escapeHtml(status.cls)}"><b>${escapeHtml(status.label)}</b><span>${escapeHtml(status.detail)}</span></div>
+    <div class="field-grid field-grid-final">
+      ${mini('Área shape',areaShape,'area')}${mini('TCH última zafra',tch,'cane')}${mini('Edad actual',edad,'age',edadNote)}${mini('Variedad',variedad,'variety')}
+    </div>
+    ${aforoBlockHtml(p)}
+    ${compact ? '' : coordsHtmlForSelected()}
+    ${quickHistoryHtml(m)}
+    ${extraFeatureActions(p)}
+    <div class="field-actions">
+      <a class="go-crono" href="${escapeHtml(crono)}">▣ Cronológico</a>
+      <a class="go-operativo" href="${escapeHtml(aforoOperativoUrl(p))}">CASUR Suertes</a>
+      <button class="go-zoom" onclick="zoomSelected()" type="button">⌕ Acercar</button>
+      <button class="share-hallazgo-btn" onclick="openHallazgoModal()" type="button">🟢 Compartir hallazgo</button>
+    </div>`;
+};

@@ -55,5 +55,11 @@
   "aforo_without_shape_count": 9,
   "nota_gps": "El GPS requiere HTTPS o localhost. En celular, publicar en HTTPS para instalar y usar ubicación.",
   "nota_aforo": "actTCH y Toneladas corresponden al aforo/plan esperado de la zafra 2026-2027; no reemplazan TCH histórico.",
-  "generated_at": "2026-08-09T05:00:40"
+  "generated_at": "2026-08-09T05:00:40",
+  "historico_tch_inline_nc_fix": {
+    "version": "VF_23826_HISTORICO_TCH_INLINE_NC_FIX",
+    "generated_at": "2026-08-09T23:12:24",
+    "nc_rule": "No se inventa NC. NC viene de la columna NC del aforo_2627.xlsx; Planta se muestra cuando DESCRIP/GrCorte indica PLANTILLA/Planta; sin dato = —.",
+    "chart": "inline_svg_only_tch_no_table_no_page_navigation"
+  }
 }
