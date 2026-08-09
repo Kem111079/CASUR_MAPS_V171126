@@ -4,10 +4,10 @@ const META_URL = './data/metadata.json';
 const CASUR_APP_VERSION = 'VF_23826';
 const METRICAS_URL = './data/metricas_lote.json';
 const AFORO_URL = './data/aforo_2627.json';
-const PRODUCCION_HISTORICA_URL = './data/produccion_historica_lote.json';
 const PRODUCCION_HISTORICA_PAGE_URL = './produccion_historica.html';
+const DATA_VERSION = 'vf_23826_carga_fix_hist_tch_corte';
 const HISTORICO_URL = './historico.html';
-let map, polygonsLayer, polygonsHaloLayer, labelsLayer, selectedLayer, DATA, META, METRICAS, AFORO, PRODUCCION_HISTORICA, INITIAL_BOUNDS;
+let map, polygonsLayer, polygonsHaloLayer, labelsLayer, selectedLayer, DATA, META, METRICAS, AFORO, INITIAL_BOUNDS;
 let activeBaseMapName = 'Mapa claro';
 let polygonVisualPreference = 'auto';
 let deferredInstallPrompt = null;
@@ -32,6 +32,27 @@ const $ = (id) => document.getElementById(id);
 const fmt = v => (v === null || v === undefined || v === '' || Number.isNaN(v)) ? '—' : String(v);
 const nf = new Intl.NumberFormat('es-NI', {maximumFractionDigits:2});
 
+function setLoaderText(msg){ const el=$('loaderText'); if(el) el.textContent=msg; }
+function versionedUrl(url){ return url + (String(url).includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(DATA_VERSION); }
+async function fetchJsonSafe(url, label, opts={}){
+  const required = opts.required !== false;
+  const timeoutMs = opts.timeoutMs || 45000;
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), timeoutMs);
+  try{
+    const r = await fetch(versionedUrl(url), {cache:'no-store', signal:controller.signal});
+    if(!r.ok) throw new Error(label + ' respondió HTTP ' + r.status);
+    return await r.json();
+  }catch(err){
+    if(required) throw new Error('No se pudo cargar ' + label + ': ' + (err && err.name==='AbortError' ? 'tiempo agotado' : (err.message||err)));
+    console.warn('[CASUR] Dato opcional no cargado:', label, err);
+    return null;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+
 window.__CASUR_APP_SCRIPT_LOADED = true;
 if (document.readyState === 'loading') {
   window.addEventListener('DOMContentLoaded', init, {once:true});
@@ -41,23 +62,27 @@ if (document.readyState === 'loading') {
 
 async function init(){
   setupInstallFlow();
-  registerServiceWorker();
+  // VF_23826 carga-fix: registrar service worker después de cargar el mapa para no competir con el GeoJSON grande.
   try{
-    const [geo, meta, metricas, aforo] = await Promise.all([
-      fetch(GEOJSON_URL).then(r=>{ if(!r.ok) throw new Error('No se pudo cargar GeoJSON'); return r.json(); }),
-      fetch(META_URL).then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(METRICAS_URL).then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(AFORO_URL).then(r=>r.ok?r.json():null).catch(()=>null)
+    setLoaderText('Cargando shape 26 actualizado...');
+    const geo = await fetchJsonSafe(GEOJSON_URL, 'shape 26 / polígonos CASUR', {required:true, timeoutMs:70000});
+    setLoaderText('Cargando métricas y aforo 26/27...');
+    const [meta, metricas, aforo] = await Promise.all([
+      fetchJsonSafe(META_URL, 'metadata.json', {required:false, timeoutMs:20000}),
+      fetchJsonSafe(METRICAS_URL, 'metricas_lote.json', {required:false, timeoutMs:30000}),
+      fetchJsonSafe(AFORO_URL, 'aforo_2627.json', {required:false, timeoutMs:30000})
     ]);
     DATA = geo; META = meta || {}; METRICAS = metricas || {lotes:{}}; AFORO = aforo || {lotes:{},resumen:{}};
+    setLoaderText('Preparando polígonos CASUR...');
     precomputeBboxes();
     initMap();
     populatePanels();
     bindUi();
     hideLoader();
+    setTimeout(registerServiceWorker, 1500);
   }catch(err){
     console.error(err);
-    $('loaderText').textContent = 'No se pudo cargar el mapa: ' + err.message + '. Verifique que el ZIP esté descomprimido completo y que se abra desde localhost/HTTPS.';
+    setLoaderText('No se pudo cargar el mapa: ' + err.message + '. Verifique que subió la carpeta data completa y limpie caché/reinstale la PWA.');
   }
 }
 
@@ -236,7 +261,8 @@ function getTablon(p){ return normalizeCode(p.Tablon || p.LLAVE_TABL || ''); }
 function urlFor(module,p){
   const codlote=getCodLote(p), codfinca=normalizeCode(p.Codfinca), suerte=normalizeCode(p.Suerte), llave=normalizeCode(p.LLAVE_TABL || p.LLAVE_LOTE || '');
   const params = new URLSearchParams({from:'map', modulo:module, codlote, hhhsss:codlote, codfinca, suerte, llave});
-  if(String(module||'').toLowerCase()==='historico' || String(module||'').toLowerCase()==='produccion') return PRODUCCION_HISTORICA_PAGE_URL + '?' + params.toString();
+  const mod=String(module||'').toLowerCase();
+  if(mod==='historico' || mod==='produccion' || mod==='produccion_historica') return PRODUCCION_HISTORICA_PAGE_URL + '?' + params.toString();
   return HISTORICO_URL + '?' + params.toString();
 }
 function openModule(module){
@@ -772,7 +798,7 @@ function cleanSelectedHtml(p, compact=false){
     ${extraFeatureActions(p)}
     <div class="field-actions">
       <a class="go-crono" href="${escapeHtml(crono)}">▣ Cronológico</a>
-      <a class="go-hist" href="${escapeHtml(hist)}">▥ Histórico</a>
+      <a class="go-hist" href="${escapeHtml(hist)}">📈 Producción histórica</a>
       <button class="go-zoom" onclick="zoomSelected()" type="button">⌕ Acercar</button>
       <button class="share-hallazgo-btn" onclick="openHallazgoModal()" type="button">🟢 Compartir hallazgo</button>
     </div>`;
@@ -919,7 +945,7 @@ function searchFeature(){
 function resetView(){
   $('searchBox').value=''; $('fincaFilter').value='';
   polygonsLayer.eachLayer(layer=>{ if(!map.hasLayer(layer)) layer.addTo(map); layer.setStyle(smartStyle(layer.feature)); });
-  selectedLayer=null; selectedKey=''; $('selectedInfo').innerHTML='Seleccione un polígono para abrir Cronológico o Producción histórica.';
+  selectedLayer=null; selectedKey=''; $('selectedInfo').innerHTML='Seleccione un polígono para abrir Cronológico o Histórico.';
   const sc=$('sheetContent'); if(sc) sc.innerHTML='<div class="sheet-empty">Toque un polígono para ver CodLote, finca y accesos a Cronológico / Histórico.</div>';
   hideSelectionSheet();
   map.fitBounds(INITIAL_BOUNDS,{padding:[20,20]});
@@ -1116,7 +1142,7 @@ function candidateRowHtml(c,i){
 }
 function candidateActionsHtml(c,i,compact){
   const p=c.p, crono=urlFor('crono',p), hist=urlFor('historico',p);
-  return `<div class="gps-inside-actions ${compact?'compact':''}"><a href="${escapeHtml(crono)}">Cronológico</a><a href="${escapeHtml(hist)}">Producción histórica</a>${compact?'':'<button type="button" onclick="useGpsCandidate('+i+',true)">Acercar</button>'}</div>`;
+  return `<div class="gps-inside-actions ${compact?'compact':''}"><a href="${escapeHtml(crono)}">Cronológico</a><a href="${escapeHtml(hist)}">Histórico</a>${compact?'':'<button type="button" onclick="useGpsCandidate('+i+',true)">Acercar</button>'}</div>`;
 }
 function updateGpsSheet(html){
   const sheet=$('selectionSheet'), content=$('sheetContent');
@@ -1541,7 +1567,7 @@ function renderQuickFichaHtml(p){
     ${qv('Días desde corte',Number.isFinite(edadDias)?nf.format(edadDias)+' días':'—')}${qv('Último corte',fechaCorte)}${qv('Variedad',variedad)}${qv('Zona',zona)}
   </div>
   <div class="quick-ficha-section"><h3>Observaciones locales</h3>${obsHtml}</div>
-  <div class="quick-ficha-actions"><a class="crono" href="${escapeHtml(urlFor('crono',p))}">Cronológico completo</a><a class="hist" href="${escapeHtml(urlFor('historico',p))}">Producción histórica</a><button class="obs" onclick="openObservationForm(selectedProps); closeQuickFicha();" type="button">Registrar observación</button><button class="close" onclick="closeQuickFicha()" type="button">Cerrar</button></div>`;
+  <div class="quick-ficha-actions"><a class="crono" href="${escapeHtml(urlFor('crono',p))}">Cronológico completo</a><a class="hist" href="${escapeHtml(urlFor('historico',p))}">Histórico completo</a><button class="obs" onclick="openObservationForm(selectedProps); closeQuickFicha();" type="button">Registrar observación</button><button class="close" onclick="closeQuickFicha()" type="button">Cerrar</button></div>`;
 }
 const casurExtraActionsBeforeV9 = extraFeatureActions;
 extraFeatureActions = function(p){
@@ -2364,10 +2390,12 @@ function aforoOperativoUrl(p){
   const a=aforoFor(p); const code=(a&&a.hhhsss)||displayCode(getCodLote(p));
   return './casur_suertes_operativo/index.html?hhhsss=' + encodeURIComponent(code) + '&from=casur_maps';
 }
+function produccionHistoricaUrl(p){ return urlFor('historico', p); }
 function aforoBlockHtml(p){
   const a=aforoFor(p);
-  if(!a) return `<div class="aforo-block aforo-missing"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-muted">Sin dato de aforo para este CodLote.</div><a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes</a></div>`;
-  return `<div class="aforo-block"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-grid"><div><span>HHHSSS</span><b>${escapeHtml(a.hhhsss||displayCode(getCodLote(p)))}</b></div><div><span>actTCH</span><b>${escapeHtml(formatNumAforo(a.actTCH,' t/ha'))}</b></div><div><span>Toneladas</span><b>${escapeHtml(formatNumAforo(a.toneladas,' t'))}</b></div></div><div class="aforo-foot">${escapeHtml(a.clasificacion||'')} ${a.zona?`· ${escapeHtml(a.zona)}`:''} ${a.tenencia?`· ${escapeHtml(a.tenencia)}`:''}</div><a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes Operativo</a></div>`;
+  const prodBtn=`<a class="aforo-prod-btn" href="${escapeHtml(produccionHistoricaUrl(p))}">📈 Ver producción histórica</a>`;
+  if(!a) return `<div class="aforo-block aforo-missing"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-muted">Sin dato de aforo para este CodLote.</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes</a></div>`;
+  return `<div class="aforo-block"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-grid"><div><span>HHHSSS</span><b>${escapeHtml(a.hhhsss||displayCode(getCodLote(p)))}</b></div><div><span>actTCH</span><b>${escapeHtml(formatNumAforo(a.actTCH,' t/ha'))}</b></div><div><span>Toneladas</span><b>${escapeHtml(formatNumAforo(a.toneladas,' t'))}</b></div></div><div class="aforo-foot">${escapeHtml(a.clasificacion||'')} ${a.zona?`· ${escapeHtml(a.zona)}`:''} ${a.tenencia?`· ${escapeHtml(a.tenencia)}`:''}</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes Operativo</a></div>`;
 }
 function renderAforoSummary(){
   const el=$('aforoSummaryPanel'); if(!el) return;
@@ -2417,7 +2445,7 @@ cleanSelectedHtml = function(p, compact=false){
     ${extraFeatureActions(p)}
     <div class="field-actions">
       <a class="go-crono" href="${escapeHtml(crono)}">▣ Cronológico</a>
-      <button class="prod-hist-btn" onclick="openProduccionHistoricaModal()" type="button">📈 Ver producción histórica</button>
+      <a class="go-hist" href="${escapeHtml(hist)}">📈 Producción histórica</a>
       <a class="go-operativo" href="${escapeHtml(aforoOperativoUrl(p))}">CASUR Suertes</a>
       <button class="go-zoom" onclick="zoomSelected()" type="button">⌕ Acercar</button>
       <button class="share-hallazgo-btn" onclick="openHallazgoModal()" type="button">🟢 Compartir hallazgo</button>
@@ -2425,109 +2453,3 @@ cleanSelectedHtml = function(p, compact=false){
 };
 window.renderAforoSummary=renderAforoSummary;
 window.aforoFor=aforoFor;
-
-
-// VF_23826 · Producción histórica rápida: evolución TCH + número de corte dentro de CASUR Maps
-async function loadProduccionHistorica(){
-  if(PRODUCCION_HISTORICA) return PRODUCCION_HISTORICA;
-  try{
-    const r = await fetch(PRODUCCION_HISTORICA_URL, {cache:'no-store'});
-    if(!r.ok) throw new Error('No se pudo cargar produccion_historica_lote.json');
-    PRODUCCION_HISTORICA = await r.json();
-  }catch(err){
-    console.error(err);
-    PRODUCCION_HISTORICA = {lotes:{}};
-  }
-  return PRODUCCION_HISTORICA;
-}
-function prodHistKeyFor(p=selectedProps){ return displayCode(getCodLote(p||{})); }
-function prodHistFor(p=selectedProps){
-  const key = prodHistKeyFor(p);
-  const lots = ((PRODUCCION_HISTORICA||{}).lotes||{});
-  return lots[key] || lots[normalizeCode(key)] || lots[String(key).toUpperCase()] || null;
-}
-function ensureProduccionHistoricaModal(){
-  let modal=$('prodHistModal');
-  if(modal) return modal;
-  modal=document.createElement('div');
-  modal.id='prodHistModal';
-  modal.className='prod-hist-modal hidden';
-  modal.innerHTML=`<div class="prod-hist-dialog" role="dialog" aria-modal="true" aria-labelledby="prodHistTitle">
-    <button class="prod-hist-close" type="button" onclick="closeProduccionHistoricaModal()">× Cerrar</button>
-    <div class="prod-hist-head"><div class="prod-hist-kicker">Producción histórica</div><h3 id="prodHistTitle">Evolución TCH</h3><p id="prodHistSub">Seleccione un lote.</p></div>
-    <div id="prodHistBody" class="prod-hist-body"><div class="prod-hist-empty">Cargando historial...</div></div>
-  </div>`;
-  modal.addEventListener('click', function(ev){ if(ev.target===modal) closeProduccionHistoricaModal(); });
-  document.body.appendChild(modal);
-  return modal;
-}
-function closeProduccionHistoricaModal(){ const m=$('prodHistModal'); if(m) m.classList.add('hidden'); }
-function histFmt(v, suffix=''){
-  const n=Number(v);
-  if(!Number.isFinite(n)) return '—';
-  return nf.format(n)+suffix;
-}
-function prodHistChartSvg(rows){
-  const data=(rows||[]).filter(r=>Number.isFinite(Number(r.tch)));
-  if(!data.length) return '<div class="prod-hist-empty">Sin datos de TCH para graficar.</div>';
-  const W=900,H=360,ml=58,mr=24,mt=24,mb=54;
-  const vals=data.map(r=>Number(r.tch));
-  let min=Math.min(...vals), max=Math.max(...vals);
-  min=Math.max(0, Math.floor((min-8)/5)*5); max=Math.ceil((max+8)/5)*5; if(max<=min) max=min+10;
-  const x=(i)=> ml + (data.length===1 ? (W-ml-mr)/2 : i*(W-ml-mr)/(data.length-1));
-  const y=(v)=> mt + (max-Number(v))*(H-mt-mb)/(max-min);
-  const grid=[0,.25,.5,.75,1].map(t=>{ const yy=mt+t*(H-mt-mb); const val=max-t*(max-min); return `<line x1="${ml}" y1="${yy}" x2="${W-mr}" y2="${yy}" stroke="#e2e8f0"/><text x="${ml-10}" y="${yy+4}" text-anchor="end" font-size="12" fill="#64748b">${histFmt(val)}</text>`; }).join('');
-  const path=data.map((r,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(r.tch).toFixed(1)}`).join(' ');
-  const pts=data.map((r,i)=>`<g><circle cx="${x(i).toFixed(1)}" cy="${y(r.tch).toFixed(1)}" r="5" fill="#0b7f3a" stroke="#ffffff" stroke-width="2"><title>${escapeHtml(r.zafra)} · TCH ${histFmt(r.tch)} · Corte ${escapeHtml(r.corte??'—')}</title></circle><text x="${x(i).toFixed(1)}" y="${(y(r.tch)-11).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="800" fill="#0b3158">${histFmt(r.tch)}</text><text x="${x(i).toFixed(1)}" y="${H-26}" text-anchor="middle" font-size="12" fill="#334155">${escapeHtml(r.zafra)}</text><text x="${x(i).toFixed(1)}" y="${H-9}" text-anchor="middle" font-size="10" fill="#64748b">Corte ${escapeHtml(r.corte??'—')}</text></g>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución histórica TCH"><rect x="0" y="0" width="${W}" height="${H}" rx="18" fill="#ffffff"/><text x="${W/2}" y="18" text-anchor="middle" font-size="14" font-weight="900" fill="#0b3158">Evolución del TCH por zafra</text>${grid}<line x1="${ml}" y1="${H-mb}" x2="${W-mr}" y2="${H-mb}" stroke="#94a3b8"/><line x1="${ml}" y1="${mt}" x2="${ml}" y2="${H-mb}" stroke="#94a3b8"/><path d="${path}" fill="none" stroke="#0b7f3a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${pts}</svg>`;
-}
-function prodHistRender(item, p=selectedProps){
-  const body=$('prodHistBody'), title=$('prodHistTitle'), sub=$('prodHistSub');
-  const cod=prodHistKeyFor(p);
-  if(!body) return;
-  if(!item || !Array.isArray(item.historial) || !item.historial.length){
-    if(title) title.textContent='Producción histórica · CODLOTE '+cod;
-    if(sub) sub.textContent='No se encontró historial TCH para este código.';
-    body.innerHTML='<div class="prod-hist-empty">No encontré historial de TCH para este CodLote en el archivo histórico integrado.</div>';
-    return;
-  }
-  const rows=item.historial.filter(r=>Number.isFinite(Number(r.tch)));
-  const latest=rows[rows.length-1] || {};
-  const avg = rows.length ? rows.reduce((a,r)=>a+Number(r.tch||0),0)/rows.length : null;
-  const min = rows.length ? rows.reduce((a,r)=>Number(r.tch)<Number(a.tch)?r:a, rows[0]) : null;
-  const max = rows.length ? rows.reduce((a,r)=>Number(r.tch)>Number(a.tch)?r:a, rows[0]) : null;
-  if(title) title.textContent='Producción histórica · CODLOTE '+escapeHtml(item.codlote||cod);
-  if(sub) sub.textContent=[item.hacienda||'', item.tablon?('Tablón '+item.tablon):'', item.variedad||''].filter(Boolean).join(' · ');
-  const summary=`<div class="prod-hist-summary"><div><span>Última zafra</span><b>${escapeHtml(latest.zafra||'—')}</b></div><div><span>TCH último</span><b>${escapeHtml(histFmt(latest.tch,' t/ha'))}</b></div><div><span>Corte último</span><b>${escapeHtml(latest.corte??'—')}</b></div><div><span>TCH promedio</span><b>${escapeHtml(histFmt(avg,' t/ha'))}</b></div></div>`;
-  const chart=`<div class="prod-hist-chart-card">${prodHistChartSvg(rows)}</div>`;
-  const tableRows=rows.map(r=>`<tr><td>${escapeHtml(r.zafra||'—')}</td><td><b>${escapeHtml(histFmt(r.tch,' t/ha'))}</b></td><td>${escapeHtml(r.corte??'—')}</td><td>${escapeHtml(histFmt(r.area_ha,' ha'))}</td><td>${escapeHtml(histFmt(r.toneladas,' t'))}</td></tr>`).join('');
-  const extrema = `<div class="prod-hist-note">Máximo: ${escapeHtml(max?.zafra||'—')} · ${escapeHtml(histFmt(max?.tch,' t/ha'))}. Mínimo: ${escapeHtml(min?.zafra||'—')} · ${escapeHtml(histFmt(min?.tch,' t/ha'))}. El gráfico muestra únicamente TCH; la tabla agrega el número de corte solicitado.</div>`;
-  body.innerHTML=summary+chart+`<div class="prod-hist-table-wrap"><table class="prod-hist-table"><thead><tr><th>Zafra</th><th>TCH</th><th>Número de corte</th><th>Área</th><th>Toneladas</th></tr></thead><tbody>${tableRows}</tbody></table></div>`+extrema;
-}
-async function openProduccionHistoricaModal(){
-  if(!selectedProps){ alert('Seleccione primero un polígono.'); return; }
-  const modal=ensureProduccionHistoricaModal();
-  const body=$('prodHistBody'); if(body) body.innerHTML='<div class="prod-hist-empty">Cargando producción histórica...</div>';
-  modal.classList.remove('hidden');
-  await loadProduccionHistorica();
-  prodHistRender(prodHistFor(selectedProps), selectedProps);
-}
-window.openProduccionHistoricaModal=openProduccionHistoricaModal;
-window.closeProduccionHistoricaModal=closeProduccionHistoricaModal;
-
-// Reforzar bloque de aforo con acceso directo a producción histórica, sin depender del histórico completo.
-aforoBlockHtml = function(p){
-  const a=aforoFor(p);
-  const prodBtn='<button class="aforo-prod-btn" onclick="openProduccionHistoricaModal()" type="button">📈 Ver producción histórica</button>';
-  if(!a) return `<div class="aforo-block aforo-missing"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-muted">Sin dato de aforo para este CodLote.</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes</a></div>`;
-  return `<div class="aforo-block"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-grid"><div><span>HHHSSS</span><b>${escapeHtml(a.hhhsss||displayCode(getCodLote(p)))}</b></div><div><span>actTCH</span><b>${escapeHtml(formatNumAforo(a.actTCH,' t/ha'))}</b></div><div><span>Toneladas</span><b>${escapeHtml(formatNumAforo(a.toneladas,' t'))}</b></div></div><div class="aforo-foot">${escapeHtml(a.clasificacion||'')} ${a.zona?`· ${escapeHtml(a.zona)}`:''} ${a.tenencia?`· ${escapeHtml(a.tenencia)}`:''}</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes Operativo</a></div>`;
-};
-window.aforoBlockHtml=aforoBlockHtml;
-
-
-// VF_23826 V2 · respaldo: abrir producción histórica en página liviana si el modal interno no se usa.
-function openProduccionHistoricaPage(){
-  if(!selectedProps){ alert('Seleccione primero un polígono.'); return; }
-  location.href = urlFor('historico', selectedProps);
-}
-window.openProduccionHistoricaPage=openProduccionHistoricaPage;

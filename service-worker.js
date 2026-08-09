@@ -1,24 +1,9 @@
-const CACHE_NAME = 'casur-maps-pwa-vf-23826-historico-tch-corte-fix-v2';
+const CACHE_NAME = 'casur-maps-pwa-vf-23826-carga-fix-hist-tch-corte';
 const CORE_ASSETS = [
-  './',
-  './index.html',
-  './app.js',
-  './styles.css',
-  './manifest.json',
-  './offline.html',
-  './produccion_historica.html',
-  './assets/logo_casur.png',
-  './data/metadata.json',
-  './data/metricas_lote.json',
-  './data/aforo_2627.json',
-  './data/produccion_historica_lote.json',
-  './icons/icon-180.png',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/maskable-icon-512.png',
-  './icons/favicon-32.png'
+  './', './index.html', './app.js', './styles.css', './manifest.json', './offline.html', './produccion_historica.html',
+  './assets/logo_casur.png', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-icon-512.png', './icons/favicon-32.png'
 ];
-const LARGE_ASSETS = ['./data/poligonos_casur.geojson','./historico.html','./casur_suertes_operativo/index.html'];
+const LARGE_ASSETS = [];
 
 self.addEventListener('install', event => {
   event.waitUntil((async()=>{
@@ -53,6 +38,10 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
+  if(url.origin === self.location.origin && /\/data\//.test(url.pathname)){
+    event.respondWith(fetch(req).catch(()=>caches.match(req)));
+    return;
+  }
   if(isShellRequest(url)){
     event.respondWith(fetch(req).then(resp=>{
       const copy = resp.clone();
