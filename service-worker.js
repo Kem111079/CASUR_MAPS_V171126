@@ -1,4 +1,4 @@
-const CACHE_NAME = 'casur-maps-pwa-vf-23826-historico-tch-corte-fix';
+const CACHE_NAME = 'casur-maps-pwa-vf-23826-historico-tch-corte-fix-v2';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const CORE_ASSETS = [
   './styles.css',
   './manifest.json',
   './offline.html',
+  './produccion_historica.html',
   './assets/logo_casur.png',
   './data/metadata.json',
   './data/metricas_lote.json',

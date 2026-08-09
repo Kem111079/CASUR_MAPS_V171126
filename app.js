@@ -5,6 +5,7 @@ const CASUR_APP_VERSION = 'VF_23826';
 const METRICAS_URL = './data/metricas_lote.json';
 const AFORO_URL = './data/aforo_2627.json';
 const PRODUCCION_HISTORICA_URL = './data/produccion_historica_lote.json';
+const PRODUCCION_HISTORICA_PAGE_URL = './produccion_historica.html';
 const HISTORICO_URL = './historico.html';
 let map, polygonsLayer, polygonsHaloLayer, labelsLayer, selectedLayer, DATA, META, METRICAS, AFORO, PRODUCCION_HISTORICA, INITIAL_BOUNDS;
 let activeBaseMapName = 'Mapa claro';
@@ -234,7 +235,8 @@ function getFeatureKey(p){ return getCodLote(p) || normalizeCode(p.ID_POLY); }
 function getTablon(p){ return normalizeCode(p.Tablon || p.LLAVE_TABL || ''); }
 function urlFor(module,p){
   const codlote=getCodLote(p), codfinca=normalizeCode(p.Codfinca), suerte=normalizeCode(p.Suerte), llave=normalizeCode(p.LLAVE_TABL || p.LLAVE_LOTE || '');
-  const params = new URLSearchParams({from:'map', modulo:module, codlote, codfinca, suerte, llave});
+  const params = new URLSearchParams({from:'map', modulo:module, codlote, hhhsss:codlote, codfinca, suerte, llave});
+  if(String(module||'').toLowerCase()==='historico' || String(module||'').toLowerCase()==='produccion') return PRODUCCION_HISTORICA_PAGE_URL + '?' + params.toString();
   return HISTORICO_URL + '?' + params.toString();
 }
 function openModule(module){
@@ -917,7 +919,7 @@ function searchFeature(){
 function resetView(){
   $('searchBox').value=''; $('fincaFilter').value='';
   polygonsLayer.eachLayer(layer=>{ if(!map.hasLayer(layer)) layer.addTo(map); layer.setStyle(smartStyle(layer.feature)); });
-  selectedLayer=null; selectedKey=''; $('selectedInfo').innerHTML='Seleccione un polígono para abrir Cronológico o Histórico.';
+  selectedLayer=null; selectedKey=''; $('selectedInfo').innerHTML='Seleccione un polígono para abrir Cronológico o Producción histórica.';
   const sc=$('sheetContent'); if(sc) sc.innerHTML='<div class="sheet-empty">Toque un polígono para ver CodLote, finca y accesos a Cronológico / Histórico.</div>';
   hideSelectionSheet();
   map.fitBounds(INITIAL_BOUNDS,{padding:[20,20]});
@@ -1114,7 +1116,7 @@ function candidateRowHtml(c,i){
 }
 function candidateActionsHtml(c,i,compact){
   const p=c.p, crono=urlFor('crono',p), hist=urlFor('historico',p);
-  return `<div class="gps-inside-actions ${compact?'compact':''}"><a href="${escapeHtml(crono)}">Cronológico</a><a href="${escapeHtml(hist)}">Histórico</a>${compact?'':'<button type="button" onclick="useGpsCandidate('+i+',true)">Acercar</button>'}</div>`;
+  return `<div class="gps-inside-actions ${compact?'compact':''}"><a href="${escapeHtml(crono)}">Cronológico</a><a href="${escapeHtml(hist)}">Producción histórica</a>${compact?'':'<button type="button" onclick="useGpsCandidate('+i+',true)">Acercar</button>'}</div>`;
 }
 function updateGpsSheet(html){
   const sheet=$('selectionSheet'), content=$('sheetContent');
@@ -1539,7 +1541,7 @@ function renderQuickFichaHtml(p){
     ${qv('Días desde corte',Number.isFinite(edadDias)?nf.format(edadDias)+' días':'—')}${qv('Último corte',fechaCorte)}${qv('Variedad',variedad)}${qv('Zona',zona)}
   </div>
   <div class="quick-ficha-section"><h3>Observaciones locales</h3>${obsHtml}</div>
-  <div class="quick-ficha-actions"><a class="crono" href="${escapeHtml(urlFor('crono',p))}">Cronológico completo</a><a class="hist" href="${escapeHtml(urlFor('historico',p))}">Histórico completo</a><button class="obs" onclick="openObservationForm(selectedProps); closeQuickFicha();" type="button">Registrar observación</button><button class="close" onclick="closeQuickFicha()" type="button">Cerrar</button></div>`;
+  <div class="quick-ficha-actions"><a class="crono" href="${escapeHtml(urlFor('crono',p))}">Cronológico completo</a><a class="hist" href="${escapeHtml(urlFor('historico',p))}">Producción histórica</a><button class="obs" onclick="openObservationForm(selectedProps); closeQuickFicha();" type="button">Registrar observación</button><button class="close" onclick="closeQuickFicha()" type="button">Cerrar</button></div>`;
 }
 const casurExtraActionsBeforeV9 = extraFeatureActions;
 extraFeatureActions = function(p){
@@ -2521,3 +2523,11 @@ aforoBlockHtml = function(p){
   return `<div class="aforo-block"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-grid"><div><span>HHHSSS</span><b>${escapeHtml(a.hhhsss||displayCode(getCodLote(p)))}</b></div><div><span>actTCH</span><b>${escapeHtml(formatNumAforo(a.actTCH,' t/ha'))}</b></div><div><span>Toneladas</span><b>${escapeHtml(formatNumAforo(a.toneladas,' t'))}</b></div></div><div class="aforo-foot">${escapeHtml(a.clasificacion||'')} ${a.zona?`· ${escapeHtml(a.zona)}`:''} ${a.tenencia?`· ${escapeHtml(a.tenencia)}`:''}</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes Operativo</a></div>`;
 };
 window.aforoBlockHtml=aforoBlockHtml;
+
+
+// VF_23826 V2 · respaldo: abrir producción histórica en página liviana si el modal interno no se usa.
+function openProduccionHistoricaPage(){
+  if(!selectedProps){ alert('Seleccione primero un polígono.'); return; }
+  location.href = urlFor('historico', selectedProps);
+}
+window.openProduccionHistoricaPage=openProduccionHistoricaPage;
