@@ -1,6 +1,6 @@
 {
-  "nombre": "CASUR Maps · V171126B_CAMPO",
-  "version": "V171126B_CAMPO",
+  "nombre": "CASUR Maps · V171126_SHAPE_AFORO",
+  "version": "V171126_SHAPE_AFORO",
   "fuente_shape": "Shape_Casur_FNC_171126.gpkg",
   "fuente_aforo": "Estimados_para_APP_Z2627v2.xlsx / Estimados_2627",
   "fuente_aforo_version": "Version del 12.10.2026",
@@ -22,7 +22,7 @@
     -85.595346,
     11.787239
   ],
-  "aforo_generated_at": "2026-11-17T22:34:28",
+  "aforo_generated_at": "2026-11-17T22:53:26",
   "aforo_zafra": "2026-2027",
   "aforo_records": 1046,
   "aforo_lotes": 1046,
@@ -33,5 +33,5 @@
   "nota_aforo": "actTCH y Toneladas corresponden al estimado de la zafra; no reemplazan TCH histórico.",
   "datos_al": "2026-11-17",
   "cortes_al": "",
-  "generated_at": "2026-11-17T22:34:28"
+  "generated_at": "2026-11-17T22:53:26"
 }
