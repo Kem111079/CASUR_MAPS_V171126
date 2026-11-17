@@ -1,0 +1,410 @@
+{
+  "generated_at": "2026-11-17T21:49:01",
+  "version": "V171126_SHAPE_FNC_AFORO_Z2627V2",
+  "shape": {
+    "archivo": "Shape_Casur_FNC_171126.gpkg",
+    "poligonos": 8341,
+    "codlotes": 1081,
+    "area_total_ha": 10319.72,
+    "geometrias_invalidas_reparadas": 8,
+    "poligonos_previos": 8254
+  },
+  "aforo": {
+    "archivo": "Estimados_para_APP_Z2627v2.xlsx",
+    "version": "Version del 12.10.2026",
+    "suertes": 1046,
+    "area_ha": 9672.13,
+    "toneladas": 563372.76,
+    "tch_ponderado": 58.25,
+    "toneladas_opt": 600654.08,
+    "tch_opt_ponderado": 62.1,
+    "area_con_aforo_ha": 9118.73,
+    "tch_ponderado_area_con_aforo": 61.78,
+    "actTCH_modificado_vs_carga_anterior": 695,
+    "area_modificada_vs_carga_anterior": 151,
+    "suertes_que_salen_del_aforo": [
+      "14710A",
+      "2209B",
+      "3313",
+      "3316A",
+      "3325",
+      "3327",
+      "3328",
+      "902A"
+    ],
+    "suertes_nuevas_en_aforo": [],
+    "destino": {
+      "Molienda": 948,
+      "Semilla AS": 41,
+      "Investigacion": 2,
+      "Semilla": 6,
+      "Sin Caña": 43,
+      "Baja Prod": 6
+    },
+    "clasificacion": {
+      "Molienda": 949,
+      "Semilla": 46,
+      "Investigacion": 2,
+      "Sin Caña": 34,
+      "Baja rentabilidad": 15
+    }
+  },
+  "validaciones": {
+    "shape_sin_aforo": [
+      "114A",
+      "14710A",
+      "15501",
+      "15502",
+      "15503",
+      "15504",
+      "15505",
+      "15506",
+      "15507",
+      "15508",
+      "15509",
+      "15510",
+      "15510A",
+      "15511",
+      "15512",
+      "15513",
+      "15514",
+      "15515",
+      "15516",
+      "15517",
+      "15518",
+      "15519",
+      "15520",
+      "15521",
+      "3313",
+      "3316A",
+      "3325",
+      "3327",
+      "3328",
+      "87801",
+      "87802",
+      "87803",
+      "87804",
+      "87804A",
+      "87805",
+      "87806",
+      "87806A",
+      "87807",
+      "87808",
+      "87809",
+      "87810"
+    ],
+    "aforo_sin_shape": [
+      "18413A",
+      "1921B",
+      "337A",
+      "606",
+      "6301A",
+      "99347A"
+    ],
+    "duplicados_excel": [],
+    "tch_opt_menor_que_actTCH": [
+      {
+        "codlote": "1427",
+        "actTCH": 64.0,
+        "tch_opt": 54.0
+      },
+      {
+        "codlote": "12504",
+        "actTCH": 65.0,
+        "tch_opt": 48.0
+      },
+      {
+        "codlote": "99319",
+        "actTCH": 65.0,
+        "tch_opt": 57.0
+      }
+    ],
+    "aforo_area_cero": [
+      "90401",
+      "90401A",
+      "6301",
+      "12514",
+      "49404A",
+      "18402",
+      "18403",
+      "18405",
+      "18407",
+      "18408",
+      "18410",
+      "18416",
+      "18417",
+      "18418",
+      "18420",
+      "18421",
+      "18422",
+      "18423",
+      "18424",
+      "18425",
+      "18427",
+      "18428",
+      "18429",
+      "18430",
+      "18440",
+      "18440A",
+      "6401",
+      "6402",
+      "6403",
+      "6203",
+      "99341",
+      "99344",
+      "99345",
+      "99347A",
+      "99348",
+      "99348A",
+      "99352",
+      "9601",
+      "5001",
+      "5003"
+    ],
+    "variedad_actualizada_desde_shape": [
+      {
+        "codlote": "3802",
+        "antes": "CP 72-2086",
+        "ahora": "NA 56-42"
+      },
+      {
+        "codlote": "1030",
+        "antes": "RB 86-7515",
+        "ahora": "CC06-783"
+      },
+      {
+        "codlote": "1502",
+        "antes": "B 82-333",
+        "ahora": "CGMEX10-26"
+      },
+      {
+        "codlote": "2010",
+        "antes": "MX 79-431",
+        "ahora": "LAI 00-301"
+      },
+      {
+        "codlote": "1801",
+        "antes": "NA 56-42",
+        "ahora": "CC06-783"
+      },
+      {
+        "codlote": "229A",
+        "antes": "NA 56-42",
+        "ahora": "LAI 00-301"
+      },
+      {
+        "codlote": "248",
+        "antes": "NA 56-42",
+        "ahora": "LAI 08-390"
+      },
+      {
+        "codlote": "250",
+        "antes": "CP 72-2086",
+        "ahora": "CC06-783"
+      },
+      {
+        "codlote": "252",
+        "antes": "RB 84-5210",
+        "ahora": "CP 72-2086"
+      },
+      {
+        "codlote": "99110",
+        "antes": "CP 72-2086",
+        "ahora": "NA 56-42"
+      },
+      {
+        "codlote": "99111",
+        "antes": "CP 72-2086",
+        "ahora": "NA 56-42"
+      },
+      {
+        "codlote": "75803",
+        "antes": "CP 72-2086",
+        "ahora": "MX 79-431"
+      },
+      {
+        "codlote": "99211",
+        "antes": "CP 00-1101",
+        "ahora": "B 82-333"
+      },
+      {
+        "codlote": "99232",
+        "antes": "RB 86-7515",
+        "ahora": "NA 56-42"
+      },
+      {
+        "codlote": "110",
+        "antes": "VARIEDADES",
+        "ahora": "NA 56-42"
+      },
+      {
+        "codlote": "112",
+        "antes": "CP 72-2086",
+        "ahora": "NA 56-42"
+      },
+      {
+        "codlote": "99325",
+        "antes": "RB 84-5210",
+        "ahora": "NA 56-42"
+      }
+    ],
+    "area_shape_vs_aforo_mayor_10pct": [
+      {
+        "codlote": "19011",
+        "area_shape_ha": 7.18,
+        "area_aforo_ha": 1.48,
+        "dif_pct": 385.0
+      },
+      {
+        "codlote": "12513",
+        "area_shape_ha": 15.35,
+        "area_aforo_ha": 5.35,
+        "dif_pct": 187.0
+      },
+      {
+        "codlote": "1921",
+        "area_shape_ha": 6.67,
+        "area_aforo_ha": 3.09,
+        "dif_pct": 115.8
+      },
+      {
+        "codlote": "19013",
+        "area_shape_ha": 7.08,
+        "area_aforo_ha": 3.58,
+        "dif_pct": 97.7
+      },
+      {
+        "codlote": "5301",
+        "area_shape_ha": 1.14,
+        "area_aforo_ha": 0.6,
+        "dif_pct": 90.8
+      },
+      {
+        "codlote": "337",
+        "area_shape_ha": 12.44,
+        "area_aforo_ha": 6.59,
+        "dif_pct": 88.7
+      },
+      {
+        "codlote": "19014",
+        "area_shape_ha": 16.55,
+        "area_aforo_ha": 8.87,
+        "dif_pct": 86.6
+      },
+      {
+        "codlote": "6201",
+        "area_shape_ha": 32.94,
+        "area_aforo_ha": 18.4,
+        "dif_pct": 79.0
+      },
+      {
+        "codlote": "12508",
+        "area_shape_ha": 3.93,
+        "area_aforo_ha": 2.26,
+        "dif_pct": 74.1
+      },
+      {
+        "codlote": "6202",
+        "area_shape_ha": 29.72,
+        "area_aforo_ha": 17.7,
+        "dif_pct": 67.9
+      },
+      {
+        "codlote": "85702",
+        "area_shape_ha": 7.28,
+        "area_aforo_ha": 4.4,
+        "dif_pct": 65.4
+      },
+      {
+        "codlote": "88201",
+        "area_shape_ha": 2.96,
+        "area_aforo_ha": 1.79,
+        "dif_pct": 65.4
+      },
+      {
+        "codlote": "19015",
+        "area_shape_ha": 22.81,
+        "area_aforo_ha": 13.81,
+        "dif_pct": 65.2
+      },
+      {
+        "codlote": "99342",
+        "area_shape_ha": 4.62,
+        "area_aforo_ha": 2.94,
+        "dif_pct": 57.0
+      },
+      {
+        "codlote": "85705A",
+        "area_shape_ha": 3.1,
+        "area_aforo_ha": 2.12,
+        "dif_pct": 46.5
+      },
+      {
+        "codlote": "902",
+        "area_shape_ha": 16.04,
+        "area_aforo_ha": 11.85,
+        "dif_pct": 35.4
+      },
+      {
+        "codlote": "90804",
+        "area_shape_ha": 15.86,
+        "area_aforo_ha": 11.92,
+        "dif_pct": 33.1
+      },
+      {
+        "codlote": "85706",
+        "area_shape_ha": 4.27,
+        "area_aforo_ha": 5.98,
+        "dif_pct": -28.6
+      },
+      {
+        "codlote": "3003",
+        "area_shape_ha": 13.87,
+        "area_aforo_ha": 10.87,
+        "dif_pct": 27.6
+      },
+      {
+        "codlote": "85705",
+        "area_shape_ha": 4.88,
+        "area_aforo_ha": 6.28,
+        "dif_pct": -22.3
+      },
+      {
+        "codlote": "99329",
+        "area_shape_ha": 27.5,
+        "area_aforo_ha": 22.63,
+        "dif_pct": 21.5
+      },
+      {
+        "codlote": "29201",
+        "area_shape_ha": 15.88,
+        "area_aforo_ha": 13.08,
+        "dif_pct": 21.4
+      },
+      {
+        "codlote": "2701",
+        "area_shape_ha": 10.15,
+        "area_aforo_ha": 8.75,
+        "dif_pct": 16.0
+      },
+      {
+        "codlote": "2702",
+        "area_shape_ha": 7.76,
+        "area_aforo_ha": 9.16,
+        "dif_pct": -15.3
+      },
+      {
+        "codlote": "12503",
+        "area_shape_ha": 11.98,
+        "area_aforo_ha": 10.48,
+        "dif_pct": 14.3
+      },
+      {
+        "codlote": "85703A",
+        "area_shape_ha": 9.24,
+        "area_aforo_ha": 10.35,
+        "dif_pct": -10.7
+      }
+    ]
+  }
+}
