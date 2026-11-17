@@ -33,10 +33,14 @@
     </div>
     <div id="chips"><button id="chipGps" type="button" class="chip-gps" hidden></button><span id="chipRed" class="chip-red" hidden>Sin señal · mapa guardado</span></div>
     <div id="leyenda" class="leyenda oculta"></div>
+    <button id="btnBrujula" type="button" class="fab brujula" aria-label="Orientación del mapa">
+      <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2 8 12h8z" fill="#d7191c"/><path d="M12 22l4-10H8z" fill="currentColor" opacity=".55"/></svg>
+    </button>
     <button id="btnGps" type="button" class="fab apagado" aria-label="Activar GPS">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>
     </button>
     <div id="medirBar" class="medir" hidden><span id="medirTxt"></span><button id="medirDeshacer" type="button" class="btn ter">↶ Deshacer</button><button id="medirFin" type="button" class="btn pri">Terminar</button></div>
+    <span id="atrib">© OpenStreetMap · Esri</span>
     <section id="card" class="card oculta" aria-live="polite"></section>
   </main>
 

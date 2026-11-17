@@ -2,7 +2,7 @@
    - Aplicación: se sirve desde caché al instante y se refresca en segundo plano.
    - data/: no se toca aquí; la app administra su propia copia y solo descarga cuando cambia la versión.
    - Mapa base: caché aparte con tope, para que nunca desplace a los polígonos. */
-const VERSION = 'v171126b';
+const VERSION = 'v171126c';
 const SHELL = 'casur-maps-shell-' + VERSION;
 const TILES = 'casur-tiles-v1';
 const TILES_MAX = 2500;
