@@ -1,5 +1,18 @@
 # Cambios
 
+## V171126D · 17-nov-2026
+- Resumen de aforo: buscador de finca, productor o código de lote, con sus totales y acceso directo.
+- Se retiran las notas explicativas del resumen (fórmula del TCH y conteo de suertes).
+- Al abrir sin estar instalada, la app invita a instalarse.
+
+## V171126C · 17-nov-2026
+- **Selección por tablón:** en la tarjeta, "Ver lote / Ver tablón" (también en Capas). Por tablón se resalta solo ese polígono y se muestran su código, área en ha y mz, parte del lote y centro. Lista de tablones del lote para saltar entre ellos.
+- **Colores de producción (TCH estimado):** < 40 rojo · 40–55 morado (sin cambio) · 55–70 mostaza · 70–85 verde · > 85 verde oscuro.
+- **Capas:** se agregan Zona y Tipo de riego; se retiran TCH última zafra y Brecha contra óptimo.
+- "TCH óptimo" pasa a llamarse **TCH optimista**.
+- Se retiran los enlaces a Cronológico y CASUR Suertes; se conserva el histórico TCH del lote.
+- **GPS:** se activa solo al abrir, con seguimiento. **Rumbo arriba** de vuelta (por defecto): el mapa gira con el avance y los toques y el arrastre se corrigen con el ángulo. Botón de brújula para alternar con norte arriba.
+
 ## V171126B · 17-nov-2026
 **Datos**
 - Excel de estimados actualizado: AIDOSA 90809, 90810 y 90815 pasan de Molienda a Semilla.
@@ -18,7 +31,6 @@
 - Exportación ZIP de bitácora con fotos; reporte de visita con mapa de la ruta y fotos.
 - Sin señal: abre al instante desde la copia local y solo descarga cuando cambian los datos; Leaflet incluido; mapa base con caché propia y "Guardar esta zona".
 - Temas Campo (alto contraste), Claro y Oscuro; controles de 44 px o más.
-- Mapa siempre norte arriba; la flecha del GPS indica el rumbo.
 
 **Retirado**
 - `historico.html` y `produccion_historica.html` (datos de junio duplicados). El cronológico se abre en CASUR Suertes.

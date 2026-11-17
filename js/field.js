@@ -227,35 +227,65 @@ let aforoGrupo = 'hacienda', instalarEvt = null;
 function renderMas() {
   const g = (RESUMEN.resumen || {}).global || {}, filas = ((RESUMEN.resumen || {})[aforoGrupo] || []);
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
-  $('tabMas').innerHTML = `<header><h2>Resumen aforo 26/27</h2><p>TCH ponderado = toneladas de molienda ÷ hectáreas de molienda.</p></header>
-    <div class="cifras c4">${cifra('Área molienda', nf0.format(g.area_ha || 0) + ' ha')}${cifra('Toneladas', nf0.format(g.toneladas || 0))}${cifra('TCH pond.', fmtN(g.tch_ponderado, '', nf), 'c-est')}${cifra('TCH óptimo', fmtN(g.tch_opt_ponderado, '', nf))}</div>
-    <p class="pie">${nf0.format(g.suertes || 0)} suertes de molienda · semilla ${nf.format(g.area_semilla_ha || 0)} ha · fuera (sin caña, baja rentabilidad, investigación) ${nf.format(g.area_fuera_ha || 0)} ha</p>
+  $('tabMas').innerHTML = `<header><h2>Resumen aforo 26/27</h2></header>
+    <div class="cifras c4">${cifra('Área molienda', nf0.format(g.area_ha || 0) + ' ha')}${cifra('Toneladas', nf0.format(g.toneladas || 0))}${cifra('TCH pond.', fmtN(g.tch_ponderado, '', nf), 'c-est')}${cifra('TCH optimista', fmtN(g.tch_opt_ponderado, '', nf))}</div>
+    <label class="campo">Buscar finca o lote<input id="aforoQ" type="search" placeholder="Nombre de finca, productor o código de lote" autocomplete="off" autocapitalize="characters" enterkeyhint="search"></label>
+    <div id="aforoRes" class="lista-lotes"></div>
     <label class="campo">Agrupar por${sel('aforoGrupo', [['hacienda', 'Hacienda / productor'], ['zona', 'Zona'], ['finca', 'Finca y tenencia']], aforoGrupo)}</label>
-    <div class="tabla"><table><thead><tr><th>Grupo</th><th>ha mol.</th><th>Ton.</th><th>TCH</th><th>Ópt.</th></tr></thead><tbody>${filas.map(x => `<tr ${aforoGrupo === 'hacienda' ? `data-finca="${esc(x.key)}"` : ''}><td>${esc(x.key)}</td><td>${nf0.format(x.area_ha)}</td><td>${nf0.format(x.toneladas)}</td><td><b>${x.area_ha ? nf1.format(x.tch_ponderado) : '—'}</b></td><td>${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="tabla"><table><thead><tr><th>Grupo</th><th>ha mol.</th><th>Ton.</th><th>TCH</th><th>Optim.</th></tr></thead><tbody id="aforoFilas">${filasAforo(filas)}</tbody></table></div>
     <h3>Ajustes</h3>
     <label class="campo">Técnico<input id="ajTec" type="text" value="${esc(S.tecnico)}" placeholder="Su nombre"></label>
     <label class="campo">Uso del GPS${sel('ajGps', [['vehiculo', 'En vehículo (recomendado)'], ['campo', 'Caminando'], ['preciso', 'Punto fijo, máxima precisión']], S.gpsPerfil)}</label>
     <label class="campo">Pantalla${sel('ajTema', [['campo', 'Campo · alto contraste para sol'], ['claro', 'Claro suave'], ['oscuro', 'Oscuro · madrugada']], S.tema)}</label>
+ <label class="campo">Orientación del mapa con GPS${sel('ajOri', [['rumbo', 'Rumbo arriba · el mapa gira con su avance'], ['norte', 'Norte arriba · el mapa no gira']], S.orientacion)}</label>
+    <label class="interruptor"><input type="checkbox" id="ajAuto" ${S.gpsAuto ? 'checked' : ''}><span>Activar el GPS al abrir la app</span></label>
     <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Mantener la pantalla encendida durante la visita</span></label>
     <label class="interruptor"><input type="checkbox" id="ajVib" ${S.vibrar ? 'checked' : ''}><span>Vibrar al entrar a un lote</span></label>
     <h3>Datos</h3>
     <div class="kvs"><div><span>Datos al</span><b>${fechaCorta(META.datos_al || META.generated_at)}</b></div><div><span>Cortes de zafra al</span><b>${META.cortes_al ? fechaCorta(META.cortes_al) : 'Sin cargar'}</b></div><div><span>Shape</span><b>${esc(META.fuente_shape || '—')}</b></div><div><span>Aforo</span><b>${esc(META.fuente_aforo_version || META.fuente_aforo || '—')}</b></div><div><span>Polígonos / lotes</span><b>${nf0.format(META.poligonos || 0)} / ${nf0.format(META.codlotes_shape || 0)}</b></div><div><span>Versión de la app</span><b>${APP_VERSION}</b></div><div><span>Espacio usado</span><b id="espacio">…</b></div></div>
     ${META.cortes_al ? '' : '<div class="nota est-medio">Sin cortes de la zafra en curso: la edad y el TCH anterior vienen de la zafra 25/26.</div>'}
     <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">⟳ Buscar datos nuevos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
-    <div class="acciones"><a class="btn ter" href="${OPERATIVO_URL}">▣ CASUR Suertes</a>${instalarEvt ? '<button type="button" class="btn pri" onclick="instalarApp()">⬇ Instalar app</button>' : ''}</div>`;
+    ${instalarEvt ? '<div class="acciones"><button type="button" class="btn pri" onclick="instalarApp()">⬇ Instalar app</button></div>' : ''}`;
   $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
+  $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
+  $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
   $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
   $('ajTec').addEventListener('change', e => { S.tecnico = e.target.value.trim(); guardarAjustes(); });
   $('ajGps').addEventListener('change', e => { S.gpsPerfil = e.target.value; guardarAjustes(); });
   $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); });
+  $('ajOri').addEventListener('change', e => { S.orientacion = e.target.value; guardarAjustes(); orientar(); pintarBrujula(); });
+  $('ajAuto').addEventListener('change', e => { S.gpsAuto = e.target.checked; guardarAjustes(); });
   $('ajPant').addEventListener('change', e => { S.pantalla = e.target.checked; guardarAjustes(); S.pantalla ? pedirPantalla() : soltarPantalla(); });
   $('ajVib').addEventListener('change', e => { S.vibrar = e.target.checked; guardarAjustes(); vibrar(); });
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => { const el = $('espacio'); if (el) el.textContent = nf0.format((e.usage || 0) / 1048576) + ' MB'; }).catch(() => {});
 }
+function filasAforo(filas) {
+  return filas.map(x => `<tr ${aforoGrupo === 'hacienda' ? `data-finca="${esc(x.key)}"` : ''}><td>${esc(x.key)}</td><td>${nf0.format(x.area_ha)}</td><td>${nf0.format(x.toneladas)}</td><td><b>${x.area_ha ? nf1.format(x.tch_ponderado) : '—'}</b></td><td>${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</td></tr>`).join('') || '<tr><td colspan="5">Sin coincidencias en esta agrupación.</td></tr>';
+}
+/* Búsqueda dentro del resumen: fincas/productores con sus totales y lotes con su aforo. También filtra la tabla. */
+function buscarAforo(q) {
+  const t = sinTildes(q).trim(), res = $('aforoRes'), todas = (RESUMEN.resumen || {})[aforoGrupo] || [];
+  $('aforoFilas').innerHTML = filasAforo(t ? todas.filter(x => sinTildes(x.key).includes(t)) : todas);
+  if (!t) { res.innerHTML = ''; return; }
+  const fincas = ((RESUMEN.resumen || {}).hacienda || []).filter(x => sinTildes(x.key).includes(t)).slice(0, 6);
+  const lotes = Object.values(LOTES).filter(l => l.cod.startsWith(t)).sort((a, b) => a.cod.length - b.cod.length || a.cod.localeCompare(b.cod, 'es', {numeric: true})).slice(0, 8);
+  res.innerHTML = fincas.map(x => `<button type="button" data-finca="${esc(x.key)}"><b>🏡</b><span><strong>${esc(x.key)}</strong><br>${nf0.format(x.area_ha)} ha mol. · ${nf0.format(x.toneladas)} t · TCH ${x.area_ha ? nf1.format(x.tch_ponderado) : '—'} · optim. ${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</span></button>`).join('') +
+    lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)}<br>${fmtN(l.area, ' ha', nf1)} · ${l.conAforo ? `${esc(l.clas || '')} · est. ${l.tchEst > 0 ? nf1.format(l.tchEst) : '—'} · optim. ${l.tchOpt > 0 ? nf1.format(l.tchOpt) : '—'} · ${l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '— t'}` : 'sin aforo 26/27'}</span></button>`).join('') ||
+    '<p class="vacio">Sin coincidencias. Pruebe con el código del lote o parte del nombre.</p>';
+}
 async function revisarDatos() { buscarActualizacion(await dataCache(), META, true); }
 async function borrarMapas() { try { await caches.delete('casur-tiles-v1'); toast('Mapas base guardados borrados.'); renderMas(); } catch (_) {} }
-async function instalarApp() { if (!instalarEvt) return; instalarEvt.prompt(); await instalarEvt.userChoice.catch(() => null); instalarEvt = null; renderMas(); }
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instalarEvt = e; });
+async function instalarApp() { if (!instalarEvt) return; instalarEvt.prompt(); await instalarEvt.userChoice.catch(() => null); instalarEvt = null; if (document.body.dataset.tab === 'mas') renderMas(); }
+const appInstalada = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let _avisoInst = false;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instalarEvt = e; avisarInstalacion(); });
+window.addEventListener('appinstalled', () => { instalarEvt = null; toast('CASUR Maps quedó instalada.', {tipo: 'bien'}); });
+/* Al abrir sin estar instalada: invita a instalar. En iPhone no hay instalación directa y se indican los pasos. */
+function avisarInstalacion() {
+  if (_avisoInst || appInstalada() || !$('loader').hidden) return;
+  if (instalarEvt) { _avisoInst = true; toast('Instale CASUR Maps en este teléfono para abrirla sin señal.', {accion: 'Instalar', ms: 15000, alAccion: instalarApp}); }
+  else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) { _avisoInst = true; toast('Para instalar: toque Compartir y luego "Agregar a inicio".', {ms: 12000}); }
+}
 
 /* ── Arranque ── */
 async function iniciar() {
@@ -266,7 +296,7 @@ async function iniciar() {
     DATA = d.geo; META = d.meta || {}; RESUMEN = d.resumen || {};
     construirLotes(d.geo, d.metricas, d.cortes); construirIndice();
     initMap(); bindBusqueda();
-    $('btnGps').addEventListener('click', gpsBoton); $('btnCapas').addEventListener('click', abrirCapas); $('chipGps').addEventListener('click', abrirGps);
+    $('btnGps').addEventListener('click', gpsBoton); $('btnBrujula').addEventListener('click', alternarOrientacion); pintarBrujula(); $('btnCapas').addEventListener('click', abrirCapas); $('chipGps').addEventListener('click', abrirGps);
     $('hojaX').addEventListener('click', cerrarHoja); $('hojaFondo').addEventListener('click', cerrarHoja);
     $('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) mostrarTab(b.dataset.tab); });
     $('medirDeshacer').addEventListener('click', medirDeshacer); $('medirFin').addEventListener('click', medirCerrar);
@@ -274,9 +304,12 @@ async function iniciar() {
     pintarGpsBtn(); pintarLista(); actualizarRed();
     $('loader').hidden = true; map.invalidateSize();
     await cargarVisitas();
-    const lote = new URLSearchParams(location.search).get('lote');
-    if (lote && LOTES[codKey(lote)]) seleccionarLote(lote, {zoom: true});
+    const lote = new URLSearchParams(location.search).get('lote'), conEnlace = lote && LOTES[codKey(lote)];
+    if (conEnlace) seleccionarLote(lote, {zoom: true});
+    // GPS automático al abrir, con seguimiento. Si se abrió con un enlace a un lote, no se mueve el mapa de ese lote.
+    if (S.gpsAuto) iniciarGps(!conEnlace, true);
     registrarSW();
+    setTimeout(avisarInstalacion, 1500);
     if (navigator.onLine) setTimeout(() => cargarHistorico().catch(() => {}), 6000); // deja el histórico listo para usarlo sin señal
   } catch (e) {
     console.error(e);

@@ -12,10 +12,42 @@ function abrirHoja(titulo, html, clase = '') {
 function cerrarHoja() { $('hoja').classList.remove('abierta'); $('hojaFondo').classList.remove('abierta'); if (typeof detenerDictado === 'function') detenerDictado(); }
 
 /* ── Mapa ── */
+/* ── Rumbo arriba ──
+   El contenedor del mapa es un cuadrado del tamaño de la diagonal de la pantalla y se gira con CSS.
+   Para que el dedo y el mapa coincidan, se corrige la conversión de toques y el arrastre con el ángulo actual. */
+let mapRot = 0; // grados, sentido horario (CSS)
+function ajustarLienzo() {
+  const v = $('vistaMapa'), W = v.clientWidth, H = v.clientHeight, D = Math.ceil(Math.hypot(W, H)) + 2, m = $('map');
+  m.style.width = m.style.height = D + 'px'; m.style.left = Math.round((W - D) / 2) + 'px'; m.style.top = Math.round((H - D) / 2) + 'px';
+  if (map) map.invalidateSize({animate: false});
+}
+function margenes(arriba = 90, abajo = 40, lado = 30) { // relleno para encuadrar dentro de la parte visible del lienzo
+  const v = $('vistaMapa'), D = $('map').offsetWidth, mx = (D - v.clientWidth) / 2, my = (D - v.clientHeight) / 2;
+  if (mapRot % 360) { const g = Math.max(mx, my) + Math.max(arriba, abajo); return {padding: [g, g]}; }
+  return {paddingTopLeft: [mx + lado, my + arriba], paddingBottomRight: [mx + lado, my + abajo]};
+}
+function girarMapa(grados) {
+  const d = ((grados - mapRot + 540) % 360) - 180; // camino más corto
+  if (Math.abs(d) < 0.5) return;
+  mapRot += d;
+  const m = $('map'); m.style.setProperty('--rot', mapRot.toFixed(1) + 'deg'); m.style.setProperty('--contra', (-mapRot).toFixed(1) + 'deg');
+  pintarBrujula(); etiquetasDebounce();
+}
+L.Map.include({
+  mouseEventToContainerPoint(e) {
+    const r = this._container.getBoundingClientRect(), t = mapRot * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+    const x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2), sz = this.getSize();
+    return L.point(c * x + s * y + sz.x / 2, -s * x + c * y + sz.y / 2);
+  }
+});
 function initMap() {
-  map = L.map('map', {zoomControl: false, preferCanvas: true, attributionControl: true, maxZoom: 20});
-  map.attributionControl.setPrefix('');
-  L.control.scale({imperial: false, position: 'bottomleft'}).addTo(map);
+  ajustarLienzo();
+  map = L.map('map', {zoomControl: false, preferCanvas: true, attributionControl: false, maxZoom: 20});
+  window.addEventListener('resize', ajustarLienzo);
+  map.dragging._draggable.on('predrag', function () { // arrastre: convierte el movimiento del dedo al sistema girado
+    const ps = this._parentScale || {x: 1, y: 1}, o = this._newPos.subtract(this._startPos), x = o.x * ps.x, y = o.y * ps.y, t = mapRot * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+    this._newPos = this._startPos.add(L.point(c * x + s * y, -s * x + c * y));
+  });
   baseLayers = {
     claro: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 20, maxNativeZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap'}),
     satelite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 20, maxNativeZoom: 18, crossOrigin: true, attribution: '© Esri'}),
@@ -28,7 +60,7 @@ function initMap() {
     style: estiloFeat,
     onEachFeature: (f, layer) => { f._layer = layer; layer.on('click', e => { if (medir.modo) { L.DomEvent.stopPropagation(e); medirPunto(e.latlng); return; } seleccionarLote(f._cod, {feat: f}); }); }
   }).addTo(map);
-  capaSel = L.geoJSON(null, {interactive: false, style: () => ({color: '#ffd400', weight: 4.5, opacity: 1, fillColor: '#ffd400', fillOpacity: .18})}).addTo(map);
+  capaSel = L.geoJSON(null, {interactive: false, style: f => f._tenue ? {color: '#ffd400', weight: 2, opacity: .9, dashArray: '6 6', fillOpacity: 0} : {color: '#ffd400', weight: 4.5, opacity: 1, fillColor: '#ffd400', fillOpacity: .18}}).addTo(map);
   capaEtiquetas = L.layerGroup().addTo(map);
   capaLista = L.layerGroup().addTo(map);
   capaMedir = L.layerGroup().addTo(map);
@@ -36,7 +68,7 @@ function initMap() {
   map.on('moveend zoomend', () => { etiquetasDebounce(); guardarVista(); });
   map.on('dragstart', () => { if (typeof GPS !== 'undefined') { GPS.siguiendo = false; pintarGpsBtn(); } });
   const v = leerLS(VISTA_KEY, null);
-  if (v && Number.isFinite(v.lat)) map.setView([v.lat, v.lng], v.z); else map.fitBounds(capaLotes.getBounds(), {padding: [20, 20]});
+  if (v && Number.isFinite(v.lat)) map.setView([v.lat, v.lng], v.z); else map.fitBounds(capaLotes.getBounds(), margenes(20, 20, 10));
   actualizarEtiquetas(); pintarLeyenda();
 }
 let _vistaT = null;
@@ -50,16 +82,19 @@ function setBase(nombre, repintar = true) {
 
 /* ── Capas temáticas: una sola variable a la vez, rampa única y leyenda con hectáreas ── */
 const RAMPA = ['#0d0887', '#7e03a8', '#cc4778', '#f89540', '#f0f921'];
+// Producción (t/ha): < 40 rojo · 40–55 morado · 55–70 mostaza · 70–85 verde · > 85 verde oscuro
+const RAMPA_TCH = ['#d7191c', '#7e03a8', '#d4a017', '#3fa34d', '#14532d'];
 const CATS = ['#1f77b4', '#ff7f0e', '#d62728', '#9467bd', '#17becf', '#8c564b', '#e377c2'];
 const TEMAS = {
   ninguno: {t: 'Sin color'},
-  tchAnt: {t: 'TCH última zafra', u: 't/ha', val: l => l.tchAnt, cortes: [40, 55, 70, 85]},
-  tchEst: {t: 'TCH estimado 26/27', u: 't/ha', val: l => esMolienda(l) && l.tchEst > 0 ? l.tchEst : null, cortes: [40, 55, 70, 85]},
-  brecha: {t: 'Brecha estimado vs. óptimo', u: 't/ha', val: l => l.tchOpt > 0 && l.tchEst > 0 ? Math.max(0, l.tchOpt - l.tchEst) : null, cortes: [2, 5, 10, 15]},
+  tchEst: {t: 'TCH estimado 26/27', u: 't/ha', val: l => esMolienda(l) && l.tchEst > 0 ? l.tchEst : null, cortes: [40, 55, 70, 85], rampa: RAMPA_TCH},
   edad: {t: 'Edad desde el corte', u: 'meses', val: edadMeses, cortes: [3, 6, 9, 12]},
+  zona: {t: 'Zona', cat: l => l.zona || 'Sin dato'},
+  riego: {t: 'Tipo de riego', cat: l => l.riego || 'Sin dato'},
   variedad: {t: 'Variedad', cat: l => l.variedad || 'Sin dato'},
   destino: {t: 'Destino / clasificación', cat: l => l.conAforo ? (l.clas || 'Sin dato') : 'Sin aforo'}
 };
+if (!TEMAS[S.colorear]) S.colorear = 'ninguno'; // capas retiradas (TCH última zafra, brecha)
 let temaColor = new Map(), temaLeyenda = [];
 function prepararTema() {
   temaColor = new Map(); temaLeyenda = [];
@@ -67,8 +102,9 @@ function prepararTema() {
   if (T.cortes) {
     const c = T.cortes, rotulos = [`< ${c[0]}`, ...c.slice(0, -1).map((v, i) => `${v} – ${c[i + 1]}`), `> ${c[c.length - 1]}`];
     const ha = new Array(rotulos.length).fill(0); let sin = 0;
-    lotes.forEach(l => { const v = T.val(l); if (v === null || v === undefined) { sin += l.areaShape; return; } let i = c.findIndex(x => v < x); if (i < 0) i = c.length; temaColor.set(l.cod, RAMPA[i]); ha[i] += l.areaShape; });
-    temaLeyenda = rotulos.map((r, i) => ({color: RAMPA[i], txt: r, ha: ha[i]})); if (sin > 0) temaLeyenda.push({color: null, txt: 'Sin dato', ha: sin});
+    const R = T.rampa || RAMPA;
+    lotes.forEach(l => { const v = T.val(l); if (v === null || v === undefined) { sin += l.areaShape; return; } let i = c.findIndex(x => v < x); if (i < 0) i = c.length; temaColor.set(l.cod, R[i]); ha[i] += l.areaShape; });
+    temaLeyenda = rotulos.map((r, i) => ({color: R[i], txt: r, ha: ha[i]})); if (sin > 0) temaLeyenda.push({color: null, txt: 'Sin dato', ha: sin});
   } else if (T.cat) {
     const ha = {}; lotes.forEach(l => { const k = T.cat(l); ha[k] = (ha[k] || 0) + l.areaShape; });
     const orden = Object.keys(ha).sort((a, b) => ha[b] - ha[a]), top = orden.slice(0, CATS.length), col = {};
@@ -111,7 +147,7 @@ function actualizarEtiquetas() {
     const p = map.latLngToContainerPoint(ll), w = txt.length * 8.2 + 10, h = 20, c = [p.x - w / 2, p.y - h / 2, p.x + w / 2, p.y + h / 2];
     if (cajas.some(o => !(c[0] > o[2] || c[2] < o[0] || c[1] > o[3] || c[3] < o[1]))) return false;
     cajas.push(c);
-    L.marker(ll, {interactive: false, keyboard: false, icon: L.divIcon({className: 'etq ' + cls, html: esc(txt), iconSize: null})}).addTo(capaEtiquetas);
+    L.marker(ll, {interactive: false, keyboard: false, icon: L.divIcon({className: 'etq ' + cls, html: `<span>${esc(txt)}</span>`, iconSize: [0, 0]})}).addTo(capaEtiquetas);
     return true;
   };
   if (z >= 18) {
@@ -179,14 +215,23 @@ function seleccionarLote(cod, o = {}) {
   cod = codKey(cod); const l = LOTES[cod];
   if (!l) { toast('No encontré el lote ' + cod, {tipo: 'mal'}); return false; }
   selCod = cod; selFeat = o.feat || l.principal;
-  capaSel.clearLayers(); l.feats.forEach(f => capaSel.addData(f));
+  if (o.modo) { S.selModo = o.modo; guardarAjustes(); }
+  pintarSeleccion();
   if (!o.gps) { const r = [cod, ...recientes().filter(c => c !== cod)].slice(0, 10); escribirLS(REC_KEY, r); }
   if (o.full !== undefined) cardFull = o.full;
-  if (o.zoom && l.bbox) map.fitBounds(boundsDe(l.bbox), {paddingTopLeft: [30, 90], paddingBottomRight: [30, 250], maxZoom: 18});
+  if (o.zoom && l.bbox) map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, 290), {maxZoom: 18}));
   if (!l.nPoly) toast('Este lote no tiene polígono en el shape.');
   mostrarTab('mapa'); renderCard();
   return true;
 }
+const porTablon = () => S.selModo === 'tablon' && !!selFeat;
+function pintarSeleccion() {
+  capaSel.clearLayers(); const l = LOTES[selCod]; if (!l) return;
+  // Por tablón: se resalta el tablón y el resto del lote queda con contorno punteado.
+  l.feats.forEach(f => { if (!porTablon() || f === selFeat) capaSel.addData(Object.assign({}, f, {_tenue: false})); else capaSel.addData(Object.assign({}, f, {_tenue: true})); });
+}
+function setSelModo(modo) { S.selModo = modo; guardarAjustes(); pintarSeleccion(); renderCard(); }
+function seleccionarTablon(i) { const f = DATA.features[i]; if (f) seleccionarLote(f._cod, {feat: f, modo: 'tablon', zoom: true}); }
 function cerrarCard() { selCod = ''; selFeat = null; capaSel.clearLayers(); $('card').className = 'card oculta'; ajustarCard(); }
 function ajustarCard() {
   const el = $('card'), vis = !el.classList.contains('oculta');
@@ -204,19 +249,22 @@ function renderCard() {
   const brecha = l.tchOpt > 0 && l.tchEst > 0 ? l.tchOpt - l.tchEst : null;
   const estim = l.conAforo ? (esMolienda(l) || l.tchEst > 0 ? fmtN(l.tchEst, '', nf1) : '—') : '—';
   const obs = typeof obsDeLote === 'function' ? obsDeLote(l.cod) : [];
+  const tab = porTablon(), pt = selFeat ? selFeat.properties : {}, aT = Number(pt.Area_Ha) || 0;
+  const tablones = l.feats.slice().sort((a, b) => String(a.properties.Tablon).localeCompare(String(b.properties.Tablon), 'es', {numeric: true}));
   el.className = 'card ' + (cardFull ? 'full' : 'peek');
   el.innerHTML = `
     <button type="button" class="card-asa" onclick="cardAlternar()" aria-label="Ampliar o reducir tarjeta"><i></i></button>
     <div class="card-top">
       <div class="card-id">
-        <div class="card-cod">Lote ${esc(l.cod)} <small>${fmtN(l.area, ' ha')}</small></div>
-        <button type="button" class="card-finca" onclick="abrirFinca(LOTES[selCod].hac)">${esc(l.hac)} ›</button>
+        <div class="card-cod">${tab ? 'Tablón ' + esc(pt.Tablon || '—') : 'Lote ' + esc(l.cod)} <small>${tab ? fmtN(pt.Area_Ha, ' ha') : fmtN(l.area, ' ha')}</small></div>
+        <button type="button" class="card-finca" onclick="abrirFinca(LOTES[selCod].hac)">${tab ? 'Lote ' + esc(l.cod) + ' · ' : ''}${esc(l.hac)} ›</button>
       </div>
       <span class="chip est-${st.cls}">${esc(st.txt)}</span>
       <button type="button" class="card-x" onclick="cerrarCard()" aria-label="Cerrar">✕</button>
     </div>
+    ${selFeat ? `<div class="segmento sel-modo"><button type="button" class="${tab ? '' : 'activo'}" onclick="setSelModo('lote')">Ver lote</button><button type="button" class="${tab ? 'activo' : ''}" onclick="setSelModo('tablon')">Ver tablón</button></div>` : ''}
     <div class="cifras">
-      ${cifra('TCH anterior', fmtN(l.tchAnt, '', nf1))}${cifra('Estimado', estim, 'c-est')}${cifra('Óptimo', l.tchOpt > 0 ? fmtN(l.tchOpt, '', nf1) : '—')}${cifra('Edad', edad === null ? '—' : nf1.format(edad) + ' m')}
+      ${cifra('TCH anterior', l.tchAnt > 0 ? nf1.format(l.tchAnt) : '—')}${cifra('Estimado', estim, 'c-est')}${cifra('Optimista', l.tchOpt > 0 ? fmtN(l.tchOpt, '', nf1) : '—')}${cifra('Edad', edad === null ? '—' : nf1.format(edad) + ' m')}
     </div>
     <div class="acciones">
       ${llegar ? `<a class="btn pri" href="${llegar}" target="_blank" rel="noopener">➤ Llegar</a>` : '<button class="btn pri" disabled>➤ Llegar</button>'}
@@ -226,13 +274,16 @@ function renderCard() {
     <div class="solo-full">
       ${st.det ? `<div class="nota est-${st.cls}">${esc(st.det)}</div>` : ''}
       <div class="kvs">
-        ${kv('Tablón tocado', selFeat && selFeat.properties.Tablon)}${kv('Polígonos', l.nPoly ? `${l.nPoly} · ${nf.format(l.areaShape)} ha en shape` : 'Sin polígono')}
+        ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nf.format(aT)} ha · ${nf.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nf.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : kv('Tablón tocado', pt.Tablon)}
+        ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nf.format(l.areaShape)} ha en shape` : 'Sin polígono')}
         ${kv('Variedad', l.variedad)}${kv('Zona', l.zona)}${kv('Riego', l.riego)}${kv('Tenencia', l.tenencia)}
         ${kv('Clasificación', l.clas || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
         ${kv('Último corte', l.fCorte ? `${fechaCorta(l.fCorte)}${l.zafra ? ' · zafra ' + l.zafra : ''}` : '')}${kv('Días desde el corte', diasDesde(l.fCorte) === null ? '' : nf0.format(diasDesde(l.fCorte)))}
-        ${kv('Toneladas estimadas', l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '')}${kv('Toneladas óptimas', l.tonOpt > 0 ? nf0.format(l.tonOpt) + ' t' : '')}
-        ${kv('Brecha vs. óptimo', brecha === null ? '' : nf1.format(brecha) + ' t/ha')}
+        ${kv('Toneladas estimadas', l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '')}${kv('Toneladas optimistas', l.tonOpt > 0 ? nf0.format(l.tonOpt) + ' t' : '')}
+        ${kv('Brecha vs. optimista', brecha === null ? '' : nf1.format(brecha) + ' t/ha')}
       </div>
+      ${tab ? '<p class="pie">TCH, edad, variedad y aforo son datos del lote completo; el shape no los trae por tablón.</p>' : ''}
+      ${tablones.length > 1 ? `<h4>Tablones del lote (${tablones.length})</h4><div class="tablones">${tablones.map(f => `<button type="button" class="${f === selFeat ? 'activo' : ''}" onclick="seleccionarTablon(${f._i})"><b>${esc(f.properties.Tablon || '—')}</b><span>${nf.format(f.properties.Area_Ha)} ha</span></button>`).join('')}</div>` : ''}
       <div class="mini-acc">
         <button type="button" onclick="favToggle(selCod)">${fav ? '★ Favorito' : '☆ Favorito'}</button>
         <button type="button" onclick="listaToggle(selCod)">${enLista ? '✓ En lista del día' : '＋ Lista del día'}</button>
@@ -244,13 +295,12 @@ function renderCard() {
       <button type="button" class="btn sec ancho" id="btnHist" onclick="alternarHistorico()">📈 Histórico TCH</button>
       <div id="histBox" hidden></div>
       <div class="obs-lote"><h4>Registros de este lote</h4>${obs.length ? obs.slice(0, 5).map(obsFilaHtml).join('') : '<p class="vacio">Sin registros en este teléfono.</p>'}</div>
-      <a class="btn ter ancho" href="${OPERATIVO_URL}?hhhsss=${encodeURIComponent(l.cod)}&from=casur_maps">▣ Cronológico y ficha en CASUR Suertes</a>
       <p class="pie">Datos al ${fechaCorta(META.datos_al || META.generated_at)}${META.cortes_al ? ' · cortes al ' + fechaCorta(META.cortes_al) : ' · sin cortes de la zafra en curso'}</p>
     </div>`;
   ajustarCard(); if (cardFull) el.scrollTop = 0;
 }
 function cardAlternar() { cardFull = !cardFull; renderCard(); }
-function acercarLote() { const l = LOTES[selCod]; if (l && l.bbox) { cardFull = false; renderCard(); map.fitBounds(boundsDe(l.bbox), {paddingTopLeft: [30, 90], paddingBottomRight: [30, 250], maxZoom: 19}); } }
+function acercarLote() { const l = LOTES[selCod]; if (l && l.bbox) { cardFull = false; renderCard(); map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, 290), {maxZoom: 19})); } }
 function copiarTexto(txt, ok = 'Copiado') {
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(() => toast(ok, {tipo: 'bien'})).catch(() => prompt('Copie:', txt)); else prompt('Copie:', txt);
 }
@@ -291,24 +341,26 @@ function abrirFinca(nombre, zoom = false) {
   const orden = ls.slice().sort((a, b) => ({mal: 0, medio: 1}[estadoLote(a).cls] ?? 2) - ({mal: 0, medio: 1}[estadoLote(b).cls] ?? 2) || a.cod.localeCompare(b.cod, 'es', {numeric: true}));
   abrirHoja(nombre, `
     <div class="cifras c4">${cifra('Lotes', ls.length)}${cifra('Área molienda', nf0.format(area) + ' ha')}${cifra('Toneladas', nf0.format(ton))}${cifra('TCH pond.', area ? nf1.format(ton / area) : '—', 'c-est')}</div>
-    <p class="pie">Área total ${nf0.format(areaTot)} ha · óptimo ${area ? nf1.format(tonOpt / area) : '—'} t/ha · ${rojos.length} lote(s) en prioridad alta</p>
+    <p class="pie">Área total ${nf0.format(areaTot)} ha · optimista ${area ? nf1.format(tonOpt / area) : '—'} t/ha · ${rojos.length} lote(s) en prioridad alta</p>
     <div class="acciones"><button type="button" class="btn sec" onclick="verFincaEnMapa('${esc(nombre).replace(/'/g, '&#39;')}')">⌕ Ver en mapa</button></div>
     <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${fmtN(l.area, ' ha', nf1)} · ant. ${fmtN(l.tchAnt, '', nf0)} · est. ${l.tchEst > 0 ? nf0.format(l.tchEst) : '—'}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>`; }).join('')}</div>`);
   if (zoom) verFincaEnMapa(nombre, false);
 }
-function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) map.fitBounds(boundsDe(f.bbox), {padding: [40, 40]}); }
+function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); }
 
 /* ── Hoja de capas y herramientas ── */
 function abrirCapas() {
   const op = (grupo, val, txt, act) => `<label class="opcion"><input type="radio" name="${grupo}" value="${val}" ${act ? 'checked' : ''}><span>${txt}</span></label>`;
   abrirHoja('Capas y herramientas', `
     <h4>Mapa base</h4><div class="opciones" id="opBase">${op('base', 'claro', 'Calles', S.base === 'claro')}${op('base', 'satelite', 'Satélite', S.base === 'satelite')}${op('base', 'ninguno', 'Sin mapa', S.base === 'ninguno')}</div>
+    <h4>Al tocar el mapa, seleccionar</h4><div class="opciones col" id="opSel">${op('sel', 'lote', 'Lote completo', S.selModo !== 'tablon')}${op('sel', 'tablon', 'Tablón', S.selModo === 'tablon')}</div>
     <h4>Colorear lotes por</h4><div class="opciones col" id="opColor">${Object.entries(TEMAS).map(([k, t]) => op('color', k, t.t, S.colorear === k)).join('')}</div>
     <label class="interruptor"><input type="checkbox" id="opEtq" ${S.etiquetas ? 'checked' : ''}><span>Mostrar etiquetas (finca · lote · tablón según acercamiento)</span></label>
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">📏 Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">⬡ Medir área</button></div>
-    <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();map.fitBounds(capaLotes.getBounds(),{padding:[20,20]})">🗺 Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">⬇ Guardar esta zona sin señal</button></div>`);
+    <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();map.fitBounds(capaLotes.getBounds(),margenes(20,20,10))">🗺 Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">⬇ Guardar esta zona sin señal</button></div>`);
   $('opBase').addEventListener('change', e => setBase(e.target.value));
+  $('opSel').addEventListener('change', e => setSelModo(e.target.value));
   $('opColor').addEventListener('change', e => setColorear(e.target.value));
   $('opEtq').addEventListener('change', e => { S.etiquetas = e.target.checked; guardarAjustes(); actualizarEtiquetas(); });
 }

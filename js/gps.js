@@ -11,26 +11,42 @@ let tileErrores = 0, capaRuta = null, rutaLinea = null;
 
 function gpsIcono() {
   const h = Number.isFinite(GPS.rumbo) ? GPS.rumbo : null;
+  // El icono vive dentro del mapa girado: su giro es el rumbo real y la pantalla lo muestra relativo al mapa.
   return L.divIcon({className: 'gps-ico', html: `<div class="gps-flecha${h === null ? ' sin-rumbo' : ''}" style="transform:rotate(${h || 0}deg)"><span></span></div>`, iconSize: [36, 36], iconAnchor: [18, 18]});
 }
 function gpsBoton() {
   if (GPS.watch === null) return iniciarGps();
-  if (GPS.fix) { GPS.siguiendo = true; map.setView([GPS.fix.lat, GPS.fix.lng], Math.max(map.getZoom(), 17)); pintarGpsBtn(); }
+  if (GPS.fix) { GPS.siguiendo = true; map.setView([GPS.fix.lat, GPS.fix.lng], Math.max(map.getZoom(), 17)); orientar(); pintarGpsBtn(); }
 }
-function iniciarGps() {
+/* Rumbo arriba: con seguimiento activo el mapa gira para que el sentido de avance quede hacia arriba. */
+function orientar() {
+  if (S.orientacion !== 'rumbo' || GPS.watch === null) { girarMapa(0); return; }
+  if (GPS.siguiendo && Number.isFinite(GPS.rumbo)) girarMapa(-GPS.rumbo);
+}
+function alternarOrientacion() {
+  S.orientacion = S.orientacion === 'rumbo' ? 'norte' : 'rumbo'; guardarAjustes(); orientar(); pintarBrujula();
+  toast(S.orientacion === 'rumbo' ? 'Rumbo arriba: el mapa gira según su avance.' : 'Norte arriba: el mapa no gira.');
+}
+function pintarBrujula() {
+  const b = $('btnBrujula'); if (!b) return;
+  b.classList.toggle('rumbo', S.orientacion === 'rumbo');
+  b.querySelector('svg').style.transform = `rotate(${mapRot.toFixed(1)}deg)`;
+  b.setAttribute('aria-label', S.orientacion === 'rumbo' ? 'Rumbo arriba activo. Tocar para norte arriba' : 'Norte arriba activo. Tocar para rumbo arriba');
+}
+function iniciarGps(seguir = true, auto = false) {
   if (!navigator.geolocation) { toast('Este navegador no tiene GPS.', {tipo: 'mal'}); return; }
   if (GPS.watch !== null) return;
-  GPS.siguiendo = true; GPS.estado = 'buscando'; GPS.detalle = 'Buscando señal GPS…'; pintarGpsChip(); pintarGpsBtn();
+  GPS.siguiendo = seguir; GPS.estado = 'buscando'; GPS.detalle = 'Buscando señal GPS…'; pintarGpsChip(); pintarGpsBtn();
   GPS.watch = navigator.geolocation.watchPosition(alPosicion, e => {
     GPS.estado = 'error'; GPS.detalle = e.code === 1 ? 'Permiso de ubicación denegado' : 'GPS sin señal'; pintarGpsChip();
-    if (e.code === 1) { detenerGps(); toast('Permita la ubicación en el navegador para usar el GPS.', {tipo: 'mal'}); }
+    if (e.code === 1) { detenerGps(); if (!auto) toast('Permita la ubicación en el navegador para usar el GPS.', {tipo: 'mal'}); }
   }, {enableHighAccuracy: true, maximumAge: 1000, timeout: 20000});
 }
 function detenerGps() {
   if (GPS.watch !== null) navigator.geolocation.clearWatch(GPS.watch);
   GPS.watch = null; GPS.fix = null; GPS.lote = ''; GPS.cands = []; GPS.estado = 'apagado';
   if (GPS.marcador) { GPS.marcador.remove(); GPS.circulo.remove(); GPS.marcador = GPS.circulo = null; }
-  pintarGpsChip(); pintarGpsBtn();
+  girarMapa(0); pintarGpsChip(); pintarGpsBtn();
 }
 function alPosicion(pos) {
   const c = pos.coords, lat = c.latitude, lng = c.longitude, acc = Math.round(c.accuracy || 0), t = pos.timestamp || Date.now(), prev = GPS.fix;
@@ -48,6 +64,7 @@ function alPosicion(pos) {
     GPS.marcador = L.marker([lat, lng], {icon: gpsIcono(), interactive: false, zIndexOffset: 1000}).addTo(map);
   } else { GPS.marcador.setLatLng([lat, lng]); GPS.marcador.setIcon(gpsIcono()); GPS.circulo.setLatLng([lat, lng]); GPS.circulo.setRadius(acc); }
   if (GPS.siguiendo) map.setView([lat, lng], Math.max(map.getZoom(), 17), {animate: true});
+  if (v === null || v > 0.8 || Number.isFinite(c.heading)) orientar(); // parado no se gira: el rumbo del GPS no es fiable
   const cands = detectarLote();
   visitaPunto(cands);
   pintarGpsChip(); pintarGpsBtn();
@@ -160,7 +177,7 @@ function dibujarRuta(v) {
   if (!v) return;
   rutaLinea = L.polyline(v.pts.map(p => [p.lat, p.lng]), {color: '#0a66ff', weight: 4, opacity: .85, interactive: false}).addTo(capaRuta);
 }
-function verRuta(v) { mostrarTab('mapa'); dibujarRuta(v); if (v && v.pts.length > 1) map.fitBounds(L.latLngBounds(v.pts.map(p => [p.lat, p.lng])), {padding: [40, 40]}); }
+function verRuta(v) { mostrarTab('mapa'); dibujarRuta(v); if (v && v.pts.length > 1) map.fitBounds(L.latLngBounds(v.pts.map(p => [p.lat, p.lng])), margenes(90, 40)); }
 
 /* ── Lista de trabajo del día ── */
 let LISTA = leerLS(LISTA_KEY, []);
@@ -172,7 +189,7 @@ function listaVaciar() { LISTA = []; listaGuardar(); }
 function pintarLista() {
   if (!capaLista) return;
   capaLista.clearLayers();
-  LISTA.forEach((x, i) => { const c = centroideLote(LOTES[x.cod]); if (c) L.marker(c, {icon: L.divIcon({className: 'pin-lista' + (x.hecho ? ' hecho' : ''), html: x.hecho ? '✓' : String(i + 1), iconSize: [30, 30], iconAnchor: [15, 15]}), zIndexOffset: 500}).on('click', () => seleccionarLote(x.cod)).addTo(capaLista); });
+  LISTA.forEach((x, i) => { const c = centroideLote(LOTES[x.cod]); if (c) L.marker(c, {icon: L.divIcon({className: 'pin-lista' + (x.hecho ? ' hecho' : ''), html: `<span>${x.hecho ? '✓' : i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15]}), zIndexOffset: 500}).on('click', () => seleccionarLote(x.cod)).addTo(capaLista); });
 }
 
 /* ── Pantalla encendida durante la visita ── */

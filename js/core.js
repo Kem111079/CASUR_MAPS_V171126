@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V171126B';
+const APP_VERSION = 'V171126D';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -10,7 +10,6 @@ const DATA_FILES = {
 };
 const HIST_URL = './data/produccion_historica_lote.json';
 const DATA_CACHE = 'casur-data-v1';
-const OPERATIVO_URL = './casur_suertes_operativo/index.html';
 
 let DATA = null, META = {}, RESUMEN = {}, LOTES = {}, FINCAS = {}, HIST = null;
 
@@ -59,7 +58,7 @@ function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.
 const AJUSTES_KEY = 'casur_maps_ajustes_v2';
 const S = Object.assign({
   tecnico: '', gpsPerfil: 'vehiculo', tema: 'campo', pantalla: true, vibrar: true,
-  colorear: 'ninguno', etiquetas: true, base: 'claro'
+  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true
 }, leerLS(AJUSTES_KEY, {}));
 function guardarAjustes() { escribirLS(AJUSTES_KEY, S); }
 function leerLS(k, def) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? def; } catch (_) { return def; } }
@@ -227,7 +226,8 @@ function construirLotes(geo, metricas, cortes) {
     }
     return (LOTES[cod] = l);
   };
-  (geo.features || []).forEach(f => {
+  (geo.features || []).forEach((f, i) => {
+    f._i = i;
     const p = f.properties || {}, cod = codKey(p.CodSuerte);
     if (!cod) return;
     const l = LOTES[cod] || nuevo(cod, M[cod]);
