@@ -1,70 +1,55 @@
-const CACHE_NAME = 'casur-maps-pwa-v171126-shape-fnc-aforo-z2627v2';
-const CORE_ASSETS = [
-  './', './index.html', './app.js', './styles.css', './manifest.json', './offline.html', './produccion_historica.html',
-  './assets/logo_casur.png', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-icon-512.png', './icons/favicon-32.png'
-];
-const LARGE_ASSETS = [];
+/* CASUR Maps · service worker.
+   - Aplicación: se sirve desde caché al instante y se refresca en segundo plano.
+   - data/: no se toca aquí; la app administra su propia copia y solo descarga cuando cambia la versión.
+   - Mapa base: caché aparte con tope, para que nunca desplace a los polígonos. */
+const VERSION = 'v171126b';
+const SHELL = 'casur-maps-shell-' + VERSION;
+const TILES = 'casur-tiles-v1';
+const TILES_MAX = 2500;
+const CORE = ['./', './index.html', './styles.css', './manifest.json', './offline.html',
+  './js/core.js', './js/map.js', './js/gps.js', './js/field.js',
+  './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css',
+  './assets/logo_casur.png', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/favicon-32.png'];
 
-self.addEventListener('install', event => {
-  event.waitUntil((async()=>{
-    const cache = await caches.open(CACHE_NAME);
-    await Promise.allSettled(CORE_ASSETS.map(a => cache.add(a)));
-    // Archivos grandes: cachear sin bloquear instalación de la PWA.
-    Promise.allSettled(LARGE_ASSETS.map(a => cache.add(a))).catch(()=>{});
-    await self.skipWaiting();
-  })());
-});
+self.addEventListener('install', e => e.waitUntil((async () => {
+  const c = await caches.open(SHELL);
+  await Promise.allSettled(CORE.map(u => c.add(new Request(u, {cache: 'reload'}))));
+  await self.skipWaiting();
+})()));
+self.addEventListener('activate', e => e.waitUntil((async () => {
+  const keys = await caches.keys();
+  // Solo se borran cachés de versiones anteriores de CASUR Maps; no las de datos, mapas ni CASUR Suertes.
+  await Promise.all(keys.filter(k => k.startsWith('casur-maps-') && k !== SHELL).map(k => caches.delete(k)));
+  await self.clients.claim();
+})()));
 
-self.addEventListener('activate', event => {
-  event.waitUntil((async()=>{
-    const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)));
-    await self.clients.claim();
-  })());
-});
-
-function isShellRequest(url){
-  return url.origin === self.location.origin && (
-    url.pathname.endsWith('/') ||
-    url.pathname.endsWith('/index.html') ||
-    url.pathname.endsWith('/app.js') ||
-    url.pathname.endsWith('/styles.css') ||
-    url.pathname.endsWith('/manifest.json') ||
-    url.pathname.endsWith('/service-worker.js')
-  );
+let _podas = 0;
+async function podarTiles() {
+  if (++_podas % 60) return;
+  const c = await caches.open(TILES), keys = await c.keys();
+  if (keys.length > TILES_MAX) await Promise.all(keys.slice(0, keys.length - TILES_MAX).map(k => c.delete(k)));
 }
+const esTile = u => /tile\.openstreetmap\.org$/.test(u.hostname) || u.hostname === 'server.arcgisonline.com';
 
-
-self.addEventListener('fetch', event => {
-  const req = event.request;
-  if(req.method !== 'GET') return;
+self.addEventListener('fetch', e => {
+  const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url);
-
-  // Data files must be network-first to avoid stale/corrupted JSON after GitHub uploads.
-  if(url.pathname.includes('/data/')){
-    event.respondWith(fetch(req, {cache:'reload'}).then(resp=>{
-      const copy = resp.clone();
-      caches.open(CACHE_NAME).then(cache=>cache.put(req, copy)).catch(()=>{});
-      return resp;
-    }).catch(()=>caches.match(req)));
+  if (esTile(url)) {
+    e.respondWith((async () => {
+      const c = await caches.open(TILES), hit = await c.match(req.url);
+      if (hit) return hit;
+      const r = await fetch(req);
+      if (r.ok) { c.put(req.url, r.clone()); podarTiles(); }
+      return r;
+    })());
     return;
   }
-
-  if(isShellRequest(url)){
-    event.respondWith(fetch(req).then(resp=>{
-      const copy = resp.clone();
-      caches.open(CACHE_NAME).then(cache=>cache.put(req, copy)).catch(()=>{});
-      return resp;
-    }).catch(()=>caches.match(req).then(cached=>cached || caches.match('./offline.html'))));
-    return;
-  }
-
-  event.respondWith(caches.match(req).then(cached => cached || fetch(req).then(resp => {
-    const copy = resp.clone();
-    caches.open(CACHE_NAME).then(cache => cache.put(req, copy)).catch(()=>{});
-    return resp;
-  }).catch(() => {
-    if(req.mode === 'navigate') return caches.match('./offline.html');
-    return cached;
-  })));
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/data/') || url.pathname.includes('/casur_suertes_operativo/')) return;
+  e.respondWith((async () => {
+    const c = await caches.open(SHELL), hit = await c.match(req, {ignoreSearch: true});
+    const red = fetch(req).then(r => { if (r.ok) c.put(req, r.clone()); return r; }).catch(() => null);
+    if (hit) { e.waitUntil(red); return hit; }
+    return (await red) || (req.mode === 'navigate' ? (await c.match('./offline.html')) : Response.error());
+  })());
 });
