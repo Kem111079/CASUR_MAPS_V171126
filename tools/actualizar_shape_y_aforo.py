@@ -178,16 +178,30 @@ def moda_ponderada(pares):
     return max(acc.items(), key=lambda kv: (kv[1], kv[0]))[0] if acc else ""
 
 
+def es_molienda(l):
+    return norm(l.get("clasificacion")).lower() == "molienda"
+
+
+def es_semilla(l):
+    return norm(l.get("clasificacion")).lower().startswith("semilla")
+
+
 def resumen_grupo(nombre, lotes):
-    area = sum(l["area_ha"] for l in lotes)
-    ton = sum(l["toneladas"] for l in lotes)
-    ton_opt = sum(l["ton_opt"] for l in lotes)
-    area_prod = sum(l["area_ha"] for l in lotes if l["actTCH"] > 0)
+    """TCH ponderado = toneladas de molienda / hectáreas de molienda.
+    Semilla y área fuera (sin caña, baja rentabilidad, investigación) se informan aparte y no entran al TCH."""
+    mol = [l for l in lotes if es_molienda(l)]
+    sem = [l for l in lotes if es_semilla(l)]
+    area_total = sum(l["area_ha"] for l in lotes)
+    area = sum(l["area_ha"] for l in mol)
+    ton = sum(l["toneladas"] for l in mol)
+    ton_opt = sum(l["ton_opt"] for l in mol)
+    area_sem = sum(l["area_ha"] for l in sem)
     return {
         "key": nombre, "area_ha": r2(area), "toneladas": r2(ton),
-        "tch_ponderado": r2(ton / area) if area else 0.0, "suertes": len(lotes),
+        "tch_ponderado": r2(ton / area) if area else 0.0, "suertes": len(mol),
         "toneladas_opt": r2(ton_opt), "tch_opt_ponderado": r2(ton_opt / area) if area else 0.0,
-        "area_con_aforo_ha": r2(area_prod), "tch_ponderado_area_con_aforo": r2(ton / area_prod) if area_prod else 0.0,
+        "area_total_ha": r2(area_total), "suertes_total": len(lotes),
+        "area_semilla_ha": r2(area_sem), "area_fuera_ha": r2(area_total - area - area_sem),
         "zona_principal": moda_ponderada((l.get("zona"), l["area_ha"]) for l in lotes),
         "variedad_dominante": moda_ponderada((l.get("variedad"), l["area_ha"]) for l in lotes),
         "clasificacion_principal": moda_ponderada((l.get("clasificacion"), l["area_ha"]) for l in lotes),
@@ -226,14 +240,9 @@ def main():
         k = key(cod)
         prev = aforo_prev.get(k, {})
         finca = txt(row, "Finca")
-        props = {
-            "ID_POLY": f"P{i + 1:05d}", "CodSuerte": cod, "Codfinca": txt(row, "Codfinca"), "Suerte": txt(row, "Suerte"),
-            "Tablon": txt(row, "Tablon"), "Area_Ha": round(num(row.get("Area_Ha")) or 0.0, 4),
-            "Nombre": txt(row, "Nombre") or " ".join(x for x in [finca, txt(row, "Suerte")] if x),
-            "Finca": finca or excel.get(k, {}).get("nombre_hacienda", "") or prev.get("nombre_hacienda", "") or finca_desde_nombre(txt(row, "Nombre"), txt(row, "Suerte")),
-            "ZONA": txt(row, "ZONA") or prev.get("zona", ""),
-            "Variedad": txt(row, "Variedad") or prev.get("variedad", ""),
-        }
+        finca = finca or excel.get(k, {}).get("nombre_hacienda", "") or prev.get("nombre_hacienda", "") or finca_desde_nombre(txt(row, "Nombre"), txt(row, "Suerte"))
+        # GeoJSON ligero: en el polígono solo va lo propio del polígono. Finca, zona y variedad viven en metricas_lote.json.
+        props = {"CodSuerte": cod, "Tablon": txt(row, "Tablon"), "Area_Ha": round(num(row.get("Area_Ha")) or 0.0, 4)}
         props = {a: b for a, b in props.items() if b != ""}
         geom = row.geometry
         b = geom.bounds
@@ -244,7 +253,7 @@ def main():
         c["n"] += 1
         for campo, col in (("variedad", "Variedad"), ("zona", "ZONA"), ("codfinca", "Codfinca"), ("suerte", "Suerte")):
             c[campo] = c[campo] or txt(row, col)
-        c["finca"] = c["finca"] or props.get("Finca", "")
+        c["finca"] = c["finca"] or finca
     bounds = [round(float(v), 7) for v in gdf.total_bounds]
     (out / "poligonos_casur.geojson").write_text(
         json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
@@ -287,8 +296,8 @@ def main():
         grupos["finca"][l["hacienda"]].append(l)
         grupos["zona"][l.get("zona") or "Sin zona"].append(l)
     g = resumen_grupo("global", vals)
-    resumen = {"global": {k: g[k] for k in ("area_ha", "toneladas", "tch_ponderado", "suertes", "toneladas_opt",
-                                           "tch_opt_ponderado", "area_con_aforo_ha", "tch_ponderado_area_con_aforo")}}
+    resumen = {"global": {k: g[k] for k in ("area_ha", "toneladas", "tch_ponderado", "suertes", "toneladas_opt", "tch_opt_ponderado",
+                                           "area_total_ha", "suertes_total", "area_semilla_ha", "area_fuera_ha")}}
     for nombre, d in grupos.items():
         resumen[nombre] = sorted((resumen_grupo(k, v) for k, v in d.items()), key=lambda r: -r["toneladas"])
 
@@ -306,10 +315,14 @@ def main():
         "metadata": {
             "nc_rule": "NC se muestra solo desde la columna NC del cronológico original; no se inventan cortes.",
             "regla_conservacion": "El Excel de estimados solo actualiza área, destino, tenencia, actTCH, toneladas, TCH/Ton óptimo y clasificación. Fechas, TCH anterior, riego y NC se conservan de la carga anterior.",
-            "regla_tch_ponderado": "tch_ponderado = toneladas / área total (incluye suertes con actTCH 0). tch_ponderado_area_con_aforo excluye suertes con actTCH 0.",
+            "regla_tch_ponderado": "tch_ponderado = toneladas de molienda / hectáreas de molienda (Clasificacion = Molienda). Semilla y área fuera se informan aparte.",
         },
     }
     (out / "aforo_2627.json").write_text(json.dumps(aforo, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    # Resumen liviano para el mapa: la app no necesita el detalle completo del aforo para abrir.
+    (out / "aforo_resumen.json").write_text(json.dumps(
+        {"generated_at": ahora, "zafra": args.zafra, "source": aforo["source"], "source_version": xinfo["version"],
+         "regla": aforo["metadata"]["regla_tch_ponderado"], "resumen": resumen}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     # ── Métricas por CodLote ──
     metricas = {}
@@ -321,7 +334,9 @@ def main():
             m.update({"hacienda_productor": a["nombre_hacienda"], "area_total_ha": a["area_ha"], "tenencia": a["tenencia"],
                       "destino": a["destino"], "suerte": a["suerte"], "zona": a.get("zona", ""),
                       "aforo_actTCH_2627": a["actTCH"], "aforo_toneladas_2627": a["toneladas"],
-                      "aforo_tch_opt_2627": a["tch_opt"], "aforo_toneladas_opt_2627": a["ton_opt"]})
+                      "aforo_tch_opt_2627": a["tch_opt"], "aforo_toneladas_opt_2627": a["ton_opt"],
+                      "clasificacion": a["clasificacion"], "cod_finca": a["cod_hacienda"],
+                      "nc": a.get("nc_display") if a.get("nc_display") not in (None, "", "—") else None})
         else:
             for campo in ("aforo_actTCH_2627", "aforo_toneladas_2627", "aforo_tch_opt_2627", "aforo_toneladas_opt_2627"):
                 m.pop(campo, None)
@@ -331,6 +346,7 @@ def main():
             if sh["variedad"]:
                 m["variedad"] = sh["variedad"]
             m.setdefault("hacienda_productor", sh["finca"])
+            m["cod_finca"] = sh["codfinca"]
             m.setdefault("zona", sh["zona"])
             m.setdefault("suerte", sh["suerte"])
             m.setdefault("area_total_ha", round(sh["area"], 2))
@@ -362,6 +378,7 @@ def main():
         "aforo_shape_without_aforo_count": len(sin_aforo), "aforo_without_shape_count": len(sin_shape),
         "nota_gps": "El GPS requiere HTTPS o localhost.",
         "nota_aforo": "actTCH y Toneladas corresponden al estimado de la zafra; no reemplazan TCH histórico.",
+        "datos_al": hoy.isoformat(), "cortes_al": meta_prev.get("cortes_al", ""),
         "generated_at": ahora,
     }
     (out / "metadata.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -392,8 +409,8 @@ def main():
 
     print(f"OK · {len(feats)} polígonos · {len(shape_codes)} CodLotes en shape · {len(lotes)} suertes en aforo")
     print(f"Cruce shape-aforo: {len(shape_codes & aforo_codes)} · shape sin aforo: {len(sin_aforo)} · aforo sin shape: {len(sin_shape)}")
-    print(f"Aforo: {resumen['global']['area_ha']} ha · {resumen['global']['toneladas']} t · TCH pond. {resumen['global']['tch_ponderado']}")
-    print("Recuerde subir la versión de datos: DATA_VERSION (app.js) y CACHE_NAME (service-worker.js).")
+    print(f"Aforo molienda: {resumen['global']['area_ha']} ha · {resumen['global']['toneladas']} t · TCH pond. {resumen['global']['tch_ponderado']}")
+    print("La app detecta sola los datos nuevos al cambiar generated_at en metadata.json.")
 
 
 if __name__ == "__main__":

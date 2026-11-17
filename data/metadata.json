@@ -1,6 +1,6 @@
 {
-  "nombre": "CASUR Maps · V171126_SHAPE_FNC_AFORO_Z2627V2",
-  "version": "V171126_SHAPE_FNC_AFORO_Z2627V2",
+  "nombre": "CASUR Maps · V171126B_CAMPO",
+  "version": "V171126B_CAMPO",
   "fuente_shape": "Shape_Casur_FNC_171126.gpkg",
   "fuente_aforo": "Estimados_para_APP_Z2627v2.xlsx / Estimados_2627",
   "fuente_aforo_version": "Version del 12.10.2026",
@@ -14,14 +14,7 @@
   "campos_publicados": [
     "Area_Ha",
     "CodSuerte",
-    "Codfinca",
-    "Finca",
-    "ID_POLY",
-    "Nombre",
-    "Suerte",
-    "Tablon",
-    "Variedad",
-    "ZONA"
+    "Tablon"
   ],
   "bounds_wgs84": [
     -86.073869,
@@ -29,7 +22,7 @@
     -85.595346,
     11.787239
   ],
-  "aforo_generated_at": "2026-11-17T21:49:01",
+  "aforo_generated_at": "2026-11-17T22:34:28",
   "aforo_zafra": "2026-2027",
   "aforo_records": 1046,
   "aforo_lotes": 1046,
@@ -38,5 +31,7 @@
   "aforo_without_shape_count": 6,
   "nota_gps": "El GPS requiere HTTPS o localhost.",
   "nota_aforo": "actTCH y Toneladas corresponden al estimado de la zafra; no reemplazan TCH histórico.",
-  "generated_at": "2026-11-17T21:49:01"
+  "datos_al": "2026-11-17",
+  "cortes_al": "",
+  "generated_at": "2026-11-17T22:34:28"
 }

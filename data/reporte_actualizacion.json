@@ -1,37 +1,30 @@
 {
-  "generated_at": "2026-11-17T21:49:01",
-  "version": "V171126_SHAPE_FNC_AFORO_Z2627V2",
+  "generated_at": "2026-11-17T22:34:28",
+  "version": "V171126B_CAMPO",
   "shape": {
     "archivo": "Shape_Casur_FNC_171126.gpkg",
     "poligonos": 8341,
     "codlotes": 1081,
     "area_total_ha": 10319.72,
     "geometrias_invalidas_reparadas": 8,
-    "poligonos_previos": 8254
+    "poligonos_previos": 8341
   },
   "aforo": {
     "archivo": "Estimados_para_APP_Z2627v2.xlsx",
     "version": "Version del 12.10.2026",
-    "suertes": 1046,
-    "area_ha": 9672.13,
-    "toneladas": 563372.76,
-    "tch_ponderado": 58.25,
-    "toneladas_opt": 600654.08,
-    "tch_opt_ponderado": 62.1,
-    "area_con_aforo_ha": 9118.73,
-    "tch_ponderado_area_con_aforo": 61.78,
-    "actTCH_modificado_vs_carga_anterior": 695,
-    "area_modificada_vs_carga_anterior": 151,
-    "suertes_que_salen_del_aforo": [
-      "14710A",
-      "2209B",
-      "3313",
-      "3316A",
-      "3325",
-      "3327",
-      "3328",
-      "902A"
-    ],
+    "suertes": 946,
+    "area_ha": 9101.68,
+    "toneladas": 560672.76,
+    "tch_ponderado": 61.6,
+    "toneladas_opt": 597888.4,
+    "tch_opt_ponderado": 65.69,
+    "area_total_ha": 9672.13,
+    "suertes_total": 1046,
+    "area_semilla_ha": 472.98,
+    "area_fuera_ha": 97.47,
+    "actTCH_modificado_vs_carga_anterior": 0,
+    "area_modificada_vs_carga_anterior": 0,
+    "suertes_que_salen_del_aforo": [],
     "suertes_nuevas_en_aforo": [],
     "destino": {
       "Molienda": 948,
@@ -42,8 +35,8 @@
       "Baja Prod": 6
     },
     "clasificacion": {
-      "Molienda": 949,
-      "Semilla": 46,
+      "Molienda": 946,
+      "Semilla": 49,
       "Investigacion": 2,
       "Sin Caña": 34,
       "Baja rentabilidad": 15
@@ -161,93 +154,7 @@
       "5001",
       "5003"
     ],
-    "variedad_actualizada_desde_shape": [
-      {
-        "codlote": "3802",
-        "antes": "CP 72-2086",
-        "ahora": "NA 56-42"
-      },
-      {
-        "codlote": "1030",
-        "antes": "RB 86-7515",
-        "ahora": "CC06-783"
-      },
-      {
-        "codlote": "1502",
-        "antes": "B 82-333",
-        "ahora": "CGMEX10-26"
-      },
-      {
-        "codlote": "2010",
-        "antes": "MX 79-431",
-        "ahora": "LAI 00-301"
-      },
-      {
-        "codlote": "1801",
-        "antes": "NA 56-42",
-        "ahora": "CC06-783"
-      },
-      {
-        "codlote": "229A",
-        "antes": "NA 56-42",
-        "ahora": "LAI 00-301"
-      },
-      {
-        "codlote": "248",
-        "antes": "NA 56-42",
-        "ahora": "LAI 08-390"
-      },
-      {
-        "codlote": "250",
-        "antes": "CP 72-2086",
-        "ahora": "CC06-783"
-      },
-      {
-        "codlote": "252",
-        "antes": "RB 84-5210",
-        "ahora": "CP 72-2086"
-      },
-      {
-        "codlote": "99110",
-        "antes": "CP 72-2086",
-        "ahora": "NA 56-42"
-      },
-      {
-        "codlote": "99111",
-        "antes": "CP 72-2086",
-        "ahora": "NA 56-42"
-      },
-      {
-        "codlote": "75803",
-        "antes": "CP 72-2086",
-        "ahora": "MX 79-431"
-      },
-      {
-        "codlote": "99211",
-        "antes": "CP 00-1101",
-        "ahora": "B 82-333"
-      },
-      {
-        "codlote": "99232",
-        "antes": "RB 86-7515",
-        "ahora": "NA 56-42"
-      },
-      {
-        "codlote": "110",
-        "antes": "VARIEDADES",
-        "ahora": "NA 56-42"
-      },
-      {
-        "codlote": "112",
-        "antes": "CP 72-2086",
-        "ahora": "NA 56-42"
-      },
-      {
-        "codlote": "99325",
-        "antes": "RB 84-5210",
-        "ahora": "NA 56-42"
-      }
-    ],
+    "variedad_actualizada_desde_shape": [],
     "area_shape_vs_aforo_mayor_10pct": [
       {
         "codlote": "19011",
