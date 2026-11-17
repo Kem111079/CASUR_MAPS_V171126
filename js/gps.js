@@ -33,13 +33,13 @@ function pintarBrujula() {
   b.querySelector('svg').style.transform = `rotate(${mapRot.toFixed(1)}deg)`;
   b.setAttribute('aria-label', S.orientacion === 'rumbo' ? 'Rumbo arriba activo. Tocar para norte arriba' : 'Norte arriba activo. Tocar para rumbo arriba');
 }
-function iniciarGps(seguir = true) {
+function iniciarGps(seguir = true, auto = false) {
   if (!navigator.geolocation) { toast('Este navegador no tiene GPS.', {tipo: 'mal'}); return; }
   if (GPS.watch !== null) return;
   GPS.siguiendo = seguir; GPS.estado = 'buscando'; GPS.detalle = 'Buscando señal GPS…'; pintarGpsChip(); pintarGpsBtn();
   GPS.watch = navigator.geolocation.watchPosition(alPosicion, e => {
     GPS.estado = 'error'; GPS.detalle = e.code === 1 ? 'Permiso de ubicación denegado' : 'GPS sin señal'; pintarGpsChip();
-    if (e.code === 1) { detenerGps(); toast('Permita la ubicación en el navegador para usar el GPS.', {tipo: 'mal'}); }
+    if (e.code === 1) { detenerGps(); if (!auto) toast('Permita la ubicación en el navegador para usar el GPS.', {tipo: 'mal'}); }
   }, {enableHighAccuracy: true, maximumAge: 1000, timeout: 20000});
 }
 function detenerGps() {

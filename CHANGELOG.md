@@ -1,5 +1,10 @@
 # Cambios
 
+## V171126D · 17-nov-2026
+- Resumen de aforo: buscador de finca, productor o código de lote, con sus totales y acceso directo.
+- Se retiran las notas explicativas del resumen (fórmula del TCH y conteo de suertes).
+- Al abrir sin estar instalada, la app invita a instalarse.
+
 ## V171126C · 17-nov-2026
 - **Selección por tablón:** en la tarjeta, "Ver lote / Ver tablón" (también en Capas). Por tablón se resalta solo ese polígono y se muestran su código, área en ha y mz, parte del lote y centro. Lista de tablones del lote para saltar entre ellos.
 - **Colores de producción (TCH estimado):** < 40 rojo · 40–55 morado (sin cambio) · 55–70 mostaza · 70–85 verde · > 85 verde oscuro.

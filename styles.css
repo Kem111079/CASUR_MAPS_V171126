@@ -186,7 +186,7 @@ svg.hist{width:100%;height:auto;display:block}
 .foto.con-foto{border-style:solid}.foto.con-foto span{background:rgba(0,0,0,.6);color:#fff;border-radius:10px;padding:4px 10px}
 .lista-lotes{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .lista-lotes>button{display:flex;align-items:center;gap:10px;min-height:54px;padding:6px 12px;border:1px solid var(--linea);border-radius:12px;background:var(--sup);text-align:left}
-.lista-lotes>button b{font-size:17px;min-width:64px}.lista-lotes>button span{flex:1;font-size:13.5px;color:var(--texto2);min-width:0}
+.lista-lotes>button b{font-size:17px;min-width:64px}.lista-lotes>button strong{color:var(--texto);font-size:15.5px}.lista-lotes>button span{flex:1;font-size:13.5px;color:var(--texto2);min-width:0}
 .fila-lista{display:flex;gap:6px;align-items:stretch}
 .fila-lista .chk{width:52px;min-height:54px;border-radius:12px;border:2px solid #e6007e;background:var(--sup);font-weight:900;font-size:17px;color:#e6007e;flex:none}
 .fila-lista.hecho .chk{border-color:var(--bien);background:var(--bien-f);color:var(--bien)}
