@@ -6,7 +6,7 @@ const METRICAS_URL = './data/metricas_lote.json';
 const AFORO_URL = './data/aforo_2627.json';
 const PRODUCCION_HISTORICA_PAGE_URL = './produccion_historica.html';
 const PRODUCCION_HISTORICA_URL = './data/produccion_historica_lote.json';
-const DATA_VERSION = 'vf_23826_shape_ligero_hist_inline_fix';
+const DATA_VERSION = 'v171126_shape_fnc_aforo_z2627v2';
 const HISTORICO_URL = './historico.html';
 let map, polygonsLayer, polygonsHaloLayer, labelsLayer, selectedLayer, DATA, META, METRICAS, AFORO, INITIAL_BOUNDS;
 let activeBaseMapName = 'Mapa claro';
@@ -65,8 +65,8 @@ async function init(){
   setupInstallFlow();
   // VF_23826 carga-fix: registrar service worker después de cargar el mapa para no competir con el GeoJSON grande.
   try{
-    setLoaderText('Cargando shape 26 actualizado optimizado...');
-    const geo = await fetchJsonSafe(GEOJSON_URL, 'shape 26 / polígonos CASUR', {required:true, timeoutMs:70000});
+    setLoaderText('Cargando polígonos CASUR (shape 17-nov-2026)...');
+    const geo = await fetchJsonSafe(GEOJSON_URL, 'polígonos CASUR', {required:true, timeoutMs:70000});
     setLoaderText('Cargando métricas y aforo 26/27...');
     const [meta, metricas, aforo] = await Promise.all([
       fetchJsonSafe(META_URL, 'metadata.json', {required:false, timeoutMs:20000}),
@@ -389,6 +389,8 @@ function agroStatusFor(m){
   const tch = Number(m && m.tch_ultima_zafra);
   const edad = edadActualMetric(m);
   if(!m || Object.keys(m).length===0) return {cls:'muted', label:'Sin dato histórico', detail:'Abra cronológico o histórico para validar el lote.'};
+  // V171126 · Lotes nuevos del shape sin TCH ni fecha de corte: no reportar "Lectura normal" sin datos que la respalden.
+  if(!Number.isFinite(tch) && !Number.isFinite(edad)) return {cls:'muted', label:'Sin dato histórico', detail:'Lote sin TCH ni fecha de corte registrados.'};
   if(Number.isFinite(tch) && tch < 55) return {cls:'bad', label:'Prioridad alta', detail:'TCH última zafra bajo; requiere revisión productiva.'};
   if(Number.isFinite(edad) && edad >= 12) return {cls:'warn', label:'Edad alta', detail:'Validar manejo/cosecha según programación.'};
   if(Number.isFinite(tch) && tch < 70) return {cls:'warn', label:'Revisar productividad', detail:'TCH última zafra por debajo del rango esperado.'};
@@ -2387,6 +2389,11 @@ function formatNumAforo(v, suffix=''){
   if(!Number.isFinite(n)) return '—';
   return nf.format(n) + suffix;
 }
+// V171126 · Estimado óptimo del Excel de aforos (TCH opt / Ton Opti); solo se muestra si el lote lo trae.
+function aforoOptTxt(a){
+  if(!a || !(Number(a.tch_opt)>0)) return '';
+  return ` · TCH ópt. ${escapeHtml(formatNumAforo(a.tch_opt,' t/ha'))} (${escapeHtml(formatNumAforo(a.ton_opt,' t'))})`;
+}
 function aforoOperativoUrl(p){
   const a=aforoFor(p); const code=(a&&a.hhhsss)||displayCode(getCodLote(p));
   return './casur_suertes_operativo/index.html?hhhsss=' + encodeURIComponent(code) + '&from=casur_maps';
@@ -2532,7 +2539,7 @@ window.toggleProdHistInline=toggleProdHistInline;
 aforoBlockHtml = function(p){
   const a=aforoFor(p);
   const prodBtn='<button id="prodHistToggleBtn" class="aforo-prod-btn" onclick="toggleProdHistInline(this)" type="button">📈 Mostrar histórico TCH</button><div id="prodHistInlineBox" class="prod-hist-inline collapsed"></div>';
-  const ncTxt = a && a.nc_display && a.nc_display !== '—' ? ` · NC ${escapeHtml(a.nc_display)}` : '';
+  const ncTxt = (a && a.nc_display && a.nc_display !== '—' ? ` · NC ${escapeHtml(a.nc_display)}` : '') + aforoOptTxt(a);
   if(!a) return `<div class="aforo-block aforo-missing"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-muted">Sin dato de aforo para este CodLote.</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes</a></div>`;
   return `<div class="aforo-block"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-grid"><div><span>HHHSSS</span><b>${escapeHtml(a.hhhsss||displayCode(getCodLote(p)))}</b></div><div><span>actTCH</span><b>${escapeHtml(formatNumAforo(a.actTCH,' t/ha'))}</b></div><div><span>Toneladas</span><b>${escapeHtml(formatNumAforo(a.toneladas,' t'))}</b></div></div><div class="aforo-foot">${escapeHtml(a.clasificacion||'')} ${a.zona?`· ${escapeHtml(a.zona)}`:''} ${a.tenencia?`· ${escapeHtml(a.tenencia)}`:''}${ncTxt}</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes Operativo</a></div>`;
 };
@@ -2622,7 +2629,7 @@ window.toggleProdHistInline=toggleProdHistInline;
 aforoBlockHtml = function(p){
   const a=aforoFor(p);
   const prodBtn='<button id="prodHistToggleBtn" class="aforo-prod-btn" onclick="toggleProdHistInline(this)" type="button">📈 Mostrar histórico TCH</button><div id="prodHistInlineBox" class="prod-hist-inline collapsed"></div>';
-  const ncTxt = a && a.nc_display && a.nc_display !== '—' ? ` · NC ${escapeHtml(a.nc_display)}` : '';
+  const ncTxt = (a && a.nc_display && a.nc_display !== '—' ? ` · NC ${escapeHtml(a.nc_display)}` : '') + aforoOptTxt(a);
   if(!a) return `<div class="aforo-block aforo-missing"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-muted">Sin dato de aforo para este CodLote.</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes</a></div>`;
   return `<div class="aforo-block"><div class="aforo-title">Aforo Zafra 2026-2027</div><div class="aforo-grid"><div><span>HHHSSS</span><b>${escapeHtml(a.hhhsss||displayCode(getCodLote(p)))}</b></div><div><span>actTCH</span><b>${escapeHtml(formatNumAforo(a.actTCH,' t/ha'))}</b></div><div><span>Toneladas</span><b>${escapeHtml(formatNumAforo(a.toneladas,' t'))}</b></div></div><div class="aforo-foot">${escapeHtml(a.clasificacion||'')} ${a.zona?`· ${escapeHtml(a.zona)}`:''} ${a.tenencia?`· ${escapeHtml(a.tenencia)}`:''}${ncTxt}</div>${prodBtn}<a class="aforo-link" href="${escapeHtml(aforoOperativoUrl(p))}">Ver en CASUR Suertes Operativo</a></div>`;
 };
