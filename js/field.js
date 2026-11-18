@@ -490,6 +490,7 @@ function renderMas() {
     <div id="aforoRes" class="lista-lotes"></div>
     <label class="campo">Agrupar por${sel('aforoGrupo', [['hacienda', 'Hacienda / productor'], ['zona', 'Zona'], ['finca', 'Finca y tenencia']], aforoGrupo)}</label>
     <div class="tabla"><table><thead><tr><th>Grupo</th><th>ha mol.</th><th>Ton.</th><th>TCH</th><th>Optim.</th></tr></thead><tbody id="aforoFilas">${filasAforo(filas)}</tbody></table></div>
+    ${renovacionHtml()}
     <h3>Ajustes</h3>
     <label class="campo">Técnico<input id="ajTec" type="text" value="${esc(S.tecnico)}" placeholder="Su nombre"></label>
     <label class="campo">Uso del GPS${sel('ajGps', [['vehiculo', 'En vehículo (recomendado)'], ['campo', 'Caminando'], ['preciso', 'Punto fijo, máxima precisión']], S.gpsPerfil)}</label>
@@ -506,6 +507,7 @@ function renderMas() {
     <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Buscar datos nuevos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
     ${instalarEvt ? '<div class="acciones"><button type="button" class="btn pri" onclick="instalarApp()">' + ico('download') + ' Instalar app</button></div>' : ''}`;
   $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
+  const tr = $('renovFilas'); if (tr) tr.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); });
   $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
   $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
   $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
@@ -519,6 +521,28 @@ function renderMas() {
   $('ajPant').addEventListener('change', e => { S.pantalla = e.target.checked; guardarAjustes(); S.pantalla ? pedirPantalla() : soltarPantalla(); });
   $('ajVib').addEventListener('change', e => { S.vibrar = e.target.checked; guardarAjustes(); vibrar(); });
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => { const el = $('espacio'); if (el) el.textContent = nf0.format((e.usage || 0) / 1048576) + ' MB'; }).catch(() => {});
+}
+/* ── Resumen de renovación: área por zona, TCH estimado, referencia y deltas ── */
+function renovacionHtml() {
+  const r = resumenRenovacion(); if (!r.n) return '';
+  const d = v => v === null ? '—' : signo(v), t = v => v === null ? '—' : nf1.format(v);
+  return `<h3>Renovación propuesta</h3>
+    <div class="cifras c4">${cifra('Lotes', nf0.format(r.n))}${cifra('Hectáreas', nf0.format(r.area))}${cifra('Estimado', nf1.format(r.est))}${cifra('Δ esperado', signo(r.dEsp), 'c-est')}</div>
+    <p class="pie">Delta esperado: contra las plantillas de la misma zona · ${signo(r.tonEsp, nf0)} t. Techo: contra el máximo histórico de cada lote · ${signo(r.dTecho)} t/ha · ${signo(r.tonTecho, nf0)} t.</p>
+    <div class="tabla ancha"><table><thead><tr><th>Zona</th><th>ha</th><th>Est.</th><th>Plant.</th><th>Δ esp.</th><th>Δ ton.</th><th>Máx.</th><th>Δ techo</th><th>Prom.</th><th>Lotes</th></tr></thead>
+      <tbody id="renovFilas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}"><td>${esc(f.zona)}</td><td>${nf0.format(f.area)}</td><td>${nf1.format(f.est)}</td><td>${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nf0)}</td><td>${t(f.max)}</td><td>${d(f.dTecho)}</td><td>${t(f.prom)}</td><td>${f.n}</td></tr>`).join('')}
+      <tr class="total"><td>Total</td><td>${nf0.format(r.area)}</td><td>${nf1.format(r.est)}</td><td></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nf0)}</td><td></td><td>${signo(r.dTecho)}</td><td></td><td>${r.n}</td></tr></tbody></table></div>
+    <p class="pie">Deslice la tabla para ver más columnas y toque una zona para ver sus lotes. Est. = TCH estimado · Plant. = plantillas de la zona · Máx. y Prom. = histórico del lote. Todo en t/ha, ponderado por área.</p>
+    <button type="button" class="btn sec ancho" onclick="verRenovacionMapa()">${ico('map')} Ver lotes a renovar en el mapa</button>`;
+}
+function verRenovacionMapa() { mostrarTab('mapa'); setColorear('renovacion'); temaFiltro = 'Renovar'; capaLotes.setStyle(estiloFeat); pintarLeyenda(); }
+function abrirRenovZona(zona) {
+  const f = resumenRenovacion().filas.find(x => x.zona === zona); if (!f) return;
+  const orden = f.lotes.slice().sort((a, b) => (deltaEsperado(b) ?? -1e9) * (b.areaAforo || 0) - (deltaEsperado(a) ?? -1e9) * (a.areaAforo || 0));
+  abrirHoja(`Renovación · ${zona}`, `
+    <div class="cifras c4">${cifra('Lotes', f.n)}${cifra('Área', nf0.format(f.area) + ' ha')}${cifra('Estimado', nf1.format(f.est))}${cifra('Δ esperado', f.dEsp === null ? '—' : signo(f.dEsp), 'c-est')}</div>
+    <p class="pie">Plantillas de la zona: ${f.plant === null ? '—' : nf1.format(f.plant)} t/ha · máximo histórico ${f.max === null ? '—' : nf1.format(f.max)} t/ha. Ordenados por toneladas que se ganarían.</p>
+    <div class="lista-lotes">${orden.map(l => { const de = deltaEsperado(l), dt = deltaTecho(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtN(l.areaAforo, ' ha', nf1)} · ${l.grCorte === 'Planta' ? 'plantilla' : esc(l.grCorte.toLowerCase())}<br>est. ${fmtN(l.tchEst, '', nf1)} · prom. ${fmtN(l.histProm, '', nf0)} · máx. ${fmtN(l.histMax, '', nf0)}</span><i class="chip ${de > 0 ? 'est-bien' : 'est-neutro'}">${de === null ? '—' : signo(de) + ' t/ha'}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`, 'alta');
 }
 function filasAforo(filas) {
   return filas.map(x => `<tr ${aforoGrupo === 'hacienda' ? `data-finca="${esc(x.key)}"` : ''}><td>${esc(x.key)}</td><td>${nf0.format(x.area_ha)}</td><td>${nf0.format(x.toneladas)}</td><td><b>${x.area_ha ? nf1.format(x.tch_ponderado) : '—'}</b></td><td>${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</td></tr>`).join('') || '<tr><td colspan="5">Sin coincidencias en esta agrupación.</td></tr>';

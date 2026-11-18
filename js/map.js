@@ -322,6 +322,7 @@ function ajustarCard() {
   if (vis && !cardFull) document.body.style.setProperty('--card-h', Math.round(el.getBoundingClientRect().height) + 'px');
 }
 function cifra(rot, val, cls = '', extra = '') { return `<div class="${cls}"><span>${rot}</span><b>${val}</b>${extra}</div>`; }
+const signo = (v, f = nf1) => (v > 0 ? '+' : v < 0 ? '−' : '') + f.format(Math.abs(v));
 function kv(k, v) { return v === '' || v === null || v === undefined || v === '—' ? '' : `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`; }
 function renderCard() {
   const el = $('card'), l = LOTES[selCod];
@@ -363,6 +364,8 @@ function renderCard() {
         ${kv('Variedad', l.variedad)}${kv('Zona', l.zona)}${kv('Riego', l.riego)}${kv('Tenencia', l.tenencia)}
         ${kv('Clasificación', l.clas || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
         ${kv('Grupo de corte', l.grCorte ? (l.grCorte === 'Planta' ? 'Plantilla' : 'Soca · ' + l.grCorte.toLowerCase()) : '')}${kv('Propuesta de renovación', l.renovar === true ? 'Sí, renovar' : l.renovar === false ? 'No' : '')}
+        ${kv('Promedio histórico', l.histProm !== null ? `${nf1.format(l.histProm)} t/ha · ${l.histN} zafras` : '')}${kv('Máximo histórico', l.histMax !== null ? nf1.format(l.histMax) + ' t/ha' : '')}
+        ${l.renovar && deltaEsperado(l) !== null ? kv('Al renovar, esperado', `${signo(deltaEsperado(l))} t/ha (plantillas de la zona: ${nf1.format(PLANT_ZONA[l.zona])})`) + kv('Al renovar, techo', deltaTecho(l) === null ? '' : `${signo(deltaTecho(l))} t/ha (su máximo)`) : ''}
         ${kv('Corte programado', l.fProg ? `${fechaCorta(l.fProg)}${l.semProg ? ' · semana ' + l.semProg.sem : ''}` : '')}${kv('Último corte', l.fCorte ? `${fechaCorta(l.fCorte)}${l.zafra ? ' · zafra ' + l.zafra : ''}` : '')}${kv('Días desde el corte', diasDesde(l.fCorte) === null ? '' : nf0.format(diasDesde(l.fCorte)))}
         ${kv('Toneladas estimadas', l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '')}${kv('Toneladas optimistas', l.tonOpt > 0 ? nf0.format(l.tonOpt) + ' t' : '')}
         ${kv('Brecha vs. optimista', brecha === null ? '' : nf1.format(brecha) + ' t/ha')}

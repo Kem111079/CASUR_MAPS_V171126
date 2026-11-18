@@ -1,5 +1,11 @@
 # Cambios
 
+## V181126G · 18-nov-2026
+- **Resumen de renovación** en la pestaña Resumen: lotes, área y TCH estimado por zona, con promedio y máximo histórico.
+- **Delta esperado** = TCH estimado de las plantillas de la misma zona − TCH estimado del lote. **Delta techo** = máximo histórico del lote − TCH estimado. Ambos en t/ha y en toneladas.
+- Al tocar una zona se listan sus lotes a renovar, ordenados por las toneladas que se ganarían.
+- La tarjeta del lote muestra promedio y máximo histórico y, si se propone renovar, sus dos deltas.
+
 ## V181126F · 18-nov-2026
 - Datos de renovación (`fuentes/datos_renovacion.xlsx`): 949 lotes con grupo de corte y propuesta de renovación; 222 lotes a renovar (2,408.87 ha).
 - Capa **Propuesta de renovación**: Renovar / No renovar.

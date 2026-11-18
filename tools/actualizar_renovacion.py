@@ -94,6 +94,14 @@ def main():
             return ""
         return f"Corte {n}" if n <= 5 else "Mayor a 5"
 
+    # Promedio y máximo histórico de TCH por lote (del histórico de producción), para estimar qué esperar de la renovación.
+    hp = out / "produccion_historica_lote.json"
+    H = json.loads(hp.read_text(encoding="utf-8")).get("lotes", {}) if hp.exists() else {}
+    for c, v in lotes.items():
+        t = [float(r["tch"]) for r in H.get(c, {}).get("historial", []) if (r.get("tch") or 0) > 0]
+        if t:
+            v.update({"hist_prom": round(sum(t) / len(t), 2), "hist_max": round(max(t), 2), "hist_n": len(t)})
+
     distintos = [{"codlote": c, "nc_cronologico": M[c].get("nc"), "gr_corte": v["gr_corte"]}
                  for c, v in lotes.items() if c in M and v.get("gr_corte") and grupo_de_nc(M[c].get("nc")) not in ("", v["gr_corte"])]
     area = lambda cond: round(sum(float(M.get(c, {}).get("area_total_ha") or 0) for c, v in lotes.items() if cond(v)), 2)
