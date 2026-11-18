@@ -48,6 +48,18 @@ COLS = {
     "ton_opt": ["ton opti", "ton opt"],
     "clas": ["clasificacion", "clasificación"],
 }
+# Columnas opcionales: si el Excel no las trae, se conserva el dato de la carga anterior.
+COLS_OPC = {"fecha_cosecha": ["fecha cosecha", "fecha de cosecha", "fecha corte", "fecha de corte", "fecha_cosecha"]}
+
+
+def a_iso(v):
+    """Fecha de Excel -> 'AAAA-MM-DD'; texto como 'Sin coincidencia' -> ''."""
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
+        return v.isoformat()
+    d = parse_iso(v)
+    return d.isoformat() if d else ""
 
 
 def norm(v):
@@ -99,6 +111,11 @@ def leer_excel(path):
                     if c in alias:
                         idx[campo] = j
                         break
+            for campo, alias in COLS_OPC.items():
+                for j, c in enumerate(cells):
+                    if c in alias:
+                        idx[campo] = j
+                        break
             break
     if hdr_i is None:
         raise SystemExit("No encontré la fila de encabezados (HHHSSS / actTCH_2627) en el Excel.")
@@ -124,7 +141,9 @@ def leer_excel(path):
             "tch_opt": num(g("tch_opt")) or 0.0, "ton_opt": num(g("ton_opt")) or 0.0,
             "clasificacion": norm(g("clas")), "_row": n,
         }
-    return out, {"hoja": ws.title, "version": version, "duplicados": dups}
+        if "fecha_cosecha" in idx:
+            out[k]["fecha_cosecha"] = a_iso(g("fecha_cosecha"))
+    return out, {"hoja": ws.title, "version": version, "duplicados": dups, "trae_fecha_cosecha": "fecha_cosecha" in idx}
 
 
 # ───────────────────────── Shape ─────────────────────────
@@ -281,6 +300,8 @@ def main():
             "actTCH": r2(x["actTCH"]), "toneladas": r2(x["toneladas"]), "tch_opt": r2(x["tch_opt"]), "ton_opt": r2(x["ton_opt"]),
             "clasificacion": x["clasificacion"], "tenencia": tenencia, "gr_tn": gr_tn, "_row": x["_row"],
         })
+        if "fecha_cosecha" in x:  # fecha de cosecha programada para la zafra en curso
+            rec["fecha_cosecha"] = x["fecha_cosecha"]
         if rec.get("fecha_ult_corte"):
             rec["edad"] = edad_meses(rec["fecha_ult_corte"], hoy)
         if x["actTCH"] > 0 and x["tch_opt"] < x["actTCH"]:
@@ -336,7 +357,8 @@ def main():
                       "aforo_actTCH_2627": a["actTCH"], "aforo_toneladas_2627": a["toneladas"],
                       "aforo_tch_opt_2627": a["tch_opt"], "aforo_toneladas_opt_2627": a["ton_opt"],
                       "clasificacion": a["clasificacion"], "cod_finca": a["cod_hacienda"],
-                      "nc": a.get("nc_display") if a.get("nc_display") not in (None, "", "—") else None})
+                      "nc": a.get("nc_display") if a.get("nc_display") not in (None, "", "—") else None,
+                      "fecha_cosecha_prog": a.get("fecha_cosecha") or None})
         else:
             for campo in ("aforo_actTCH_2627", "aforo_toneladas_2627", "aforo_tch_opt_2627", "aforo_toneladas_opt_2627"):
                 m.pop(campo, None)
@@ -379,6 +401,7 @@ def main():
         "nota_gps": "El GPS requiere HTTPS o localhost.",
         "nota_aforo": "actTCH y Toneladas corresponden al estimado de la zafra; no reemplazan TCH histórico.",
         "datos_al": hoy.isoformat(), "cortes_al": meta_prev.get("cortes_al", ""),
+        "lotes_con_fecha_cosecha": sum(1 for l in vals if l.get("fecha_cosecha")),
         "generated_at": ahora,
     }
     (out / "metadata.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -401,6 +424,8 @@ def main():
         "validaciones": {
             "shape_sin_aforo": sin_aforo, "aforo_sin_shape": sin_shape, "duplicados_excel": xinfo["duplicados"],
             "tch_opt_menor_que_actTCH": cambios["tch_opt_menor_act"], "aforo_area_cero": cambios["area_cero"],
+            "molienda_sin_fecha_cosecha": sorted(l["hhhsss"] for l in vals if es_molienda(l) and not l.get("fecha_cosecha")) if xinfo["trae_fecha_cosecha"] else "El Excel no trae Fecha Cosecha",
+            "fecha_cosecha_vencida": sorted(l["hhhsss"] for l in vals if l.get("fecha_cosecha") and l["fecha_cosecha"] < hoy.isoformat()),
             "variedad_actualizada_desde_shape": cambios["variedad"],
             "area_shape_vs_aforo_mayor_10pct": sorted(dif_area, key=lambda d: -abs(d["dif_pct"])),
         },

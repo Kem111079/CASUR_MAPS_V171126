@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-17T22:53:26",
-  "version": "V171126_SHAPE_AFORO",
+  "generated_at": "2026-11-18T00:30:50",
+  "version": "V181126_FECHA_COSECHA",
   "shape": {
     "archivo": "Shape_Casur_FNC_171126.gpkg",
     "poligonos": 8341,
@@ -154,6 +154,8 @@
       "5001",
       "5003"
     ],
+    "molienda_sin_fecha_cosecha": [],
+    "fecha_cosecha_vencida": [],
     "variedad_actualizada_desde_shape": [],
     "area_shape_vs_aforo_mayor_10pct": [
       {
