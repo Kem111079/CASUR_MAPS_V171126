@@ -175,7 +175,7 @@ function actualizarEtiquetas() {
   };
   if (z >= 18) {
     let k = 0;
-    for (const f of DATA.features) { if (!toca(f.bbox)) continue; const c = centroideFeat(f); if (!c) continue; const l = LOTES[f._cod]; if (poner(c, l && l.nPoly > 1 ? `${f._cod} · ${f.properties.Tablon || ''}` : f._cod, 'etq-tab') && ++k > 260) break; }
+    for (const f of DATA.features) { if (!toca(f.bbox)) continue; const c = centroideFeat(f); if (!c) continue; const l = LOTES[f._cod]; const nc = S.etqNc ? ncCorto(l) : ''; if (poner(c, (l && l.nPoly > 1 ? `${f._cod} · ${f.properties.Tablon || ''}` : f._cod) + (nc ? ' · ' + nc : ''), 'etq-tab') && ++k > 260) break; }
   } else if (z >= 15.5) {
     let k = 0;
     // Con la capa Semana de corte, los lotes con fecha próxima o vencida se etiquetan primero.
@@ -190,10 +190,11 @@ function actualizarEtiquetas() {
 
 /* Con la capa Semana de corte, los lotes vencidos o de las dos próximas semanas llevan su fecha en la etiqueta. */
 function etqLote(l) {
-  if (S.colorear !== 'semana') return l.cod;
-  const c = claseCorte(l); if (c === null || c > 2) return l.cod;
+  const nc = S.etqNc ? ncCorto(l) : '', base = l.cod + (nc ? ' · ' + nc : '');
+  if (S.colorear !== 'semana') return base;
+  const c = claseCorte(l); if (c === null || c > 2) return base;
   const d = parseISO(l.fProg);
-  return `${l.cod} · ${d.getDate()} ${d.toLocaleDateString('es-NI', {month: 'short'}).replace('.', '')}`;
+  return `${base} · ${d.getDate()} ${d.toLocaleDateString('es-NI', {month: 'short'}).replace('.', '')}`;
 }
 /* Etiqueta de cosecha de la tarjeta: fecha programada, días que faltan y semana; alerta si la fecha ya pasó. */
 /* Cosecha del lote para la tarjeta: texto de una línea y, si la fecha ya pasó, una alerta aparte. */
@@ -333,7 +334,7 @@ function renderCard() {
     <button type="button" class="card-asa" onclick="cardAlternar()" aria-label="Ampliar o reducir tarjeta"><i></i></button>
     <div class="card-top">
       <div class="card-id">
-        <div class="card-cod">${tab ? 'Tablón ' + esc(pt.Tablon || '—') : 'Lote ' + esc(l.cod)} <small>${tab ? fmtN(pt.Area_Ha, ' ha') : fmtN(l.area, ' ha')}</small></div>
+        <div class="card-cod">${tab ? 'Tablón ' + esc(pt.Tablon || '—') : 'Lote ' + esc(l.cod)} <small>${tab ? fmtN(pt.Area_Ha, ' ha') : fmtN(l.area, ' ha')}${l.nc ? ' · ' + esc(ncLargo(l)) : ''}</small></div>
         <div class="card-sub"><button type="button" class="card-finca" onclick="abrirFinca(LOTES[selCod].hac)">${tab ? 'Lote ' + esc(l.cod) + ' · ' : ''}${esc(l.hac)} ›</button></div>
       </div>
       ${selFeat ? `<div class="mini-seg" role="group" aria-label="Ver lote o tablón"><button type="button" class="${tab ? '' : 'activo'}" onclick="setSelModo('lote')">Lote</button><button type="button" class="${tab ? 'activo' : ''}" onclick="setSelModo('tablon')">Tablón</button></div>` : ''}
@@ -436,6 +437,7 @@ function abrirCapas() {
     <h4>Al tocar el mapa, seleccionar</h4><div class="opciones col" id="opSel">${op('sel', 'lote', 'Lote completo', S.selModo !== 'tablon')}${op('sel', 'tablon', 'Tablón', S.selModo === 'tablon')}</div>
     <h4>Colorear lotes por</h4><div class="opciones col" id="opColor">${Object.entries(TEMAS).map(([k, t]) => op('color', k, t.t, S.colorear === k)).join('')}</div>
     <label class="interruptor"><input type="checkbox" id="opEtq" ${S.etiquetas ? 'checked' : ''}><span>Mostrar etiquetas (finca · lote · tablón según acercamiento)</span></label>
+    <label class="interruptor"><input type="checkbox" id="opNc" ${S.etqNc ? 'checked' : ''}><span>Número de corte en las etiquetas (C6 = corte 6 · PL = plantía)</span></label>
     <label class="interruptor"><input type="checkbox" id="opReg" ${S.verRegistros ? 'checked' : ''}><span>Mostrar en el mapa los hallazgos pendientes</span></label>
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">${ico('ruler')} Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">${ico('hexagon')} Medir área</button></div>
@@ -445,6 +447,7 @@ function abrirCapas() {
   $('opReg').addEventListener('change', e => { S.verRegistros = e.target.checked; guardarAjustes(); pintarRegistros(); });
   $('opColor').addEventListener('change', e => setColorear(e.target.value));
   $('opEtq').addEventListener('change', e => { S.etiquetas = e.target.checked; guardarAjustes(); actualizarEtiquetas(); });
+  $('opNc').addEventListener('change', e => { S.etqNc = e.target.checked; guardarAjustes(); actualizarEtiquetas(); });
 }
 
 /* ── Vista de alrededores: aleja lo justo para ver los lotes vecinos (~2 km) y vuelve con otro toque ── */

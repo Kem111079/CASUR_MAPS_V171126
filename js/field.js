@@ -188,7 +188,7 @@ async function imagenRegistro(o) {
   rr(ctx, 40, 215, W - 80, H - 255, 26, '#fff', '#dbe5dd');
   ctx.fillStyle = '#0f172a'; ctx.font = '900 56px Arial'; ctx.fillText('Lote ' + l.cod, 80, 300);
   ctx.fillStyle = '#334155'; ctx.font = '700 34px Arial'; ctx.fillText(String(l.hac || '').slice(0, 52), 80, 350);
-  ctx.font = '600 26px Arial'; ctx.fillStyle = '#64748b'; ctx.fillText([o.tablon ? 'Tablón ' + o.tablon : '', l.variedad, fmtN(l.area, ' ha')].filter(x => x && x !== '—').join(' · '), 80, 392);
+  ctx.font = '600 26px Arial'; ctx.fillStyle = '#64748b'; ctx.fillText([o.tablon ? 'Tablón ' + o.tablon : '', l.variedad, fmtN(l.area, ' ha'), ncLargo(l)].filter(x => x && x !== '—').join(' · '), 80, 392);
   const sev = {Alta: '#b91c1c', Media: '#b45309', Baja: '#0b7f3a'}[o.severidad] || '#334155';
   [['CATEGORÍA', o.categoria, '#0f172a'], ['SEVERIDAD', o.severidad, sev], ['TÉCNICO', (o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : 'No indicado').slice(0, 20), '#0f172a']].forEach((b, i) => {
     const x = 80 + i * 352; rr(ctx, x, 420, 336, 92, 18, '#f8fafc', '#e2e8f0'); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 20, 452); ctx.fillStyle = b[2]; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 20, 492);
@@ -495,7 +495,7 @@ function renderMas() {
     <label class="campo">Uso del GPS${sel('ajGps', [['vehiculo', 'En vehículo (recomendado)'], ['campo', 'Caminando'], ['preciso', 'Punto fijo, máxima precisión']], S.gpsPerfil)}</label>
     <label class="campo">Pantalla${sel('ajTema', [['campo', 'Campo · alto contraste para sol'], ['auto', 'Automático · oscuro de 7 p. m. a 5:30 a. m.'], ['claro', 'Claro suave'], ['oscuro', 'Oscuro · madrugada']], S.tema)}</label>
     <label class="campo">Tamaño de letra${sel('ajLetra', [['normal', 'Normal'], ['grande', 'Grande'], ['muygrande', 'Muy grande']], S.letra || 'normal')}</label>
-    <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tablero ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
+    <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tableroAbrir ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
  <label class="campo">Giro del mapa con GPS${sel('ajGiro', [['suave', 'Suave · gira poco, solo al avanzar (recomendado)'], ['normal', 'Normal · sigue cada cambio de rumbo'], ['sin', 'Sin giro · norte siempre arriba']], S.giro)}</label>
     <label class="interruptor"><input type="checkbox" id="ajAuto" ${S.gpsAuto ? 'checked' : ''}><span>Activar el GPS al abrir la app</span></label>
     <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Mantener la pantalla encendida durante la visita</span></label>
@@ -513,7 +513,7 @@ function renderMas() {
   $('ajGps').addEventListener('change', e => { S.gpsPerfil = e.target.value; guardarAjustes(); });
   $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); pintarSeleccion(); });
   $('ajLetra').addEventListener('change', e => { S.letra = e.target.value; guardarAjustes(); aplicarTema(); });
-  $('ajTab').addEventListener('change', e => { S.tablero = e.target.checked; guardarAjustes(); });
+  $('ajTab').addEventListener('change', e => { S.tableroAbrir = e.target.checked; guardarAjustes(); });
   $('ajGiro').addEventListener('change', e => { S.giro = e.target.value; S.orientacion = S.giro === 'sin' ? 'norte' : 'rumbo'; guardarAjustes(); aplicarGiroCss(); orientar(true); pintarBrujula(); });
   $('ajAuto').addEventListener('change', e => { S.gpsAuto = e.target.checked; guardarAjustes(); });
   $('ajPant').addEventListener('change', e => { S.pantalla = e.target.checked; guardarAjustes(); S.pantalla ? pedirPantalla() : soltarPantalla(); });
@@ -594,7 +594,9 @@ async function iniciar() {
     if (S.gpsAuto) iniciarGps(!conEnlace, true);
     registrarSW();
     setTimeout(avisarInstalacion, 1500);
-    if (S.tablero && !conEnlace) setTimeout(() => abrirTablero(false), 700);
+    // El tablero ya no se abre solo (salvo que se active en Ajustes); queda en Resumen > Tablero de hoy.
+    if (S.tableroAbrir && !conEnlace) setTimeout(() => abrirTablero(false), 700);
+    else { const venc = Object.values(LOTES).filter(corteVencido).length; if (venc) toast(`${venc} lote(s) con fecha de corte vencida. Actualice el programa o cargue los cortes.`, {tipo: 'mal', accion: 'Ver', ms: 12000, alAccion: () => { mostrarTab('mapa'); setColorear('semana'); }}); }
     if (navigator.onLine) setTimeout(() => cargarHistorico().catch(() => {}), 6000); // deja el histórico listo para usarlo sin señal
   } catch (e) {
     console.error(e);

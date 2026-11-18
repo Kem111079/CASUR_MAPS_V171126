@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126D';
+const APP_VERSION = 'V181126E';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -94,7 +94,7 @@ function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.
 const AJUSTES_KEY = 'casur_maps_ajustes_v2';
 const S = Object.assign({
   tecnico: '', gpsPerfil: 'vehiculo', tema: 'campo', pantalla: true, vibrar: true,
-  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true, verRegistros: true, letra: 'normal', tablero: true, giro: 'suave'
+  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true, verRegistros: true, letra: 'normal', tableroAbrir: false, giro: 'suave', etqNc: true
 }, leerLS(AJUSTES_KEY, {}));
 if (!('giro' in leerLS(AJUSTES_KEY, {})) && S.orientacion === 'norte') S.giro = 'sin'; // quien ya usaba norte arriba lo conserva
 S.orientacion = S.giro === 'sin' ? 'norte' : 'rumbo';
@@ -332,6 +332,9 @@ function claseCorte(l) {
   const k = l.semProg ? l.semProg.clave : '';
   return SEMANAS_PROX[0] && k === SEMANAS_PROX[0].clave ? 1 : SEMANAS_PROX[1] && k === SEMANAS_PROX[1].clave ? 2 : 3;
 }
+/* Número de corte en forma corta para etiquetas: 'C6', o 'PL' si es plantía. Viene del cronológico; no se calcula. */
+const ncCorto = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'PL' : 'C' + l.nc;
+const ncLargo = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'plantía' : 'corte ' + l.nc;
 const esMolienda = l => String(l.clas || '').toLowerCase() === 'molienda';
 
 /* Semáforo agronómico. Mismos umbrales de versiones anteriores; se agregan estados informativos. */
