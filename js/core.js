@@ -1,11 +1,12 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126E';
+const APP_VERSION = 'V181126F';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
   resumen: './data/aforo_resumen.json',
   cortes: './data/cortes_zafra.json',
+  renov: './data/renovacion.json',
   meta: './data/metadata.json'
 };
 const HIST_URL = './data/produccion_historica_lote.json';
@@ -213,7 +214,7 @@ async function leerCache(cache, url) { if (!cache) return null; try { const r = 
 async function descargarDatos(cache, meta) {
   const out = {meta};
   const claves = Object.keys(DATA_FILES).filter(k => k !== 'meta');
-  const res = await Promise.all(claves.map(k => fetchJson(DATA_FILES[k], 90000).catch(e => { if (k === 'cortes') return null; throw new Error(DATA_FILES[k].split('/').pop() + ': ' + (e.name === 'AbortError' ? 'tiempo agotado' : e.message)); })));
+  const res = await Promise.all(claves.map(k => fetchJson(DATA_FILES[k], 90000).catch(e => { if (k === 'cortes' || k === 'renov') return null; throw new Error(DATA_FILES[k].split('/').pop() + ': ' + (e.name === 'AbortError' ? 'tiempo agotado' : e.message)); })));
   claves.forEach((k, i) => { out[k] = res[i] ? res[i].json : null; });
   if (cache) {
     await Promise.all(claves.map((k, i) => res[i] ? cache.put(DATA_FILES[k], res[i].resp) : null));
@@ -225,10 +226,10 @@ async function cargarDatos() {
   const cache = await dataCache();
   const metaLocal = await leerCache(cache, DATA_FILES.meta);
   if (metaLocal) {
-    const [geo, metricas, resumen, cortes] = await Promise.all(['geo', 'metricas', 'resumen', 'cortes'].map(k => leerCache(cache, DATA_FILES[k])));
+    const [geo, metricas, resumen, cortes, renov] = await Promise.all(['geo', 'metricas', 'resumen', 'cortes', 'renov'].map(k => leerCache(cache, DATA_FILES[k])));
     if (geo && metricas) {
       setTimeout(() => buscarActualizacion(cache, metaLocal), 2500);
-      return {geo, metricas, resumen, cortes, meta: metaLocal, origen: 'local'};
+      return {geo, metricas, resumen, cortes, renov, meta: metaLocal, origen: 'local'};
     }
   }
   setLoader('Descargando datos por primera vez…');
@@ -258,20 +259,23 @@ async function cargarHistorico() {
 }
 
 /* ── Modelo por lote: une métricas, aforo y cortes de la zafra en curso ── */
-function construirLotes(geo, metricas, cortes) {
+function construirLotes(geo, metricas, cortes, renov) {
+  const RV = (renov || {}).lotes || {};
   const M = (metricas || {}).lotes || {}, C = (cortes || {}).lotes || {}, zafraFeed = (cortes || {}).zafra || '26/27';
   LOTES = {}; FINCAS = {};
   const nuevo = (cod, m = {}) => {
-    const c = C[cod];
+    const c = C[cod], rv = RV[cod] || {};
     const l = {
       cod, hac: m.hacienda_productor || 'Sin dato', codFinca: m.cod_finca || '', zona: m.zona || '', variedad: m.variedad || '',
       riego: m.riego || '', tenencia: m.tenencia || '', destino: m.destino || '', clas: m.clasificacion || '', nc: m.nc || '',
       areaAforo: num(m.area_total_ha), areaShape: 0, nPoly: 0,
       tchAnt: num(m.tch_ultima_zafra), fCorte: m.fecha_ultimo_corte || '', zafra: m.ultima_zafra_label || '',
-      fProg: m.fecha_cosecha_prog || '',
+      fProg: m.fecha_cosecha_prog || '', grCorte: rv.gr_corte || '', renovar: typeof rv.renovar === 'boolean' ? rv.renovar : null,
       tchEst: num(m.aforo_actTCH_2627), tonEst: num(m.aforo_toneladas_2627), tchOpt: num(m.aforo_tch_opt_2627), tonOpt: num(m.aforo_toneladas_opt_2627),
       conAforo: m.aforo_actTCH_2627 !== undefined, cosechado: false, feats: [], bbox: null
     };
+    // El grupo de corte es más reciente que el NC del cronológico: si no coinciden, manda el grupo.
+    if (l.grCorte) { const g = /^planta/i.test(l.nc) ? 'Planta' : Number(l.nc) > 5 ? 'Mayor a 5' : l.nc ? 'Corte ' + l.nc : ''; if (g !== l.grCorte) l.nc = l.grCorte === 'Planta' ? 'Planta' : l.grCorte === 'Mayor a 5' ? '>5' : l.grCorte.replace('Corte ', ''); }
     // Corte de la zafra en curso: manda sobre la fecha anterior y, si trae TCH real, sobre el TCH de la última zafra.
     if (c && c.fecha_corte && (!l.fCorte || c.fecha_corte > l.fCorte)) {
       l.fCorte = c.fecha_corte; l.cosechado = true; l.zafra = zafraFeed;

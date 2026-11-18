@@ -577,7 +577,7 @@ async function iniciar() {
     setLoader('Abriendo datos…');
     const d = await cargarDatos();
     DATA = d.geo; META = d.meta || {}; RESUMEN = d.resumen || {};
-    construirLotes(d.geo, d.metricas, d.cortes); construirIndice();
+    construirLotes(d.geo, d.metricas, d.cortes, d.renov); construirIndice();
     initMap(); bindBusqueda();
     $('btnGps').addEventListener('click', gpsBoton); $('btnBrujula').addEventListener('click', alternarOrientacion); aplicarGiroCss(); pintarBrujula(); $('btnCapas').addEventListener('click', abrirCapas); $('chipGps').addEventListener('click', abrirGps);
     $('hojaX').addEventListener('click', cerrarHoja); $('hojaFondo').addEventListener('click', cerrarHoja);

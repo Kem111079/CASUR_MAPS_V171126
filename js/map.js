@@ -89,6 +89,7 @@ function setBase(nombre, repintar = true) {
 }
 
 /* ── Capas temáticas: una sola variable a la vez, rampa única y leyenda con hectáreas ── */
+const GR_CORTE = ['Planta', 'Corte 2', 'Corte 3', 'Corte 4', 'Corte 5', 'Mayor a 5'];
 const RAMPA = ['#0d0887', '#7e03a8', '#cc4778', '#f89540', '#f0f921'];
 // Producción (t/ha): < 40 rojo · 40–55 morado · 55–70 mostaza · 70–85 verde · > 85 verde oscuro
 const RAMPA_TCH = ['#d7191c', '#7e03a8', '#d4a017', '#3fa34d', '#14532d'];
@@ -101,7 +102,12 @@ const TEMAS = {
   riego: {t: 'Tipo de riego', cat: l => l.riego || 'Sin dato'},
   variedad: {t: 'Variedad', cat: l => l.variedad || 'Sin dato'},
   destino: {t: 'Destino / clasificación', cat: l => l.conAforo ? (l.clas || 'Sin dato') : 'Sin aforo'},
-  semana: {t: 'Semana de corte', clave: claseCorte, clases: () => [
+  socas: {t: 'Plantillas y socas', clave: l => { const i = GR_CORTE.indexOf(l.grCorte); return i < 0 ? null : i; }, clases: () => [
+    {txt: 'Plantilla', color: '#1a9850'}, {txt: 'Soca · corte 2', color: '#a6d96a'}, {txt: 'Soca · corte 3', color: '#fee08b'},
+    {txt: 'Soca · corte 4', color: '#fdae61'}, {txt: 'Soca · corte 5', color: '#f46d43'}, {txt: 'Soca · más de 5', color: '#a50026'}]},
+  renovacion: {t: 'Propuesta de renovación', clave: l => l.renovar === true ? 0 : l.renovar === false ? 1 : null, clases: () => [
+    {txt: 'Renovar', color: '#d7191c'}, {txt: 'No renovar', color: '#74add1'}]},
+  semana: {t: 'Semana de corte', sin: 'Sin fecha', clave: claseCorte, clases: () => [
     {txt: 'Fecha vencida', color: '#d7191c'},
     {txt: SEMANAS_PROX[0] ? `Sem. ${SEMANAS_PROX[0].sem} · ${rangoSemana(SEMANAS_PROX[0])}` : 'Próxima semana', color: '#ff8c00'},
     {txt: SEMANAS_PROX[1] ? `Sem. ${SEMANAS_PROX[1].sem} · ${rangoSemana(SEMANAS_PROX[1])}` : 'Semana siguiente', color: '#1f77b4'},
@@ -123,7 +129,7 @@ function prepararTema() {
     const defs = T.clases(), ha = defs.map(() => 0), n = defs.map(() => 0); let sin = 0;
     lotes.forEach(l => { const i = T.clave(l); if (i === null) { sin += l.areaShape; return; } temaColor.set(l.cod, defs[i].color); temaClase.set(l.cod, defs[i].txt); ha[i] += l.areaShape; n[i]++; });
     temaLeyenda = defs.map((d, i) => ({color: d.color, txt: d.txt, ha: ha[i], n: n[i]})).filter(x => x.n);
-    if (sin > 0) temaLeyenda.push({color: null, txt: 'Sin fecha', ha: sin});
+    if (sin > 0) temaLeyenda.push({color: null, txt: T.sin || 'Sin dato', ha: sin});
   } else if (T.cat) {
     const ha = {}; lotes.forEach(l => { const k = T.cat(l); ha[k] = (ha[k] || 0) + l.areaShape; });
     const orden = Object.keys(ha).sort((a, b) => ha[b] - ha[a]), top = orden.slice(0, CATS.length), col = {};
@@ -134,7 +140,7 @@ function prepararTema() {
 }
 function estiloFeat(f) {
   const sat = S.base === 'satelite', oscuro = S.base === 'ninguno' && temaEfectivo() === 'oscuro';
-  if (temaFiltro !== null && (temaClase.get(f._cod) || 'Sin dato') !== temaFiltro && !(temaFiltro === 'Sin fecha' && !temaClase.has(f._cod))) return {color: sat ? '#ffffff' : '#9aa3ad', weight: .5, opacity: .45, fillColor: '#9aa3ad', fillOpacity: .04};
+  if (temaFiltro !== null && (temaClase.get(f._cod) || (TEMAS[S.colorear] || {}).sin || 'Sin dato') !== temaFiltro) return {color: sat ? '#ffffff' : '#9aa3ad', weight: .5, opacity: .45, fillColor: '#9aa3ad', fillOpacity: .04};
   if (S.colorear === 'ninguno') return {color: sat || oscuro ? '#ffffff' : '#0b3a66', weight: sat ? 1.6 : 1, opacity: sat ? .95 : .8, fillColor: sat ? '#ffffff' : '#3d6b99', fillOpacity: sat ? .05 : .13};
   const c = temaColor.get(f._cod);
   if (!c) return {color: sat ? '#ffffff' : '#7b8794', weight: .8, opacity: .7, fillColor: '#9aa3ad', fillOpacity: .12};
@@ -340,7 +346,7 @@ function renderCard() {
       ${selFeat ? `<div class="mini-seg" role="group" aria-label="Ver lote o tablón"><button type="button" class="${tab ? '' : 'activo'}" onclick="setSelModo('lote')">Lote</button><button type="button" class="${tab ? 'activo' : ''}" onclick="setSelModo('tablon')">Tablón</button></div>` : ''}
       <button type="button" class="card-x" onclick="cerrarCard()" aria-label="Cerrar">${ico('x')}</button>
     </div>
-    <div class="fila-estado"><span class="chip est-${st.cls}">${esc(st.txt)}</span>${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
+    <div class="fila-estado"><span class="chip est-${st.cls}">${esc(st.txt)}</span>${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
     ${corte.alerta}
     <div class="cifras">
       ${cifra('TCH anterior', l.tchAnt > 0 ? nf1.format(l.tchAnt) : '—', '', chispa(l.cod))}${cifra('Estimado', estim, 'c-est')}${cifra('Optimista', l.tchOpt > 0 ? fmtN(l.tchOpt, '', nf1) : '—')}${cifra('Edad', edad === null ? '—' : nf1.format(edad) + ' m')}
@@ -356,6 +362,7 @@ function renderCard() {
         ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nf.format(l.areaShape)} ha en shape` : 'Sin polígono')}
         ${kv('Variedad', l.variedad)}${kv('Zona', l.zona)}${kv('Riego', l.riego)}${kv('Tenencia', l.tenencia)}
         ${kv('Clasificación', l.clas || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
+        ${kv('Grupo de corte', l.grCorte ? (l.grCorte === 'Planta' ? 'Plantilla' : 'Soca · ' + l.grCorte.toLowerCase()) : '')}${kv('Propuesta de renovación', l.renovar === true ? 'Sí, renovar' : l.renovar === false ? 'No' : '')}
         ${kv('Corte programado', l.fProg ? `${fechaCorta(l.fProg)}${l.semProg ? ' · semana ' + l.semProg.sem : ''}` : '')}${kv('Último corte', l.fCorte ? `${fechaCorta(l.fCorte)}${l.zafra ? ' · zafra ' + l.zafra : ''}` : '')}${kv('Días desde el corte', diasDesde(l.fCorte) === null ? '' : nf0.format(diasDesde(l.fCorte)))}
         ${kv('Toneladas estimadas', l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '')}${kv('Toneladas optimistas', l.tonOpt > 0 ? nf0.format(l.tonOpt) + ' t' : '')}
         ${kv('Brecha vs. optimista', brecha === null ? '' : nf1.format(brecha) + ' t/ha')}
@@ -422,7 +429,7 @@ function abrirFinca(nombre, zoom = false) {
   const orden = ls.slice().sort((a, b) => ({mal: 0, medio: 1}[estadoLote(a).cls] ?? 2) - ({mal: 0, medio: 1}[estadoLote(b).cls] ?? 2) || a.cod.localeCompare(b.cod, 'es', {numeric: true}));
   abrirHoja(nombre, `
     <div class="cifras c4">${cifra('Lotes', ls.length)}${cifra('Área molienda', nf0.format(area) + ' ha')}${cifra('Toneladas', nf0.format(ton))}${cifra('TCH pond.', area ? nf1.format(ton / area) : '—', 'c-est')}</div>
-    <p class="pie">Área total ${nf0.format(areaTot)} ha · optimista ${area ? nf1.format(tonOpt / area) : '—'} t/ha · ${rojos.length} lote(s) en prioridad alta</p>
+    <p class="pie">Área total ${nf0.format(areaTot)} ha · optimista ${area ? nf1.format(tonOpt / area) : '—'} t/ha · ${rojos.length} lote(s) en prioridad alta${ls.some(l => l.renovar) ? ` · ${ls.filter(l => l.renovar).length} a renovar (${nf0.format(ls.filter(l => l.renovar).reduce((s, l) => s + (l.area || 0), 0))} ha)` : ''}</p>
     <div class="acciones"><button type="button" class="btn sec" onclick="verFincaEnMapa('${esc(nombre).replace(/'/g, '&#39;')}')">${ico('zoomIn')} Ver en mapa</button></div>
     <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${fmtN(l.area, ' ha', nf1)} · ant. ${fmtN(l.tchAnt, '', nf0)} · est. ${l.tchEst > 0 ? nf0.format(l.tchEst) : '—'}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`);
   if (zoom) verFincaEnMapa(nombre, false);

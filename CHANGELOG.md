@@ -1,5 +1,12 @@
 # Cambios
 
+## V181126F · 18-nov-2026
+- Datos de renovación (`fuentes/datos_renovacion.xlsx`): 949 lotes con grupo de corte y propuesta de renovación; 222 lotes a renovar (2,408.87 ha).
+- Capa **Propuesta de renovación**: Renovar / No renovar.
+- Capa **Plantillas y socas**: plantilla y socas agrupadas por corte (2, 3, 4, 5 y más de 5).
+- Tarjeta: etiqueta "Renovar", grupo de corte y propuesta; el resumen de finca indica cuántos lotes se renuevan.
+- `tools/actualizar_renovacion.py` y paso en la acción de GitHub.
+
 ## V181126E · 18-nov-2026
 - El tablero del día ya no se abre solo al iniciar la app; queda en Resumen → Tablero de hoy (se puede reactivar en Ajustes).
 - Número de corte en las etiquetas del mapa (C6 = corte 6, PL = plantía), en el título de la tarjeta y en la imagen del hallazgo. Se puede ocultar en Capas.
