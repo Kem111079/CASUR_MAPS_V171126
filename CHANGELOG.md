@@ -1,5 +1,10 @@
 # Cambios
 
+## V181126J · 18-nov-2026
+- **Corrección:** la capa Propuesta de renovación (y Plantillas y socas) salía "Sin dato" en teléfonos que habían descargado los datos con una versión anterior de la app. Ahora la app completa los archivos que falten en su copia local.
+- Los datos nuevos se aplican solos al abrir; "Descargar datos de nuevo" vuelve a bajar todo lo publicado.
+- **Ajustes** pasa a su propia pestaña (preferencias, datos, plantilla, actualización). **Resumen** queda solo con el aforo, la renovación y el tablero.
+
 ## V181126I · 18-nov-2026
 - La app se actualiza sola al abrir cuando hay versión nueva (si no hay nada a medio hacer); si llega más tarde, avisa con un botón.
 - Revisa si hay versión nueva cada vez que vuelve a primer plano.

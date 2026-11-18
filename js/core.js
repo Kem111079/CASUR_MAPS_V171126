@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126I';
+const APP_VERSION = 'V181126J';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -228,7 +228,9 @@ async function cargarDatos() {
   if (metaLocal) {
     const [geo, metricas, resumen, cortes, renov] = await Promise.all(['geo', 'metricas', 'resumen', 'cortes', 'renov'].map(k => leerCache(cache, DATA_FILES[k])));
     if (geo && metricas) {
-      setTimeout(() => buscarActualizacion(cache, metaLocal), 2500);
+      // Si a la copia local le falta un archivo (por ejemplo, lo descargó una versión anterior de la app que aún no lo conocía), se completa.
+      const faltan = Object.entries({resumen, cortes, renov}).filter(([, v]) => !v).map(([k]) => k);
+      setTimeout(() => buscarActualizacion(cache, metaLocal, false, faltan), 2500);
       return {geo, metricas, resumen, cortes, renov, meta: metaLocal, origen: 'local'};
     }
   }
@@ -236,16 +238,26 @@ async function cargarDatos() {
   const meta = (await fetchJson(DATA_FILES.meta, 20000)).json;
   return Object.assign(await descargarDatos(cache, meta), {origen: 'red'});
 }
-async function buscarActualizacion(cache, metaLocal, manual = false) {
+function datosListos() { // al abrir, los datos nuevos se aplican solos; si el usuario ya está trabajando, se le avisa
+  if (typeof recargaSegura === 'function' && typeof ocupado === 'function' && Date.now() - _abiertaEn < 25000 && !ocupado() && recargaSegura()) return;
+  toast('Datos nuevos listos.', {accion: 'Aplicar', fijo: true, tipo: 'bien', alAccion: () => location.reload()});
+}
+async function buscarActualizacion(cache, metaLocal, manual = false, faltan = []) {
   if (!navigator.onLine) { if (manual) toast('Sin señal: se usan los datos guardados.'); return; }
   try {
     const meta = (await fetchJson(DATA_FILES.meta, 8000)).json;
-    if (meta.generated_at === metaLocal.generated_at) { if (manual) toast('Los datos ya están al día.', {tipo: 'bien'}); return; }
-    const aviso = toast('Descargando datos nuevos…', {fijo: true});
+    if (meta.generated_at === metaLocal.generated_at && !manual) {
+      if (!faltan.length || !cache) return;
+      const res = await Promise.all(faltan.map(k => fetchJson(DATA_FILES[k], 30000).catch(() => null)));
+      await Promise.all(faltan.map((k, i) => res[i] ? cache.put(DATA_FILES[k], res[i].resp) : null));
+      if (res.some(Boolean)) datosListos();
+      return;
+    }
+    const aviso = toast(manual ? 'Descargando los datos publicados…' : 'Descargando datos nuevos…', {fijo: true});
     await descargarDatos(cache, meta);
     aviso && aviso.remove();
-    toast('Datos nuevos listos.', {accion: 'Aplicar', fijo: true, tipo: 'bien', alAccion: () => location.reload()});
-  } catch (e) { if (manual) toast('No se pudo revisar: ' + (e.message || e), {tipo: 'mal'}); }
+    if (manual) location.reload(); else datosListos();
+  } catch (e) { if (manual) toast('No se pudo descargar: ' + (e.message || e), {tipo: 'mal'}); }
 }
 async function cargarHistorico() {
   if (HIST) return HIST;
