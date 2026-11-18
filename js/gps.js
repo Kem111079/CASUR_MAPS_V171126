@@ -16,15 +16,31 @@ function gpsIcono() {
 }
 function gpsBoton() {
   if (GPS.watch === null) return iniciarGps();
-  if (GPS.fix) { GPS.siguiendo = true; panorama = null; pintarPanorama(); map.setView([GPS.fix.lat, GPS.fix.lng], Math.max(map.getZoom(), 17)); orientar(); pintarGpsBtn(); }
+  if (GPS.fix) { GPS.siguiendo = true; panorama = null; pintarPanorama(); map.setView([GPS.fix.lat, GPS.fix.lng], Math.max(map.getZoom(), 17)); GPS.centro = {lat: GPS.fix.lat, lng: GPS.fix.lng}; orientar(true); pintarGpsBtn(); }
 }
 /* Rumbo arriba: con seguimiento activo el mapa gira para que el sentido de avance quede hacia arriba. */
-function orientar() {
-  if (S.orientacion !== 'rumbo' || GPS.watch === null) { girarMapa(0); return; }
-  if (GPS.siguiendo && Number.isFinite(GPS.rumbo)) girarMapa(-GPS.rumbo);
+/* Giro del mapa (rumbo arriba). El mapa solo gira con avance real y sostenido, usando el rumbo del tramo
+   recorrido y no el de cada lectura, que a baja velocidad es ruidoso. La flecha azul sí muestra el rumbo al instante. */
+const GIRO = {
+  suave: {vMin: 1.7, base: 13, banda: 12, cada: 2000, accMax: 20, dur: '1s', centrar: 4},
+  normal: {vMin: 0.8, base: 5, banda: 5, cada: 900, accMax: 35, dur: '.6s', centrar: 0}
+};
+const giroCfg = () => GIRO[S.giro] || GIRO.suave;
+function aplicarGiroCss() { $('map').style.setProperty('--giro-dur', giroCfg().dur); }
+function orientar(forzar = false) {
+  if (S.giro === 'sin' || GPS.watch === null) { girarMapa(0); return; }
+  if (!GPS.siguiendo || !Number.isFinite(GPS.curso)) return;
+  const G = giroCfg(), ahora = Date.now(), dif = Math.abs((((-GPS.curso) - mapRot + 540) % 360) - 180);
+  if (!forzar && (GPS.movN < 2 || dif < G.banda || ahora - (GPS.giroT || 0) < G.cada)) return;
+  GPS.giroT = ahora; girarMapa(-GPS.curso);
+}
+function rumboEntre(a, b) {
+  const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r), x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
 }
 function alternarOrientacion() {
-  S.orientacion = S.orientacion === 'rumbo' ? 'norte' : 'rumbo'; guardarAjustes(); orientar(); pintarBrujula();
+  if (S.giro === 'sin') S.giro = S.giroPrev || 'suave'; else { S.giroPrev = S.giro; S.giro = 'sin'; }
+  S.orientacion = S.giro === 'sin' ? 'norte' : 'rumbo'; guardarAjustes(); aplicarGiroCss(); orientar(true); pintarBrujula();
   toast(S.orientacion === 'rumbo' ? 'Rumbo arriba: el mapa gira según su avance.' : 'Norte arriba: el mapa no gira.');
 }
 function pintarBrujula() {
@@ -44,7 +60,7 @@ function iniciarGps(seguir = true, auto = false) {
 }
 function detenerGps() {
   if (GPS.watch !== null) navigator.geolocation.clearWatch(GPS.watch);
-  GPS.watch = null; GPS.fix = null; GPS.lote = ''; GPS.cands = []; GPS.estado = 'apagado';
+  GPS.watch = null; GPS.fix = null; GPS.ancla = null; GPS.curso = null; GPS.movN = 0; GPS.centro = null; GPS.lote = ''; GPS.cands = []; GPS.estado = 'apagado';
   if (GPS.marcador) { GPS.marcador.remove(); GPS.circulo.remove(); GPS.marcador = GPS.circulo = null; }
   girarMapa(0); pintarGpsChip(); pintarGpsBtn();
 }
@@ -58,15 +74,25 @@ function alPosicion(pos) {
     h = (Math.atan2(y, x) / r + 360) % 360;
   }
   if (h !== null) { const d = Number.isFinite(GPS.rumbo) ? ((h - GPS.rumbo + 540) % 360) - 180 : 0; GPS.rumbo = Number.isFinite(GPS.rumbo) ? (Math.abs(d) < 3 ? GPS.rumbo : (GPS.rumbo + d * .3 + 360) % 360) : h; }
-  const primera = !GPS.fix;
+  const primera = !GPS.fix, G = giroCfg(), aqui = {lat, lng};
   GPS.fix = {lat, lng, acc, v, t, reloj: Date.now()};
+  // Rumbo estable para el mapa: se recalcula cada vez que se avanza la distancia base con buena precisión.
+  GPS.movN = v !== null && v >= G.vMin ? (GPS.movN || 0) + 1 : 0;
+  if (acc <= G.accMax) {
+    if (!GPS.ancla) GPS.ancla = aqui;
+    else if (haversineM(GPS.ancla.lng, GPS.ancla.lat, lng, lat) >= G.base) { GPS.curso = rumboEntre(GPS.ancla, aqui); GPS.ancla = aqui; }
+  }
   if (!GPS.marcador) {
     GPS.circulo = L.circle([lat, lng], {radius: acc, color: '#0a66ff', weight: 1, fillOpacity: .08, interactive: false}).addTo(map);
     GPS.marcador = L.marker([lat, lng], {icon: gpsIcono(), interactive: false, zIndexOffset: 1000}).addTo(map);
   } else { GPS.marcador.setLatLng([lat, lng]); GPS.marcador.setIcon(gpsIcono()); GPS.circulo.setLatLng([lat, lng]); GPS.circulo.setRadius(acc); }
   // Solo la primera lectura acerca el mapa; después se respeta el zoom elegido (por ejemplo, la vista de alrededores).
-  if (GPS.siguiendo) map.setView([lat, lng], primera ? Math.max(map.getZoom(), 17) : map.getZoom(), {animate: true});
-  if (v === null || v > 0.8 || Number.isFinite(c.heading)) orientar(); // parado no se gira: el rumbo del GPS no es fiable
+  // El mapa se recentra solo al avanzar unos metros, con desplazamiento suave: quieto, no tiembla con el ruido del GPS.
+  if (GPS.siguiendo) {
+    if (primera) { map.setView([lat, lng], Math.max(map.getZoom(), 17)); GPS.centro = aqui; }
+    else if (!GPS.centro || haversineM(GPS.centro.lng, GPS.centro.lat, lng, lat) >= G.centrar) { map.panTo([lat, lng], {animate: true, duration: .9, easeLinearity: .6}); GPS.centro = aqui; }
+  }
+  orientar();
   const cands = detectarLote();
   visitaPunto(cands);
   pintarGpsChip(); pintarGpsBtn();

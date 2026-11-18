@@ -1,5 +1,10 @@
 # Cambios
 
+## V181126D · 18-nov-2026
+- **Giro del mapa más suave.** Nuevo ajuste "Giro del mapa": Suave (por defecto), Normal o Sin giro. En Suave el mapa gira solo a más de 6 km/h sostenidos, con el rumbo del tramo recorrido (13 m), ante cambios de 12° o más, como máximo cada 2 s y con un movimiento de 1 s. Quieto o caminando despacio no gira.
+- El mapa se recentra al avanzar 4 m o más, con desplazamiento suave, en lugar de en cada lectura.
+- Mini gráfico de la tarjeta: muestra el valor de la primera y la última zafra.
+
 ## V181126C · 18-nov-2026
 **Diseño**
 - Iconos de línea propios en lugar de emojis (se ven igual en todos los teléfonos).

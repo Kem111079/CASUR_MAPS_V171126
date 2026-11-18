@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126C';
+const APP_VERSION = 'V181126D';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -94,8 +94,10 @@ function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.
 const AJUSTES_KEY = 'casur_maps_ajustes_v2';
 const S = Object.assign({
   tecnico: '', gpsPerfil: 'vehiculo', tema: 'campo', pantalla: true, vibrar: true,
-  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true, verRegistros: true, letra: 'normal', tablero: true
+  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true, verRegistros: true, letra: 'normal', tablero: true, giro: 'suave'
 }, leerLS(AJUSTES_KEY, {}));
+if (!('giro' in leerLS(AJUSTES_KEY, {})) && S.orientacion === 'norte') S.giro = 'sin'; // quien ya usaba norte arriba lo conserva
+S.orientacion = S.giro === 'sin' ? 'norte' : 'rumbo';
 function guardarAjustes() { escribirLS(AJUSTES_KEY, S); }
 function leerLS(k, def) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? def; } catch (_) { return def; } }
 function escribirLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { toast('Almacenamiento lleno: exporte y limpie la bitácora.', {tipo: 'mal'}); return false; } }

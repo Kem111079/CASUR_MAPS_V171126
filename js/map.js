@@ -211,7 +211,7 @@ function chispa(cod) {
   if (v.length < 3) return '';
   const mn = Math.min(...v), mx = Math.max(...v), W = 76, H = 18, y = t => (H - 3 - (mx === mn ? .5 : (t - mn) / (mx - mn)) * (H - 6)).toFixed(1), x = i => (2 + i * (W - 4) / (v.length - 1)).toFixed(1);
   const sube = v[v.length - 1] >= v[0];
-  return `<svg class="chispa ${sube ? 'sube' : 'baja'}" viewBox="0 0 ${W} ${H}" aria-label="TCH de las últimas ${v.length} zafras"><polyline points="${v.map((t, i) => x(i) + ',' + y(t)).join(' ')}"/><circle cx="${x(v.length - 1)}" cy="${y(v[v.length - 1])}" r="2.4"/></svg>`;
+  return `<svg class="chispa ${sube ? 'sube' : 'baja'}" viewBox="0 0 ${W} ${H}" aria-label="TCH de las últimas ${v.length} zafras"><polyline points="${v.map((t, i) => x(i) + ',' + y(t)).join(' ')}"/><circle cx="${x(v.length - 1)}" cy="${y(v[v.length - 1])}" r="2.4"/></svg><small class="chispa-txt" title="Primera y última zafra del gráfico">${nf0.format(v[0])} → ${nf0.format(v[v.length - 1])}</small>`;
 }
 
 /* ── Búsqueda por código, productor o finca (sin tildes), con recientes y favoritos ── */

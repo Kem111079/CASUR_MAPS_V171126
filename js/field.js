@@ -496,7 +496,7 @@ function renderMas() {
     <label class="campo">Pantalla${sel('ajTema', [['campo', 'Campo · alto contraste para sol'], ['auto', 'Automático · oscuro de 7 p. m. a 5:30 a. m.'], ['claro', 'Claro suave'], ['oscuro', 'Oscuro · madrugada']], S.tema)}</label>
     <label class="campo">Tamaño de letra${sel('ajLetra', [['normal', 'Normal'], ['grande', 'Grande'], ['muygrande', 'Muy grande']], S.letra || 'normal')}</label>
     <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tablero ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
- <label class="campo">Orientación del mapa con GPS${sel('ajOri', [['rumbo', 'Rumbo arriba · el mapa gira con su avance'], ['norte', 'Norte arriba · el mapa no gira']], S.orientacion)}</label>
+ <label class="campo">Giro del mapa con GPS${sel('ajGiro', [['suave', 'Suave · gira poco, solo al avanzar (recomendado)'], ['normal', 'Normal · sigue cada cambio de rumbo'], ['sin', 'Sin giro · norte siempre arriba']], S.giro)}</label>
     <label class="interruptor"><input type="checkbox" id="ajAuto" ${S.gpsAuto ? 'checked' : ''}><span>Activar el GPS al abrir la app</span></label>
     <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Mantener la pantalla encendida durante la visita</span></label>
     <label class="interruptor"><input type="checkbox" id="ajVib" ${S.vibrar ? 'checked' : ''}><span>Vibrar al entrar a un lote</span></label>
@@ -514,7 +514,7 @@ function renderMas() {
   $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); pintarSeleccion(); });
   $('ajLetra').addEventListener('change', e => { S.letra = e.target.value; guardarAjustes(); aplicarTema(); });
   $('ajTab').addEventListener('change', e => { S.tablero = e.target.checked; guardarAjustes(); });
-  $('ajOri').addEventListener('change', e => { S.orientacion = e.target.value; guardarAjustes(); orientar(); pintarBrujula(); });
+  $('ajGiro').addEventListener('change', e => { S.giro = e.target.value; S.orientacion = S.giro === 'sin' ? 'norte' : 'rumbo'; guardarAjustes(); aplicarGiroCss(); orientar(true); pintarBrujula(); });
   $('ajAuto').addEventListener('change', e => { S.gpsAuto = e.target.checked; guardarAjustes(); });
   $('ajPant').addEventListener('change', e => { S.pantalla = e.target.checked; guardarAjustes(); S.pantalla ? pedirPantalla() : soltarPantalla(); });
   $('ajVib').addEventListener('change', e => { S.vibrar = e.target.checked; guardarAjustes(); vibrar(); });
@@ -579,7 +579,7 @@ async function iniciar() {
     DATA = d.geo; META = d.meta || {}; RESUMEN = d.resumen || {};
     construirLotes(d.geo, d.metricas, d.cortes); construirIndice();
     initMap(); bindBusqueda();
-    $('btnGps').addEventListener('click', gpsBoton); $('btnBrujula').addEventListener('click', alternarOrientacion); pintarBrujula(); $('btnCapas').addEventListener('click', abrirCapas); $('chipGps').addEventListener('click', abrirGps);
+    $('btnGps').addEventListener('click', gpsBoton); $('btnBrujula').addEventListener('click', alternarOrientacion); aplicarGiroCss(); pintarBrujula(); $('btnCapas').addEventListener('click', abrirCapas); $('chipGps').addEventListener('click', abrirGps);
     $('hojaX').addEventListener('click', cerrarHoja); $('hojaFondo').addEventListener('click', cerrarHoja);
     $('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) mostrarTab(b.dataset.tab); });
     $('medirDeshacer').addEventListener('click', medirDeshacer); $('medirFin').addEventListener('click', medirCerrar);
