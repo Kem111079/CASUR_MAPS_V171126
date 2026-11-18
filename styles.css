@@ -65,14 +65,14 @@ body.con-card .fab.brujula{bottom:calc(var(--card-h,230px) + 84px)}
 .nota{border-radius:12px;padding:10px 12px;font-weight:600;font-size:14px;margin:10px 0}
 
 /* Leyenda temática */
-.leyenda{position:absolute;z-index:870;left:10px;bottom:34px;background:var(--sup);border:1px solid var(--linea);border-radius:14px;box-shadow:var(--sombra);font-size:13px;max-width:230px;overflow:hidden}
+.leyenda{position:absolute;z-index:870;left:10px;bottom:34px;background:var(--sup);border:1px solid var(--linea);border-radius:14px;box-shadow:var(--sombra);font-size:13px;max-width:300px;overflow:hidden}
 .leyenda.oculta{display:none}
 body.con-card .leyenda{display:none}
 .ley-cab{display:flex;gap:6px;align-items:baseline;width:100%;min-height:40px;padding:6px 12px;border:0;background:transparent;text-align:left}
 .ley-cab small{color:var(--texto2)}.ley-cab i{margin-left:auto;font-style:normal}
 .leyenda.plegada .ley-cuerpo{display:none}.leyenda.plegada .ley-cab i{transform:rotate(180deg)}
 .ley-cuerpo{padding:0 12px 10px}
-.ley-cuerpo div{display:flex;align-items:center;gap:8px;padding:2px 0}
+.ley-cuerpo div{display:flex;align-items:center;gap:8px;padding:2px 0;white-space:nowrap}
 .ley-cuerpo em{margin-left:auto;font-style:normal;color:var(--texto2);font-variant-numeric:tabular-nums}
 .ley-color{width:18px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.35);background:repeating-linear-gradient(45deg,#cfd6dc 0 3px,#fff 3px 6px);flex:none}
 
@@ -153,6 +153,24 @@ svg.hist{width:100%;height:auto;display:block}
 .obs-acc{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .obs-acc button{min-height:44px;padding:0 12px;border:1px solid var(--linea);border-radius:10px;background:var(--sup);font-weight:700;font-size:14px}
 .obs-lote h4{margin-top:20px}
+.obs.resuelta{opacity:.72;border-left-color:var(--bien)}
+.obs-acc button.ok{background:var(--bien-f);color:var(--bien);border-color:var(--bien)}
+.corte{border-radius:12px;padding:8px 12px;margin-top:8px;font-size:15px;font-weight:600}
+.corte b{font-weight:900}
+.destino{display:flex;align-items:center;gap:8px;background:var(--info-f);color:var(--info);border-radius:14px;padding:8px 8px 8px 14px;margin:10px 0}
+.destino.sin{background:var(--medio-f);color:var(--medio)}
+.destino span{flex:1;font-size:15px}.destino small{opacity:.8}
+.destino button{min-height:44px;border:0;border-radius:10px;background:var(--sup);color:var(--texto);font-weight:800;padding:0 12px;flex:none}
+.rapidos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rapidos button{min-height:74px;border:2px solid var(--linea);border-radius:14px;background:var(--sup);font-weight:800;font-size:13.5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px}
+.rapidos button:active{background:var(--bien-f);border-color:var(--bien)}
+.rapidos i{font-style:normal;font-size:24px;line-height:1}
+.cifras.c3{grid-template-columns:repeat(3,1fr)}
+.cifras .c-alerta{background:var(--mal-f)}.cifras .c-alerta b{color:var(--mal)}
+.segmento.filtro{margin:10px 0}
+.plan-finca{border:1px solid var(--linea);border-radius:12px;padding:8px 12px;background:var(--sup)}
+#nav button{position:relative}
+.insignia{position:absolute;top:6px;left:calc(50% + 6px);min-width:22px;height:22px;border-radius:11px;background:var(--mal);color:#fff;font-style:normal;font-size:12.5px;font-weight:900;display:grid;place-items:center;padding:0 5px}
 .obs-lote-btn{border:0;background:transparent;padding:6px 0;min-height:40px;font-weight:800;color:var(--verde);text-align:left;font-size:16px}
 .bloque{border:1px solid var(--linea);border-radius:14px;padding:10px 12px;margin:10px 0;background:var(--sup)}
 
@@ -214,6 +232,7 @@ svg.hist{width:100%;height:auto;display:block}
 /* Avisos */
 #toasts{position:fixed;z-index:2500;left:10px;right:10px;top:calc(124px + var(--sat));display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
 .toast{pointer-events:auto;display:flex;align-items:center;gap:12px;max-width:560px;background:#16202a;color:#fff;border-radius:14px;padding:12px 16px;font-weight:600;font-size:15px;box-shadow:var(--sombra)}
+body:not([data-tab=mapa]) #toasts{top:auto;bottom:calc(var(--nav) + var(--sab) + 10px)}
 .toast.bien{background:#0a6b31}.toast.mal{background:#a3140f}
 .toast button{border:0;background:#fff;color:#16202a;border-radius:10px;min-height:40px;padding:0 14px;font-weight:800;flex:none}
 
@@ -223,5 +242,6 @@ svg.hist{width:100%;height:auto;display:block}
   body.con-card .fab{bottom:18px}body.con-card .fab.brujula{bottom:88px}body.con-card.card-full .fab{display:grid}body.con-card .leyenda{display:block;left:452px}
   .hoja{bottom:auto;top:50%;transform:translateY(-50%);border-radius:22px}
 }
+@media (max-width:380px){.rapidos{grid-template-columns:repeat(3,1fr)}}
 @media (max-width:360px){.cifras b{font-size:18px}.card-cod{font-size:21px}.mini-acc{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}

@@ -4,11 +4,66 @@ const OBS_KEY = 'casur_maps_observaciones_v6'; // misma clave de versiones anter
 const CATEGORIAS = ['Seguimiento', 'Siembra', 'Madurante', 'Maleza', 'Plaga', 'Sequía', 'Despoblación', 'Riego', 'Acceso', 'Cosecha', 'Otro'];
 const obsTodas = () => leerLS(OBS_KEY, []);
 const obsGuardar = arr => escribirLS(OBS_KEY, arr);
+/* Un registro de severidad media o alta queda pendiente hasta marcarlo resuelto. */
+const esPendiente = o => !o.resuelto && (o.severidad === 'Media' || o.severidad === 'Alta');
 const obsDeLote = cod => obsTodas().filter(o => codKey(o.codlote) === cod).reverse();
 const fechaHora = iso => new Date(iso).toLocaleString('es-NI', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
 function obsFilaHtml(o) {
-  return `<div class="obs sev-${esc(String(o.severidad || '').toLowerCase())}"><div class="obs-cab"><b>${esc(o.categoria)} · ${esc(o.severidad)}</b><small>${esc(fechaHora(o.fecha_hora))}${o.photo_id ? ' · 📷' : ''}</small></div><p>${esc(o.nota || 'Sin nota')}</p>
-    <div class="obs-acc"><button type="button" onclick="abrirRegistro('${esc(o.codlote)}','${esc(o.id)}')">✎ Editar</button><button type="button" onclick="compartirRegistro('${esc(o.id)}')">↗ Compartir</button><button type="button" onclick="obsBorrar('${esc(o.id)}')">🗑 Borrar</button></div></div>`;
+  const pend = esPendiente(o);
+  return `<div class="obs sev-${esc(String(o.severidad || '').toLowerCase())}${o.resuelto ? ' resuelta' : ''}"><div class="obs-cab"><b>${esc(o.categoria)} · ${esc(o.severidad)}</b><small>${esc(fechaHora(o.fecha_hora))}${o.photo_id ? ' · 📷' : ''}</small></div>
+    <p>${esc(o.nota || 'Sin nota')}</p>${o.resuelto ? `<p class="pie">✔ Resuelto el ${esc(fechaHora(o.resuelto))}</p>` : ''}
+    <div class="obs-acc">${pend ? `<button type="button" class="ok" onclick="obsResolver('${esc(o.id)}',true)">✔ Resuelto</button>` : o.resuelto ? `<button type="button" onclick="obsResolver('${esc(o.id)}',false)">↺ Reabrir</button>` : ''}<button type="button" onclick="abrirRegistro('${esc(o.codlote)}','${esc(o.id)}')">✎ Editar</button><button type="button" onclick="compartirRegistro('${esc(o.id)}')">↗ Compartir</button><button type="button" onclick="obsBorrar('${esc(o.id)}')">🗑</button></div></div>`;
+}
+function obsResolver(id, resuelto) {
+  const arr = obsTodas(), o = arr.find(x => x.id === id); if (!o) return;
+  if (resuelto) o.resuelto = new Date().toISOString(); else delete o.resuelto;
+  obsGuardar(arr); refrescarVistas();
+  if (resuelto) toast('Marcado como resuelto.', {tipo: 'bien', accion: 'Deshacer', alAccion: () => obsResolver(id, false)});
+}
+function pintarInsignia() {
+  const n = obsTodas().filter(esPendiente).length, el = $('insigniaBit'); if (!el) return;
+  el.hidden = !n; el.textContent = n > 99 ? '99+' : n;
+}
+
+/* ── Elegir lote sin pasar por el mapa: propone el del GPS, el seleccionado y los recientes; permite buscar ── */
+let _alElegir = null;
+function elegirLote(titulo, alElegir) {
+  _alElegir = alElegir;
+  const vistos = new Set(), sug = [];
+  const add = (cod, motivo) => { if (cod && LOTES[cod] && !vistos.has(cod)) { vistos.add(cod); sug.push({cod, motivo}); } };
+  GPS.cands.slice(0, 3).forEach(c => add(c.cod, c.inside ? 'Usted está aquí' : `a ${Math.round(c.d)} m`));
+  add(selCod, 'seleccionado en el mapa'); LISTA.filter(x => !x.hecho).slice(0, 4).forEach(x => add(x.cod, 'lista del día')); recientes().slice(0, 5).forEach(c => add(c, 'reciente'));
+  const fila = x => `<button type="button" data-cod="${esc(x.cod)}"><b>${esc(x.cod)}</b><span>${esc(LOTES[x.cod].hac)}${x.motivo ? ' · ' + esc(x.motivo) : ''}</span></button>`;
+  abrirHoja(titulo, `<label class="campo">Buscar lote<input id="elegirQ" type="search" placeholder="Código o productor" autocomplete="off" autocapitalize="characters"></label>
+    <div id="elegirRes" class="lista-lotes">${sug.map(fila).join('') || '<p class="vacio">Escriba el código del lote o el nombre del productor.</p>'}</div>`, 'alta');
+  $('elegirQ').addEventListener('input', e => {
+    const t = sinTildes(e.target.value).trim();
+    const r = t ? indice.filter(it => it.tipo === 'lote' && (it.cod.startsWith(t) || it.n.includes(t))).sort((a, b) => (b.cod.startsWith(t) - a.cod.startsWith(t)) || a.cod.length - b.cod.length || a.cod.localeCompare(b.cod, 'es', {numeric: true})).slice(0, 12).map(it => ({cod: it.cod})) : sug;
+    $('elegirRes').innerHTML = r.map(fila).join('') || '<p class="vacio">Sin coincidencias.</p>';
+  });
+  $('elegirRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const f = _alElegir; _alElegir = null; cerrarHoja(); f && f(b.dataset.cod); });
+}
+/* Lote al que va un registro hecho desde la Bitácora: el elegido a mano, el del GPS (si está dentro) o el seleccionado. */
+let destinoManual = '';
+function loteDestino() {
+  if (destinoManual && LOTES[destinoManual]) return {cod: destinoManual, por: 'elegido'};
+  const c = GPS.cands[0];
+  if (GPS.lote) return {cod: GPS.lote, por: 'GPS'};
+  if (c && c.inside) return {cod: c.cod, por: 'GPS'};
+  if (selCod) return {cod: selCod, por: 'seleccionado en el mapa'};
+  return null;
+}
+function nuevoRegistro() { const d = loteDestino(); if (d) abrirRegistro(d.cod); else elegirLote('¿En qué lote?', cod => { destinoManual = cod; abrirRegistro(cod); }); }
+/* Registro rápido: un toque guarda categoría, lote, hora y posición. Nota y foto quedan para después. */
+function registroRapido(cat) {
+  const d = loteDestino();
+  if (!d) { elegirLote('¿En qué lote? · ' + cat, cod => { destinoManual = cod; registroRapido(cat); }); return; }
+  const l = LOTES[d.cod], pos = posicionRegistro(d.cod), arr = obsTodas(), ahora = new Date().toISOString();
+  const o = {id: 'OBS-' + Date.now(), fecha_hora: ahora, codlote: d.cod, hacienda_productor: l.hac, tablon: selFeat && selFeat._cod === d.cod ? selFeat.properties.Tablon || '' : '',
+    categoria: cat, severidad: 'Media', nota: '', lat: pos.lat, lng: pos.lng, precision_m: pos.acc, pos_fuente: pos.fuente, usuario: S.tecnico || 'CASUR Maps', photo_id: '', photo_name: '', photo_id2: ''};
+  arr.push(o); if (!obsGuardar(arr)) return;
+  vibrar(40); refrescarVistas();
+  toast(`${cat} registrado en lote ${d.cod}.`, {tipo: 'bien', accion: 'Nota / foto', ms: 8000, alAccion: () => abrirRegistro(d.cod, o.id)});
 }
 
 /* ── Formulario único de registro (antes: "observación" y "hallazgo" por separado) ── */
@@ -83,7 +138,7 @@ function obsBorrar(id) {
   const [o] = arr.splice(i, 1); obsGuardar(arr); refrescarVistas();
   toast('Registro borrado.', {accion: 'Deshacer', alAccion: () => { const a = obsTodas(); a.splice(Math.min(i, a.length), 0, o); obsGuardar(a); refrescarVistas(); }});
 }
-function refrescarVistas() { if (selCod) renderCard(); const t = document.body.dataset.tab; if (t === 'bitacora') renderBitacora(); if (t === 'visita') renderVisita(); }
+function refrescarVistas() { pintarInsignia(); if (selCod) renderCard(); const t = document.body.dataset.tab; if (t === 'bitacora') renderBitacora(); if (t === 'visita') renderVisita(); }
 
 /* ── Tarjeta de hallazgo como imagen para WhatsApp ── */
 function rr(ctx, x, y, w, h, r, fill, stroke) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); } }
@@ -142,15 +197,27 @@ function mostrarTab(t) {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('activo', b.dataset.tab === t));
   if (t === 'visita') renderVisita(); else if (t === 'bitacora') renderBitacora(); else if (t === 'mas') renderMas(); else setTimeout(() => map && map.invalidateSize(), 50);
 }
+let bitFiltro = 'pendientes';
 function renderBitacora() {
-  const arr = obsTodas().slice().reverse();
-  $('tabBitacora').innerHTML = `<header><h2>Bitácora</h2><p>${arr.length} registro(s) guardados solo en este teléfono. Exporte para respaldarlos.</p></header>
-    <div class="acciones"><button type="button" class="btn pri" onclick="exportarZip()">⬇ Exportar ZIP con fotos</button><button type="button" class="btn sec" onclick="exportarCsv()">CSV</button></div>
-    ${arr.length ? arr.map(o => `<div class="bloque"><button type="button" class="obs-lote-btn" onclick="seleccionarLote('${esc(o.codlote)}',{zoom:true})">Lote ${esc(o.codlote)} · ${esc(o.hacienda_productor || '')} ›</button>${obsFilaHtml(o)}</div>`).join('') : '<p class="vacio">Aún no hay registros. Toque un lote y use "＋ Registrar".</p>'}
-    ${arr.length ? '<button type="button" class="btn peligro ancho" onclick="vaciarBitacora()">Borrar toda la bitácora y sus fotos</button>' : ''}`;
+  const todas = obsTodas().slice().reverse(), pend = todas.filter(esPendiente), d = loteDestino();
+  if (bitFiltro === 'pendientes' && !pend.length && todas.length) bitFiltro = 'todos';
+  const lista = bitFiltro === 'pendientes' ? pend : bitFiltro === 'resueltos' ? todas.filter(o => o.resuelto) : todas;
+  const semana = todas.filter(o => Date.now() - new Date(o.fecha_hora) < 7 * 86400000).length;
+  $('tabBitacora').innerHTML = `<header><h2>Bitácora</h2></header>
+    <div class="destino ${d ? '' : 'sin'}"><span>${d ? `Se guardará en <b>lote ${esc(d.cod)}</b> · ${esc(LOTES[d.cod].hac)} <small>(${esc(d.por)})</small>` : 'Sin lote: active el GPS dentro de un lote o elija uno.'}</span><button type="button" onclick="elegirLote('Elegir lote', c => { destinoManual = c; renderBitacora(); })">${d ? 'Cambiar' : 'Elegir lote'}</button>${destinoManual ? '<button type="button" onclick="destinoManual=\'\';renderBitacora()" aria-label="Volver al lote del GPS">✕</button>' : ''}</div>
+    <button type="button" class="btn pri ancho grande" onclick="nuevoRegistro()">＋ Nuevo registro con nota y foto</button>
+    <h3>Registro rápido · un toque</h3>
+    <div class="rapidos">${[['Maleza', '🌿'], ['Plaga', '🐛'], ['Riego', '💧'], ['Sequía', '☀'], ['Despoblación', '▫'], ['Acceso', '🚧'], ['Cosecha', '🚜'], ['Seguimiento', '👁']].map(c => `<button type="button" onclick="registroRapido('${c[0]}')"><i>${c[1]}</i>${c[0]}</button>`).join('')}</div>
+    <h3>Registros</h3>
+    <div class="cifras c3">${cifra('Pendientes', pend.length, pend.length ? 'c-alerta' : '')}${cifra('Últimos 7 días', semana)}${cifra('Total', todas.length)}</div>
+    <div class="segmento filtro">${[['pendientes', 'Pendientes'], ['todos', 'Todos'], ['resueltos', 'Resueltos']].map(f => `<button type="button" class="${bitFiltro === f[0] ? 'activo' : ''}" onclick="bitFiltro='${f[0]}';renderBitacora()">${f[1]}</button>`).join('')}</div>
+    ${lista.length ? lista.map(o => `<div class="bloque"><button type="button" class="obs-lote-btn" onclick="seleccionarLote('${esc(o.codlote)}',{zoom:true})">Lote ${esc(o.codlote)} · ${esc(o.hacienda_productor || '')} ›</button>${obsFilaHtml(o)}</div>`).join('')
+      : `<p class="vacio">${todas.length ? (bitFiltro === 'pendientes' ? 'Sin pendientes: todo lo de severidad media o alta está resuelto.' : 'Nada en este filtro.') : 'Aún no hay registros. Use un botón de registro rápido o "＋ Nuevo registro".'}</p>`}
+    ${todas.length ? `<h3>Respaldo</h3><p class="pie">Los registros viven solo en este teléfono. Exporte para respaldarlos.</p><div class="acciones"><button type="button" class="btn sec" onclick="exportarZip()">⬇ ZIP con fotos</button><button type="button" class="btn ter" onclick="exportarCsv()">CSV</button></div>
+      <button type="button" class="btn peligro ancho" onclick="vaciarBitacora()">Borrar toda la bitácora y sus fotos</button>` : ''}`;
 }
-const CSV_OBS = ['id', 'fecha_hora', 'codlote', 'hacienda_productor', 'tablon', 'categoria', 'severidad', 'nota', 'lat', 'lng', 'precision_m', 'pos_fuente', 'usuario', 'photo_name', 'photo_id2'];
-function csvBitacora() { return '﻿' + [CSV_OBS.join(','), ...obsTodas().map(o => csvLinea(CSV_OBS.map(h => o[h])))].join('\n'); }
+const CSV_OBS = ['id', 'fecha_hora', 'codlote', 'hacienda_productor', 'tablon', 'categoria', 'severidad', 'nota', 'lat', 'lng', 'precision_m', 'pos_fuente', 'usuario', 'photo_name', 'photo_id2', 'estado', 'resuelto'];
+function csvBitacora() { return '﻿' + [CSV_OBS.join(','), ...obsTodas().map(o => csvLinea(CSV_OBS.map(h => h === 'estado' ? (o.resuelto ? 'Resuelto' : esPendiente(o) ? 'Pendiente' : 'Informativo') : o[h])))].join('\n'); }
 function exportarCsv() { if (!obsTodas().length) { toast('No hay registros para exportar.'); return; } descargarTexto(`bitacora_casur_${new Date().toISOString().slice(0, 10)}.csv`, csvBitacora(), 'text/csv;charset=utf-8'); }
 async function exportarZip() {
   if (!obsTodas().length) { toast('No hay registros para exportar.'); return; }
@@ -176,9 +243,33 @@ function renderVisita() {
       ${lotesVisitados(v).length ? `<p class="pie">Visitados: ${lotesVisitados(v).map(esc).join(' · ')}</p>` : ''}
       <div class="acciones"><button type="button" class="btn peligro" onclick="finalizarVisita()">⏹ Finalizar visita</button><button type="button" class="btn sec" onclick="verRuta(VISITA)">🗺 Ver ruta</button></div>`
       : '<button type="button" class="btn pri ancho grande" onclick="iniciarVisita()">▶ Iniciar visita</button>'}
-    <h3>Lista del día</h3>${lista}
+    <h3>Lista del día</h3>
+    <label class="campo">Planificar: agregar finca o lote<input id="planQ" type="search" placeholder="Nombre de finca, productor o código de lote" autocomplete="off" autocapitalize="characters"></label>
+    <div id="planRes" class="lista-lotes"></div>
+    ${lista}
     <h3>Visitas anteriores</h3>${previas || '<p class="vacio">Sin visitas guardadas.</p>'}`;
+  $('planQ').addEventListener('input', e => planBuscar(e.target.value));
+  $('planRes').addEventListener('click', planClick);
   if (v) _visT = setInterval(() => { const t = $('visTiempo'); if (t && VISITA) t.textContent = fmtDur(Date.now() - new Date(VISITA.inicio)); else clearInterval(_visT); }, 1000);
+}
+/* Planificación de la lista del día: por finca (todos, solo prioridad alta o con corte próximo) o lote a lote. */
+const planGrupos = f => { const ls = f.lotes.map(c => LOTES[c]).filter(l => l.nPoly); return {todos: ls, alta: ls.filter(l => estadoLote(l).cls === 'mal'), corte: ls.filter(l => { const c = claseCorte(l); return c !== null && c <= 2; })}; };
+function planBuscar(q) {
+  const t = sinTildes(q).trim(), res = $('planRes'); if (!res) return;
+  if (!t) { res.innerHTML = ''; return; }
+  const fincas = Object.values(FINCAS).filter(f => sinTildes(f.nombre).includes(t)).sort((a, b) => b.lotes.length - a.lotes.length).slice(0, 4);
+  const lotes = Object.values(LOTES).filter(l => l.nPoly && l.cod.startsWith(t)).sort((a, b) => a.cod.length - b.cod.length || a.cod.localeCompare(b.cod, 'es', {numeric: true})).slice(0, 6);
+  res.innerHTML = fincas.map(f => { const g = planGrupos(f); return `<div class="plan-finca"><b>🏡 ${esc(f.nombre)}</b><div class="obs-acc"><button type="button" data-finca="${esc(f.nombre)}" data-g="todos">＋ Todos (${g.todos.length})</button>${g.alta.length ? `<button type="button" data-finca="${esc(f.nombre)}" data-g="alta">＋ Prioridad alta (${g.alta.length})</button>` : ''}${g.corte.length ? `<button type="button" data-finca="${esc(f.nombre)}" data-g="corte">＋ Corte próximo (${g.corte.length})</button>` : ''}</div></div>`; }).join('') +
+    lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtN(l.area, ' ha', nf1)}</span><i class="chip ${listaTiene(l.cod) ? 'est-bien' : 'est-neutro'}">${listaTiene(l.cod) ? '✓ en lista' : '＋ agregar'}</i></button>`).join('') || '<p class="vacio">Sin coincidencias.</p>';
+}
+function planClick(e) {
+  const b = e.target.closest('button'); if (!b) return;
+  let cods = [];
+  if (b.dataset.lote) cods = [b.dataset.lote]; else if (b.dataset.finca) cods = planGrupos(FINCAS[b.dataset.finca])[b.dataset.g].map(l => l.cod);
+  const nuevos = cods.filter(c => !listaTiene(c));
+  if (!nuevos.length) { toast('Ya estaban en la lista.'); return; }
+  nuevos.forEach(c => LISTA.push({cod: c, hecho: false}));
+  listaGuardar(); toast(`${nuevos.length} lote(s) agregados a la lista del día.`, {tipo: 'bien'});
 }
 const visitaPorId = id => VISITAS.find(x => x.id === id);
 async function borrarVisita(id) { if (!confirm('¿Borrar esta visita?')) return; VISITAS = VISITAS.filter(x => x.id !== id); await kvSet('visitas', VISITAS); renderVisita(); }
@@ -301,7 +392,7 @@ async function iniciar() {
     $('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) mostrarTab(b.dataset.tab); });
     $('medirDeshacer').addEventListener('click', medirDeshacer); $('medirFin').addEventListener('click', medirCerrar);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarHoja(); cerrarSugerencias(); } });
-    pintarGpsBtn(); pintarLista(); actualizarRed();
+    pintarGpsBtn(); pintarLista(); actualizarRed(); pintarInsignia();
     $('loader').hidden = true; map.invalidateSize();
     await cargarVisitas();
     const lote = new URLSearchParams(location.search).get('lote'), conEnlace = lote && LOTES[codKey(lote)];
@@ -310,6 +401,8 @@ async function iniciar() {
     if (S.gpsAuto) iniciarGps(!conEnlace, true);
     registrarSW();
     setTimeout(avisarInstalacion, 1500);
+    const venc = Object.values(LOTES).filter(corteVencido).length;
+    if (venc) toast(`${venc} lote(s) con fecha de corte vencida. Actualice el programa o cargue los cortes.`, {tipo: 'mal', accion: 'Ver', ms: 12000, alAccion: () => { mostrarTab('mapa'); setColorear('semana'); }});
     if (navigator.onLine) setTimeout(() => cargarHistorico().catch(() => {}), 6000); // deja el histórico listo para usarlo sin señal
   } catch (e) {
     console.error(e);

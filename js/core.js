@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V171126D';
+const APP_VERSION = 'V181126';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -43,8 +43,9 @@ function haversineM(lon1, lat1, lon2, lat2) {
 /* ── Avisos no bloqueantes (reemplazan a alert) ── */
 function toast(msg, opts = {}) {
   const box = $('toasts'); if (!box) return;
+  box.querySelectorAll('.toast:not(.fijo)').forEach(t => t.remove()); // un aviso a la vez: no tapar la pantalla
   const el = document.createElement('div');
-  el.className = 'toast ' + (opts.tipo || '');
+  el.className = 'toast ' + (opts.tipo || '') + (opts.fijo ? ' fijo' : '');
   el.innerHTML = `<span>${esc(msg)}</span>` + (opts.accion ? `<button type="button">${esc(opts.accion)}</button>` : '');
   box.appendChild(el);
   const cerrar = () => el.remove();
@@ -216,6 +217,7 @@ function construirLotes(geo, metricas, cortes) {
       riego: m.riego || '', tenencia: m.tenencia || '', destino: m.destino || '', clas: m.clasificacion || '', nc: m.nc || '',
       areaAforo: num(m.area_total_ha), areaShape: 0, nPoly: 0,
       tchAnt: num(m.tch_ultima_zafra), fCorte: m.fecha_ultimo_corte || '', zafra: m.ultima_zafra_label || '',
+      fProg: m.fecha_cosecha_prog || '',
       tchEst: num(m.aforo_actTCH_2627), tonEst: num(m.aforo_toneladas_2627), tchOpt: num(m.aforo_tch_opt_2627), tonOpt: num(m.aforo_toneladas_opt_2627),
       conAforo: m.aforo_actTCH_2627 !== undefined, cosechado: false, feats: [], bbox: null
     };
@@ -236,6 +238,7 @@ function construirLotes(geo, metricas, cortes) {
     if (b) l.bbox = l.bbox ? [Math.min(l.bbox[0], b[0]), Math.min(l.bbox[1], b[1]), Math.max(l.bbox[2], b[2]), Math.max(l.bbox[3], b[3])] : b.slice();
   });
   Object.keys(M).forEach(cod => { if (!LOTES[cod]) nuevo(cod, M[cod]); });
+  calcularSemanas();
   Object.values(LOTES).forEach(l => {
     l.area = l.areaAforo !== null && l.areaAforo > 0 ? l.areaAforo : l.areaShape;
     l.principal = l.feats.slice().sort((a, b) => (b.properties.Area_Ha || 0) - (a.properties.Area_Ha || 0))[0] || null;
@@ -251,6 +254,33 @@ function bboxDe(f) {
   return x0 < Infinity ? [x0, y0, x1, y1] : null;
 }
 const edadMeses = l => { const d = diasDesde(l && l.fCorte); return d === null ? null : d / 30.4375; };
+/* ── Cosecha programada ── */
+const diasPara = iso => { const d = parseISO(iso); return d ? Math.round((d - hoyLocal()) / 86400000) : null; };
+/* Semana calendario ISO (lunes a domingo) de una fecha: {clave: 'AAAA-SS', sem, lunes, domingo}. */
+function semanaDe(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()), dia = (x.getDay() + 6) % 7, lunes = new Date(x); lunes.setDate(x.getDate() - dia);
+  const jue = new Date(lunes); jue.setDate(lunes.getDate() + 3);
+  const sem = 1 + Math.round(((jue - new Date(jue.getFullYear(), 0, 4)) / 86400000 - 3 + ((new Date(jue.getFullYear(), 0, 4).getDay() + 6) % 7)) / 7);
+  const dom = new Date(lunes); dom.setDate(lunes.getDate() + 6);
+  return {clave: jue.getFullYear() + '-' + String(sem).padStart(2, '0'), sem, lunes, domingo: dom};
+}
+const rangoSemana = w => `${w.lunes.getDate()}${w.lunes.getMonth() !== w.domingo.getMonth() ? ' ' + w.lunes.toLocaleDateString('es-NI', {month: 'short'}) : ''}–${w.domingo.getDate()} ${w.domingo.toLocaleDateString('es-NI', {month: 'short'})}`;
+const corteVencido = l => !!l.fProg && !l.cosechado && diasPara(l.fProg) < 0;
+/* Las dos próximas semanas calendario que tienen lotes programados (desde la semana en curso). */
+let SEMANAS_PROX = [];
+function calcularSemanas() {
+  const actual = semanaDe(hoyLocal()).clave, mapa = new Map();
+  Object.values(LOTES).forEach(l => { const d = parseISO(l.fProg); if (!d || l.cosechado) return; const w = semanaDe(d); l.semProg = w; if (w.clave >= actual && diasPara(l.fProg) >= 0) mapa.set(w.clave, w); });
+  SEMANAS_PROX = [...mapa.values()].sort((a, b) => a.clave.localeCompare(b.clave)).slice(0, 2);
+}
+/* Clase de corte del lote: 0 vencida · 1 próxima semana · 2 semana siguiente · 3 más adelante · 4 cosechado · null sin fecha. */
+function claseCorte(l) {
+  if (l.cosechado) return 4;
+  if (!l.fProg) return null;
+  if (diasPara(l.fProg) < 0) return 0;
+  const k = l.semProg ? l.semProg.clave : '';
+  return SEMANAS_PROX[0] && k === SEMANAS_PROX[0].clave ? 1 : SEMANAS_PROX[1] && k === SEMANAS_PROX[1].clave ? 2 : 3;
+}
 const esMolienda = l => String(l.clas || '').toLowerCase() === 'molienda';
 
 /* Semáforo agronómico. Mismos umbrales de versiones anteriores; se agregan estados informativos. */

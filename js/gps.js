@@ -177,12 +177,13 @@ function dibujarRuta(v) {
   if (!v) return;
   rutaLinea = L.polyline(v.pts.map(p => [p.lat, p.lng]), {color: '#0a66ff', weight: 4, opacity: .85, interactive: false}).addTo(capaRuta);
 }
-function verRuta(v) { mostrarTab('mapa'); dibujarRuta(v); if (v && v.pts.length > 1) map.fitBounds(L.latLngBounds(v.pts.map(p => [p.lat, p.lng])), margenes(90, 40)); }
+function verRuta(v) { mostrarTab('mapa'); dibujarRuta(v); if (v && v.pts.length > 1) soltarSeguimiento();
+  if (v && v.pts.length > 1) map.fitBounds(L.latLngBounds(v.pts.map(p => [p.lat, p.lng])), margenes(90, 40)); }
 
 /* ── Lista de trabajo del día ── */
 let LISTA = leerLS(LISTA_KEY, []);
 const listaTiene = cod => LISTA.some(x => x.cod === cod);
-function listaGuardar() { escribirLS(LISTA_KEY, LISTA); pintarLista(); if (document.body.dataset.tab === 'visita') renderVisita(); if (selCod) renderCard(); }
+function listaGuardar() { escribirLS(LISTA_KEY, LISTA); pintarLista(); if (document.body.dataset.tab === 'visita') { const q = $('planQ') ? $('planQ').value : ''; renderVisita(); if (q) { $('planQ').value = q; planBuscar(q); } } if (selCod) renderCard(); }
 function listaToggle(cod) { if (listaTiene(cod)) LISTA = LISTA.filter(x => x.cod !== cod); else LISTA.push({cod, hecho: false}); listaGuardar(); toast(listaTiene(cod) ? `Lote ${cod} agregado a la lista del día.` : `Lote ${cod} quitado de la lista.`); }
 function listaMarcar(cod, hecho) { const x = LISTA.find(i => i.cod === cod); if (x && x.hecho !== hecho) { x.hecho = hecho; listaGuardar(); if (hecho) toast(`✓ Lote ${cod} visitado.`, {tipo: 'bien'}); } }
 function listaVaciar() { LISTA = []; listaGuardar(); }

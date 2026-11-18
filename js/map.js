@@ -92,7 +92,13 @@ const TEMAS = {
   zona: {t: 'Zona', cat: l => l.zona || 'Sin dato'},
   riego: {t: 'Tipo de riego', cat: l => l.riego || 'Sin dato'},
   variedad: {t: 'Variedad', cat: l => l.variedad || 'Sin dato'},
-  destino: {t: 'Destino / clasificación', cat: l => l.conAforo ? (l.clas || 'Sin dato') : 'Sin aforo'}
+  destino: {t: 'Destino / clasificación', cat: l => l.conAforo ? (l.clas || 'Sin dato') : 'Sin aforo'},
+  semana: {t: 'Semana de corte', clave: claseCorte, clases: () => [
+    {txt: 'Fecha vencida', color: '#d7191c'},
+    {txt: SEMANAS_PROX[0] ? `Sem. ${SEMANAS_PROX[0].sem} · ${rangoSemana(SEMANAS_PROX[0])}` : 'Próxima semana', color: '#ff8c00'},
+    {txt: SEMANAS_PROX[1] ? `Sem. ${SEMANAS_PROX[1].sem} · ${rangoSemana(SEMANAS_PROX[1])}` : 'Semana siguiente', color: '#1f77b4'},
+    {txt: 'Más adelante', color: '#cfd8df'},
+    {txt: 'Cosechado', color: '#6b7280'}]}
 };
 if (!TEMAS[S.colorear]) S.colorear = 'ninguno'; // capas retiradas (TCH última zafra, brecha)
 let temaColor = new Map(), temaLeyenda = [];
@@ -105,6 +111,11 @@ function prepararTema() {
     const R = T.rampa || RAMPA;
     lotes.forEach(l => { const v = T.val(l); if (v === null || v === undefined) { sin += l.areaShape; return; } let i = c.findIndex(x => v < x); if (i < 0) i = c.length; temaColor.set(l.cod, R[i]); ha[i] += l.areaShape; });
     temaLeyenda = rotulos.map((r, i) => ({color: R[i], txt: r, ha: ha[i]})); if (sin > 0) temaLeyenda.push({color: null, txt: 'Sin dato', ha: sin});
+  } else if (T.clases) {
+    const defs = T.clases(), ha = defs.map(() => 0), n = defs.map(() => 0); let sin = 0;
+    lotes.forEach(l => { const i = T.clave(l); if (i === null) { sin += l.areaShape; return; } temaColor.set(l.cod, defs[i].color); ha[i] += l.areaShape; n[i]++; });
+    temaLeyenda = defs.map((d, i) => ({color: d.color, txt: d.txt, ha: ha[i], n: n[i]})).filter(x => x.n);
+    if (sin > 0) temaLeyenda.push({color: null, txt: 'Sin fecha', ha: sin});
   } else if (T.cat) {
     const ha = {}; lotes.forEach(l => { const k = T.cat(l); ha[k] = (ha[k] || 0) + l.areaShape; });
     const orden = Object.keys(ha).sort((a, b) => ha[b] - ha[a]), top = orden.slice(0, CATS.length), col = {};
@@ -121,7 +132,7 @@ function estiloFeat(f) {
   return {color: sat ? '#ffffff' : '#1c2733', weight: sat ? 1.2 : .7, opacity: .9, fillColor: c, fillOpacity: sat ? .55 : .68};
 }
 function setColorear(modo) {
-  S.colorear = modo; guardarAjustes(); prepararTema(); capaLotes.setStyle(estiloFeat); pintarLeyenda();
+  S.colorear = modo; guardarAjustes(); prepararTema(); capaLotes.setStyle(estiloFeat); pintarLeyenda(); actualizarEtiquetas();
 }
 function pintarLeyenda() {
   const el = $('leyenda'); if (!el) return;
@@ -129,7 +140,7 @@ function pintarLeyenda() {
   const T = TEMAS[S.colorear];
   el.classList.remove('oculta');
   el.innerHTML = `<button type="button" class="ley-cab" onclick="this.parentElement.classList.toggle('plegada')"><b>${esc(T.t)}</b>${T.u ? ` <small>${esc(T.u)}</small>` : ''}<i>▾</i></button><div class="ley-cuerpo">` +
-    temaLeyenda.map(x => `<div><span class="ley-color" style="${x.color ? 'background:' + x.color : ''}"></span><span>${esc(x.txt)}</span><em>${nf0.format(x.ha)} ha</em></div>`).join('') + '</div>';
+    temaLeyenda.map(x => `<div><span class="ley-color" style="${x.color ? 'background:' + x.color : ''}"></span><span>${esc(x.txt)}</span><em>${x.n ? x.n + ' · ' : ''}${nf0.format(x.ha)} ha</em></div>`).join('') + '</div>';
 }
 
 /* ── Etiquetas por nivel de zoom: finca → lote → tablón ── */
@@ -137,6 +148,7 @@ let _etqT = null;
 function etiquetasDebounce() { clearTimeout(_etqT); _etqT = setTimeout(actualizarEtiquetas, 140); }
 function actualizarEtiquetas() {
   if (!capaEtiquetas) return;
+  if (map._animatingZoom) { etiquetasDebounce(); return; } // durante la animación las posiciones aún no son las finales
   capaEtiquetas.clearLayers();
   if (!S.etiquetas) return;
   const z = map.getZoom(), b = map.getBounds().pad(0.05), w = b.getWest(), e = b.getEast(), s = b.getSouth(), n = b.getNorth();
@@ -144,7 +156,7 @@ function actualizarEtiquetas() {
   // Evita etiquetas encimadas: se colocan primero las más importantes y se descarta la que choque con una ya puesta.
   const cajas = [];
   const poner = (ll, txt, cls) => {
-    const p = map.latLngToContainerPoint(ll), w = txt.length * 8.2 + 10, h = 20, c = [p.x - w / 2, p.y - h / 2, p.x + w / 2, p.y + h / 2];
+    const p = map.latLngToContainerPoint(ll), w = txt.length * (cls === 'etq-finca' ? 8.6 : 6.8) + 8, h = 20, c = [p.x - w / 2, p.y - h / 2, p.x + w / 2, p.y + h / 2];
     if (cajas.some(o => !(c[0] > o[2] || c[2] < o[0] || c[1] > o[3] || c[3] < o[1]))) return false;
     cajas.push(c);
     L.marker(ll, {interactive: false, keyboard: false, icon: L.divIcon({className: 'etq ' + cls, html: `<span>${esc(txt)}</span>`, iconSize: [0, 0]})}).addTo(capaEtiquetas);
@@ -155,12 +167,30 @@ function actualizarEtiquetas() {
     for (const f of DATA.features) { if (!toca(f.bbox)) continue; const c = centroideFeat(f); if (!c) continue; const l = LOTES[f._cod]; if (poner(c, l && l.nPoly > 1 ? `${f._cod} · ${f.properties.Tablon || ''}` : f._cod, 'etq-tab') && ++k > 260) break; }
   } else if (z >= 15.5) {
     let k = 0;
-    const vis = Object.values(LOTES).filter(l => l.principal && toca(l.bbox)).sort((a, b) => b.areaShape - a.areaShape);
-    for (const l of vis) { const c = centroideLote(l); if (c && b.contains(c) && poner(c, l.cod, 'etq-lote') && ++k > 320) break; }
+    // Con la capa Semana de corte, los lotes con fecha próxima o vencida se etiquetan primero.
+    const pri = l => { if (S.colorear !== 'semana') return 0; const c = claseCorte(l); return c !== null && c <= 2 ? 1 : 0; };
+    const vis = Object.values(LOTES).filter(l => l.principal && toca(l.bbox)).sort((a, b) => pri(b) - pri(a) || b.areaShape - a.areaShape);
+    for (const l of vis) { const c = centroideLote(l); if (c && b.contains(c) && poner(c, etqLote(l), 'etq-lote') && ++k > 320) break; }
   } else if (z >= 12.5) {
     const vis = Object.values(FINCAS).filter(f => toca(f.bbox)).sort((a, b) => b.lotes.length - a.lotes.length);
     for (const f of vis) poner([(f.bbox[1] + f.bbox[3]) / 2, (f.bbox[0] + f.bbox[2]) / 2], f.nombre, 'etq-finca');
   }
+}
+
+/* Con la capa Semana de corte, los lotes vencidos o de las dos próximas semanas llevan su fecha en la etiqueta. */
+function etqLote(l) {
+  if (S.colorear !== 'semana') return l.cod;
+  const c = claseCorte(l); if (c === null || c > 2) return l.cod;
+  const d = parseISO(l.fProg);
+  return `${l.cod} · ${d.getDate()} ${d.toLocaleDateString('es-NI', {month: 'short'}).replace('.', '')}`;
+}
+/* Etiqueta de cosecha de la tarjeta: fecha programada, días que faltan y semana; alerta si la fecha ya pasó. */
+function corteHtml(l) {
+  if (l.cosechado) return `<div class="corte est-info">✔ Cosechado el ${fechaCorta(l.fCorte)}</div>`;
+  if (!l.fProg) return '';
+  const d = diasPara(l.fProg), w = l.semProg;
+  if (d < 0) return `<div class="corte est-mal">⚠ Fecha de corte vencida: ${fechaCorta(l.fProg)} (hace ${-d} día${d === -1 ? '' : 's'}). Actualice el programa o cargue el corte.</div>`;
+  return `<div class="corte ${d <= 14 ? 'est-medio' : 'est-neutro'}">🗓 Corte ${fechaCorta(l.fProg)} · ${d === 0 ? '<b>hoy</b>' : `faltan <b>${d}</b> día${d === 1 ? '' : 's'}`}${w ? ' · sem. ' + w.sem : ''}</div>`;
 }
 
 /* ── Búsqueda por código, productor o finca (sin tildes), con recientes y favoritos ── */
@@ -210,6 +240,8 @@ function bindBusqueda() {
 }
 
 /* ── Selección y tarjeta ── */
+/* Al llevar el mapa a un lote, finca o ruta se suelta el seguimiento; si no, la siguiente lectura del GPS lo devolvería. */
+function soltarSeguimiento() { if (typeof GPS !== 'undefined' && GPS.siguiendo && GPS.watch !== null) { GPS.siguiendo = false; pintarGpsBtn(); } }
 function boundsDe(bb) { return L.latLngBounds([bb[1], bb[0]], [bb[3], bb[2]]); }
 function seleccionarLote(cod, o = {}) {
   cod = codKey(cod); const l = LOTES[cod];
@@ -219,6 +251,7 @@ function seleccionarLote(cod, o = {}) {
   pintarSeleccion();
   if (!o.gps) { const r = [cod, ...recientes().filter(c => c !== cod)].slice(0, 10); escribirLS(REC_KEY, r); }
   if (o.full !== undefined) cardFull = o.full;
+  if (o.zoom && l.bbox) soltarSeguimiento();
   if (o.zoom && l.bbox) map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, 290), {maxZoom: 18}));
   if (!l.nPoly) toast('Este lote no tiene polígono en el shape.');
   mostrarTab('mapa'); renderCard();
@@ -266,6 +299,7 @@ function renderCard() {
     <div class="cifras">
       ${cifra('TCH anterior', l.tchAnt > 0 ? nf1.format(l.tchAnt) : '—')}${cifra('Estimado', estim, 'c-est')}${cifra('Optimista', l.tchOpt > 0 ? fmtN(l.tchOpt, '', nf1) : '—')}${cifra('Edad', edad === null ? '—' : nf1.format(edad) + ' m')}
     </div>
+    ${corteHtml(l)}
     <div class="acciones">
       ${llegar ? `<a class="btn pri" href="${llegar}" target="_blank" rel="noopener">➤ Llegar</a>` : '<button class="btn pri" disabled>➤ Llegar</button>'}
       <button type="button" class="btn sec" onclick="abrirRegistro(selCod)">＋ Registrar</button>
@@ -278,7 +312,7 @@ function renderCard() {
         ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nf.format(l.areaShape)} ha en shape` : 'Sin polígono')}
         ${kv('Variedad', l.variedad)}${kv('Zona', l.zona)}${kv('Riego', l.riego)}${kv('Tenencia', l.tenencia)}
         ${kv('Clasificación', l.clas || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
-        ${kv('Último corte', l.fCorte ? `${fechaCorta(l.fCorte)}${l.zafra ? ' · zafra ' + l.zafra : ''}` : '')}${kv('Días desde el corte', diasDesde(l.fCorte) === null ? '' : nf0.format(diasDesde(l.fCorte)))}
+        ${kv('Corte programado', l.fProg ? `${fechaCorta(l.fProg)}${l.semProg ? ' · semana ' + l.semProg.sem : ''}` : '')}${kv('Último corte', l.fCorte ? `${fechaCorta(l.fCorte)}${l.zafra ? ' · zafra ' + l.zafra : ''}` : '')}${kv('Días desde el corte', diasDesde(l.fCorte) === null ? '' : nf0.format(diasDesde(l.fCorte)))}
         ${kv('Toneladas estimadas', l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '')}${kv('Toneladas optimistas', l.tonOpt > 0 ? nf0.format(l.tonOpt) + ' t' : '')}
         ${kv('Brecha vs. optimista', brecha === null ? '' : nf1.format(brecha) + ' t/ha')}
       </div>
@@ -300,7 +334,7 @@ function renderCard() {
   ajustarCard(); if (cardFull) el.scrollTop = 0;
 }
 function cardAlternar() { cardFull = !cardFull; renderCard(); }
-function acercarLote() { const l = LOTES[selCod]; if (l && l.bbox) { cardFull = false; renderCard(); map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, 290), {maxZoom: 19})); } }
+function acercarLote() { const l = LOTES[selCod]; if (l && l.bbox) { soltarSeguimiento(); cardFull = false; renderCard(); map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, 290), {maxZoom: 19})); } }
 function copiarTexto(txt, ok = 'Copiado') {
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(() => toast(ok, {tipo: 'bien'})).catch(() => prompt('Copie:', txt)); else prompt('Copie:', txt);
 }
@@ -346,7 +380,7 @@ function abrirFinca(nombre, zoom = false) {
     <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${fmtN(l.area, ' ha', nf1)} · ant. ${fmtN(l.tchAnt, '', nf0)} · est. ${l.tchEst > 0 ? nf0.format(l.tchEst) : '—'}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>`; }).join('')}</div>`);
   if (zoom) verFincaEnMapa(nombre, false);
 }
-function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); }
+function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) { soltarSeguimiento(); map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); } }
 
 /* ── Hoja de capas y herramientas ── */
 function abrirCapas() {
@@ -358,7 +392,7 @@ function abrirCapas() {
     <label class="interruptor"><input type="checkbox" id="opEtq" ${S.etiquetas ? 'checked' : ''}><span>Mostrar etiquetas (finca · lote · tablón según acercamiento)</span></label>
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">📏 Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">⬡ Medir área</button></div>
-    <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();map.fitBounds(capaLotes.getBounds(),margenes(20,20,10))">🗺 Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">⬇ Guardar esta zona sin señal</button></div>`);
+    <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();soltarSeguimiento();map.fitBounds(capaLotes.getBounds(),margenes(20,20,10))">🗺 Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">⬇ Guardar esta zona sin señal</button></div>`);
   $('opBase').addEventListener('change', e => setBase(e.target.value));
   $('opSel').addEventListener('change', e => setSelModo(e.target.value));
   $('opColor').addEventListener('change', e => setColorear(e.target.value));
