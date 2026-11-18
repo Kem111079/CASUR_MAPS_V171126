@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126';
+const APP_VERSION = 'V181126C';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -40,6 +40,41 @@ function haversineM(lon1, lat1, lon2, lat2) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
+/* ── Iconos de línea propios (mismo trazo en todos los teléfonos; reemplazan a los emojis) ── */
+const ICONOS = {
+  plus: '<path d="M12 5v14M5 12h14"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  chevUp: '<path d="M6 15l6-6 6 6"/>', chevDown: '<path d="M6 9l6 6 6-6"/>', chevLeft: '<path d="M15 6l-6 6 6 6"/>', chevRight: '<path d="M9 6l6 6-6 6"/>',
+  nav: '<path d="M20.5 3.5 3.5 10.6l7 2.9 2.9 7z"/>', pin: '<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>', alert: '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.2v.3"/>',
+  star: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>', starFill: '<path fill="currentColor" d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>',
+  listPlus: '<path d="M4 7h10M4 12h10M4 17h6M17 14v6M14 17h6"/>', lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', unlock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.6-1.7"/>',
+  share: '<path d="M12 15V4M8 8l4-4 4 4M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>', copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  zoomIn: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.3-4.3M11 8.5v5M8.5 11h5"/>', search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.3-4.3"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>', camera: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>', mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/>', trash: '<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>', rotate: '<path d="M5 9a8 8 0 1 1-1 5M5 4v5h5"/>',
+  home: '<path d="M4 11l8-7 8 7M6 10v10h12V10"/>', lot: '<rect x="5" y="5" width="14" height="14" rx="2"/>', clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  file: '<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/>', route: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>', play: '<path d="M8 5l11 7-11 7z"/>', ruler: '<path d="M4 16L16 4l4 4L8 20zM8 12l2 2M11 9l2 2M14 6l2 2"/>',
+  hexagon: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/>', map: '<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/>', download: '<path d="M12 4v11M8 11l4 4 4-4M5 20h14"/>',
+  swap: '<path d="M4 8h14M15 5l3 3-3 3M20 16H6M9 13l-3 3 3 3"/>', layers: '<path d="M12 3 2 8.5 12 14l10-5.5L12 3z"/><path d="m2 13 10 5.5L22 13"/>', undo: '<path d="M9 7 4 12l5 5M4 12h10a5 5 0 0 1 0 10h-2"/>',
+  board: '<rect x="4" y="4" width="7" height="9" rx="1.5"/><rect x="13" y="4" width="7" height="5" rx="1.5"/><rect x="13" y="11" width="7" height="9" rx="1.5"/><rect x="4" y="15" width="7" height="5" rx="1.5"/>',
+  leaf: '<path d="M5 19c0-9 5-14 14-14 0 9-5 14-14 14zM5 19l8-8"/>', bug: '<ellipse cx="12" cy="14" rx="4" ry="5"/><path d="M12 9V7M9 5l1.5 2.5M15 5l-1.5 2.5M8 12H4M20 12h-4M8 16l-3 2M16 16l3 2"/>',
+  droplet: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>', sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/>',
+  sparse: '<path d="M4 20V9M9 20v-5M20 20V7"/><path stroke-dasharray="1.5 3" d="M14.5 20v-9"/>', barrier: '<path d="M4 9h16v5H4zM7 14v6M17 14v6M8 9l-3 5M13 9l-3 5M18 9l-3 5"/>',
+  truck: '<path d="M3 7h10v9H3zM13 10h4l3 3v3h-7z"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>', eye: '<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  sprout: '<path d="M12 21v-9M12 12c0-4-3-6-7-6 0 4 3 6 7 6zM12 14c0-3 2.5-5 6-5 0 3-2.5 5-6 5z"/>', flask: '<path d="M10 3h4M10.5 3v6L5 19a1.5 1.5 0 0 0 1.3 2h11.4A1.5 1.5 0 0 0 19 19L13.5 9V3M8 15h8"/>',
+  dots: '<circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/>'
+};
+const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONOS[n] || ICONOS.lot}</svg>`;
+const ICONO_CAT = {Seguimiento: 'eye', Siembra: 'sprout', Madurante: 'flask', Maleza: 'leaf', Plaga: 'bug', 'Sequía': 'sun', 'Despoblación': 'sparse', Riego: 'droplet', Acceso: 'barrier', Cosecha: 'truck', Otro: 'dots'};
+
+const urlLlegar = (lat, lng) => `https://www.google.com/maps/dir/?api=1&destination=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}&travelmode=driving`;
+/* Enlace "Llegar" para las listas donde se elige a qué lote ir. */
+function llegarHtml(cod, lat, lng) {
+  if (lat === undefined || lat === '' || lat === null) { const c = centroideLote(LOTES[cod]); if (!c) return ''; lat = c[0]; lng = c[1]; }
+  return `<a class="llegar" href="${urlLlegar(lat, lng)}" target="_blank" rel="noopener" aria-label="Cómo llegar al lote ${esc(cod)}">${ico('nav')}</a>`;
+}
+
 /* ── Avisos no bloqueantes (reemplazan a alert) ── */
 function toast(msg, opts = {}) {
   const box = $('toasts'); if (!box) return;
@@ -59,12 +94,26 @@ function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.
 const AJUSTES_KEY = 'casur_maps_ajustes_v2';
 const S = Object.assign({
   tecnico: '', gpsPerfil: 'vehiculo', tema: 'campo', pantalla: true, vibrar: true,
-  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true
+  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true, verRegistros: true, letra: 'normal', tablero: true
 }, leerLS(AJUSTES_KEY, {}));
 function guardarAjustes() { escribirLS(AJUSTES_KEY, S); }
 function leerLS(k, def) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? def; } catch (_) { return def; } }
 function escribirLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { toast('Almacenamiento lleno: exporte y limpie la bitácora.', {tipo: 'mal'}); return false; } }
-function aplicarTema() { document.documentElement.dataset.tema = S.tema || 'campo'; }
+/* Tema "auto": alto contraste de día y oscuro de noche (19:00 a 05:30), por hora y no por el ajuste del teléfono,
+   para que la app nunca quede oscura bajo el sol. */
+function temaEfectivo() {
+  if (S.tema !== 'auto') return S.tema || 'campo';
+  const d = new Date(), h = d.getHours() + d.getMinutes() / 60;
+  return h >= 19 || h < 5.5 ? 'oscuro' : 'campo';
+}
+function aplicarTema() { const e = document.documentElement; e.dataset.tema = temaEfectivo(); e.dataset.letra = S.letra || 'normal'; }
+setInterval(() => { if (S.tema === 'auto' && document.documentElement.dataset.tema !== temaEfectivo()) { aplicarTema(); if (typeof capaLotes !== 'undefined' && capaLotes) { capaLotes.setStyle(estiloFeat); pintarSeleccion(); } } }, 60000);
+/* Confirmación visual breve al guardar. */
+function confirmar(txt) {
+  const el = document.createElement('div'); el.className = 'confirma';
+  el.innerHTML = `<div><svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="23"/><path d="M15 27l8 8 15-17"/></svg><b>${esc(txt)}</b></div>`;
+  document.body.appendChild(el); setTimeout(() => el.classList.add('fuera'), 900); setTimeout(() => el.remove(), 1250);
+}
 
 /* ── IndexedDB: clave/valor para visitas y recorrido (sin el límite de ~5 MB de localStorage) ── */
 let _kvDb = null;

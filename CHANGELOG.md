@@ -1,5 +1,46 @@
 # Cambios
 
+## V181126C · 18-nov-2026
+**Diseño**
+- Iconos de línea propios en lugar de emojis (se ven igual en todos los teléfonos).
+- Transiciones suaves en tarjeta, hojas, pestañas y avisos; realce breve del lote al seleccionarlo.
+- Tarjeta más limpia: "Lote / Tablón" pasa a un control pequeño junto al título; estado y fecha de corte en una sola línea.
+- Pantalla de carga y pestaña Resumen con la marca CASUR.
+
+**Visualización**
+- Mini gráfico del TCH de las últimas zafras en la tarjeta.
+- Al seleccionar un lote, el resto del mapa se atenúa.
+- Leyenda interactiva: tocar una clase la resalta en el mapa.
+- Progreso de la visita sobre el mapa (lotes de la lista visitados, tiempo y distancia).
+
+**Práctica**
+- Tema automático (oscuro de 7 p. m. a 5:30 a. m.) y tamaño de letra ajustable.
+- Deslizar un registro: derecha lo resuelve, izquierda lo borra.
+- Acciones principales fijas abajo en Bitácora y Visita; el botón de capas baja a la esquina inferior izquierda.
+
+**Interactiva**
+- Toque largo sobre un lote: menú rápido (registrar, lista del día, llegar, ficha, favorito, tablón).
+- Tablero del día al abrir: pendientes, lotes por visitar, cortes de la semana y fechas vencidas.
+- Confirmación animada al guardar.
+
+## V181126B · 18-nov-2026
+**Hallazgos georreferenciados**
+- Un hallazgo solo se guarda con GPS: precisión de 30 m o mejor y el técnico dentro del lote o a menos de 50 m. Aplica también al registro rápido. El formulario muestra el estado del GPS en vivo.
+- En severidad alta la foto es obligatoria.
+- Al compartir se envía solo la imagen, sin texto ni enlaces. Los registros antiguos sin GPS no se comparten.
+- La imagen muestra cada foto completa y centrada, sin recorte; lleva la coordenada, la precisión y la hora.
+
+**Mapa**
+- Hallazgos pendientes como puntos de color en la coordenada donde se registraron.
+- Botón de vista de alrededores (aleja a unos 2 km y vuelve con otro toque).
+- "Llegar" sale de la fila principal de la tarjeta y pasa al buscador, la lista del día, los lotes de una finca y los pendientes (al punto exacto). Queda también dentro de "Más".
+- El seguimiento del GPS respeta el zoom elegido.
+
+**Lote y visita**
+- Historial de visitas del lote y días desde la última.
+- Fotos del lote por fecha y comparación de dos fechas.
+- Cierre de visita con resumen e imagen para enviar por WhatsApp.
+
 ## V181126 · 18-nov-2026
 **Datos**
 - El Excel de estimados trae `Fecha Cosecha`: 949 lotes con fecha programada (11-dic-2026 a 15-abr-2027).

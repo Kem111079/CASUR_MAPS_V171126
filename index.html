@@ -22,24 +22,27 @@
     <div id="map"></div>
     <div id="arriba">
       <div id="buscador">
-        <span class="lupa" aria-hidden="true">🔍</span>
+        <svg class="lupa ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.3-4.3"/></svg>
         <input id="q" type="search" placeholder="Buscar lote o productor" autocomplete="off" autocapitalize="characters" enterkeyhint="search" aria-label="Buscar lote, productor o finca" />
-        <button id="btnClearQ" type="button" hidden aria-label="Borrar búsqueda">✕</button>
+        <button id="btnClearQ" type="button" hidden aria-label="Borrar búsqueda"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         <div id="sugerencias" role="listbox"></div>
       </div>
-      <button id="btnCapas" type="button" class="cuadro" aria-label="Capas y herramientas">
-        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 2 8.5 12 14l10-5.5L12 3Z"/><path d="m2 13 10 5.5L22 13"/></svg>
-      </button>
     </div>
-    <div id="chips"><button id="chipGps" type="button" class="chip-gps" hidden></button><span id="chipRed" class="chip-red" hidden>Sin señal · mapa guardado</span></div>
+    <div id="chips"><button id="chipGps" type="button" class="chip-gps" hidden></button><button id="chipVisita" type="button" class="chip-visita" hidden onclick="mostrarTab('visita')"></button><span id="chipRed" class="chip-red" hidden>Sin señal · mapa guardado</span></div>
     <div id="leyenda" class="leyenda oculta"></div>
+    <button id="btnCapas" type="button" class="fab capas" aria-label="Capas y herramientas">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8.5 12 14l10-5.5L12 3z"/><path d="m2 13 10 5.5L22 13"/></svg>
+    </button>
+    <button id="btnPanorama" type="button" class="fab panorama" aria-label="Ver alrededores">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>
+    </button>
     <button id="btnBrujula" type="button" class="fab brujula" aria-label="Orientación del mapa">
       <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2 8 12h8z" fill="#d7191c"/><path d="M12 22l4-10H8z" fill="currentColor" opacity=".55"/></svg>
     </button>
     <button id="btnGps" type="button" class="fab apagado" aria-label="Activar GPS">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>
     </button>
-    <div id="medirBar" class="medir" hidden><span id="medirTxt"></span><button id="medirDeshacer" type="button" class="btn ter">↶ Deshacer</button><button id="medirFin" type="button" class="btn pri">Terminar</button></div>
+    <div id="medirBar" class="medir" hidden><span id="medirTxt"></span><button id="medirDeshacer" type="button" class="btn ter"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M4 12h10a5 5 0 0 1 0 10h-2"/></svg> Deshacer</button><button id="medirFin" type="button" class="btn pri">Terminar</button></div>
     <span id="atrib">© OpenStreetMap · Esri</span>
     <section id="card" class="card oculta" aria-live="polite"></section>
   </main>
@@ -50,7 +53,7 @@
 
   <div id="hojaFondo" class="hoja-fondo"></div>
   <section id="hoja" class="hoja" role="dialog" aria-modal="true">
-    <div class="hoja-cab"><h3 id="hojaTitulo"></h3><button id="hojaX" type="button" aria-label="Cerrar">✕</button></div>
+    <div class="hoja-cab"><h3 id="hojaTitulo"></h3><button id="hojaX" type="button" aria-label="Cerrar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div id="hojaBody" class="hoja-body"></div>
   </section>
 
