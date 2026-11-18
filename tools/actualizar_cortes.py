@@ -22,8 +22,8 @@ from pathlib import Path
 
 ALIAS = {
     "cod": ["codlote", "hhhsss", "cod_lote", "codsuerte", "lote"],
-    "fecha": ["fecha_corte", "fecha corte", "f. corte", "fecha_ultimo_corte", "fecha"],
-    "tch": ["tch", "tch_real", "tch real"],
+    "fecha": ["fecha corte real", "fecha_corte_real", "fecha_corte", "fecha corte", "f. corte", "fecha"],
+    "tch": ["tch real", "tch_real", "tch"],
     "ton": ["toneladas", "ton", "tm"],
     "area": ["area_ha", "area ha", "area", "área ha"],
 }
@@ -51,6 +51,12 @@ def a_fecha(v):
     return None
 
 
+def codigo(v):
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return str(v or "").strip().upper()
+
+
 def a_num(v):
     try:
         return round(float(str(v).replace(",", "")), 2)
@@ -69,7 +75,8 @@ def main():
     hdr, idx = None, {}
     for i, row in enumerate(rows[:15]):
         cells = [str(c or "").strip().lower() for c in row]
-        found = {k: next((j for j, c in enumerate(cells) if c in al), None) for k, al in ALIAS.items()}
+        # se respeta el orden de preferencia de los alias (primero los nombres de la plantilla)
+        found = {k: next((cells.index(a) for a in al if a in cells), None) for k, al in ALIAS.items()}
         if found["cod"] is not None and found["fecha"] is not None:
             hdr, idx = i, found
             break
@@ -78,9 +85,11 @@ def main():
     lotes, invalidas = {}, []
     for n, row in enumerate(rows[hdr + 1:], start=hdr + 2):
         get = lambda k: row[idx[k]] if idx[k] is not None and idx[k] < len(row) else None
-        cod = str(get("cod") or "").strip().upper()
+        cod = codigo(get("cod"))
         if not cod:
             continue
+        if get("fecha") in (None, ""):
+            continue  # lote aún sin cortar
         f = a_fecha(get("fecha"))
         if not f or f > date.today():
             invalidas.append(f"fila {n}: {cod}")

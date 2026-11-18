@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-18T05:34:48",
+  "generated_at": "2026-11-18T05:39:47",
   "version": "V181126_SHAPE_AFORO",
   "shape": {
     "archivo": "Shape_Casur_FNC_171126.gpkg",
@@ -10,11 +10,11 @@
     "poligonos_previos": 8341
   },
   "aforo": {
-    "archivo": "Estimados_para_APP_Z2627v2.xlsx",
-    "version": "Version del 12.10.2026",
+    "archivo": "Plantilla_CASUR_Maps.xlsx",
+    "version": "",
     "suertes": 946,
     "area_ha": 9101.68,
-    "toneladas": 560672.76,
+    "toneladas": 560672.73,
     "tch_ponderado": 61.6,
     "toneladas_opt": 597888.4,
     "tch_opt_ponderado": 65.69,
@@ -29,17 +29,17 @@
     "destino": {
       "Molienda": 948,
       "Semilla AS": 41,
-      "Investigacion": 2,
       "Semilla": 6,
       "Sin Caña": 43,
-      "Baja Prod": 6
+      "Baja Prod": 6,
+      "Investigacion": 2
     },
     "clasificacion": {
       "Molienda": 946,
       "Semilla": 49,
-      "Investigacion": 2,
       "Sin Caña": 34,
-      "Baja rentabilidad": 15
+      "Baja rentabilidad": 15,
+      "Investigacion": 2
     }
   },
   "validaciones": {
@@ -113,11 +113,15 @@
       }
     ],
     "aforo_area_cero": [
-      "90401",
-      "90401A",
+      "5001",
+      "5003",
+      "6203",
       "6301",
+      "6401",
+      "6402",
+      "6403",
+      "9601",
       "12514",
-      "49404A",
       "18402",
       "18403",
       "18405",
@@ -139,20 +143,16 @@
       "18430",
       "18440",
       "18440A",
-      "6401",
-      "6402",
-      "6403",
-      "6203",
+      "49404A",
+      "90401",
+      "90401A",
       "99341",
       "99344",
       "99345",
       "99347A",
       "99348",
       "99348A",
-      "99352",
-      "9601",
-      "5001",
-      "5003"
+      "99352"
     ],
     "molienda_sin_fecha_cosecha": [],
     "fecha_cosecha_vencida": [],

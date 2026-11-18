@@ -23,6 +23,7 @@ ALIAS = {
     "cod": ["codigo de lote", "codlote", "cod lote", "hhhsss", "lote"],
     "grupo": ["grcorte", "gr corte", "grupo de corte", "grupo corte"],
     "renovar": ["propuesta de renovacion", "renovacion", "renovar"],
+    "nc": ["nc", "numero de corte", "n. corte"],
 }
 GRUPOS = ["Planta", "Corte 2", "Corte 3", "Corte 4", "Corte 5", "Mayor a 5"]
 
@@ -67,6 +68,16 @@ def main():
             continue
         g = plano(get("grupo"))
         grupo = canon.get(g, "Planta" if g.startswith("plant") else "")
+        if not g and idx.get("nc") is not None:  # plantilla única: el grupo sale del número de corte
+            nc = plano(get("nc"))
+            if nc.startswith("plant"):
+                grupo = "Planta"
+            else:
+                try:
+                    n_ = int(float(nc))
+                    grupo = f"Corte {n_}" if 2 <= n_ <= 5 else "Mayor a 5" if n_ > 5 else "Planta" if n_ == 1 else ""
+                except ValueError:
+                    grupo = ""
         if g and not grupo:
             raros.append(f"fila {n}: {cod} = {get('grupo')}")
         r = plano(get("renovar"))

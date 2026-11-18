@@ -1,5 +1,11 @@
 # Cambios
 
+## V181126H · 18-nov-2026
+- **Plantilla única de datos** `fuentes/Plantilla_CASUR_Maps.xlsx`: una fila por lote con aforo, fecha de cosecha, número de corte, renovación, zafra anterior y cortes reales. Reemplaza a los tres Excel sueltos.
+- Las herramientas leen la plantilla; toneladas y grupo de corte se calculan solos.
+- En Resumen → Datos: botones para descargar la plantilla y subirla a GitHub.
+- El grupo de corte ahora cubre también los lotes fuera de molienda (97 más).
+
 ## V181126G · 18-nov-2026
 - **Resumen de renovación** en la pestaña Resumen: lotes, área y TCH estimado por zona, con promedio y máximo histórico.
 - **Delta esperado** = TCH estimado de las plantillas de la misma zona − TCH estimado del lote. **Delta techo** = máximo histórico del lote − TCH estimado. Ambos en t/ha y en toneladas.

@@ -14,21 +14,42 @@ Mapa de lotes cañeros para trabajo de campo (PWA). Departamento de Negocios de 
 | `docs/historial/` | Notas y código de versiones anteriores |
 
 ## Actualizar datos
-**Automático:** suba a `fuentes/` el shape (`.gpkg`), el Excel `Estimados*.xlsx` o el Excel `Cortes*.xlsx`. GitHub regenera `data/` y los teléfonos lo descargan solos en la siguiente apertura con señal.
+Todo lo que depende de Excel está en **una sola plantilla**: `fuentes/Plantilla_CASUR_Maps.xlsx` (una fila por lote).
 
-**Manual:**
+1. Descargue la plantilla (en la app: Resumen → Datos → *Descargar plantilla*; o desde la carpeta `fuentes/`).
+2. Edítela en Excel. La hoja *Instrucciones* explica cada columna.
+3. Súbala a `fuentes/` con el mismo nombre: en GitHub, carpeta `fuentes` → *Add file* → *Upload files* → *Commit changes*.
+4. En 2 a 3 minutos GitHub regenera `data/` y los teléfonos descargan los datos al abrir la app con señal.
+
+Si el archivo tiene un error, la pestaña **Actions** muestra una marca roja y no se publica nada.
+
+| Grupo de columnas | Alimenta |
+|---|---|
+| Identificación (código, hacienda, zona) | Búsqueda, fichas, resumen por zona |
+| Aforo (área, destino, tenencia, clasificación, variedad, riego, NC, TCH estimado y optimista) | Tarjeta, resumen de aforo, capas |
+| Programa (fecha de cosecha, propuesta de renovación) | Etiqueta de corte, capa Semana de corte, renovación |
+| Zafra anterior (fecha de último corte, TCH) | Edad y "TCH anterior" |
+| Cortes reales (fecha y TCH del corte en curso) | Marca el lote como cosechado y apaga la alerta de fecha vencida |
+
+El **shape** (polígonos) se actualiza aparte: suba el `.gpkg` nuevo a `fuentes/` y borre el anterior.
+
+**Manual (sin GitHub Actions):**
 ```bash
 pip install geopandas pyogrio openpyxl
 ```
 ```bash
-python tools/actualizar_shape_y_aforo.py fuentes/Shape_Casur_FNC_171126.gpkg fuentes/Estimados_para_APP_Z2627v2.xlsx --salida data
+python tools/actualizar_shape_y_aforo.py fuentes/Shape_Casur_FNC_171126.gpkg fuentes/Plantilla_CASUR_Maps.xlsx --salida data
 ```
 ```bash
-python tools/actualizar_cortes.py fuentes/Cortes_zafra.xlsx --salida data
+python tools/actualizar_cortes.py fuentes/Plantilla_CASUR_Maps.xlsx --salida data
 ```
-
-### Excel de cortes de la zafra
-Columnas: `CodLote` (o `HHHSSS`), `Fecha_Corte`, `TCH` (opcionales `Toneladas`, `Area_Ha`). Plantilla en `plantillas/plantilla_cortes_zafra.csv`. Con este archivo la edad, el TCH anterior y el estado "Cosechado" se mantienen al día durante la zafra.
+```bash
+python tools/actualizar_renovacion.py fuentes/Plantilla_CASUR_Maps.xlsx --salida data
+```
+Para volver a generar la plantilla a partir de lo publicado:
+```bash
+python tools/generar_plantilla.py --datos data --salida fuentes/Plantilla_CASUR_Maps.xlsx
+```
 
 ## Reglas de cálculo
 - **TCH ponderado** = toneladas de molienda ÷ hectáreas de molienda (`Clasificacion = Molienda`). Semilla y área fuera se informan aparte.
