@@ -506,6 +506,7 @@ function renderMas() {
     ${META.cortes_al ? '' : '<div class="nota est-medio">Sin cortes de la zafra en curso: la edad y el TCH anterior vienen de la zafra 25/26.</div>'}
     <div class="nota est-neutro"><b>Para actualizar los datos:</b> descargue la plantilla, edítela en Excel y súbala a la carpeta <b>fuentes</b> del repositorio con el mismo nombre. En unos minutos los teléfonos reciben los datos nuevos.</div>
     <div class="acciones"><a class="btn sec" href="./fuentes/Plantilla_CASUR_Maps.xlsx" download>${ico('download')} Descargar plantilla</a><a class="btn ter" href="https://github.com/Kem111079/CASUR_MAPS_V171126/upload/main/fuentes" target="_blank" rel="noopener">${ico('share')} Subir a GitHub</a></div>
+    <div class="acciones"><button type="button" class="btn pri" onclick="actualizarApp()">${ico('download')} Actualizar la app (versión ${APP_VERSION})</button></div>
     <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Buscar datos nuevos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
     ${instalarEvt ? '<div class="acciones"><button type="button" class="btn pri" onclick="instalarApp()">' + ico('download') + ' Instalar app</button></div>' : ''}`;
   $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
@@ -629,10 +630,43 @@ async function iniciar() {
     setLoader('No se pudieron abrir los datos: ' + (e.message || e) + '. Conéctese una vez a internet y vuelva a abrir.');
   }
 }
+/* ── Actualización de la app ──
+   La app abre desde su copia local. Cuando hay versión nueva:
+   · si se detecta al abrir (primeros 20 s, sin nada a medio hacer), se recarga sola;
+   · si llega más tarde, se avisa con un botón, para no interrumpir un registro o una visita;
+   · se vuelve a revisar cada vez que la app regresa a primer plano, y hay un botón manual en Resumen. */
+const _abiertaEn = Date.now();
+let _swReg = null, _swRevisado = 0;
+function ocupado() { return $('hoja').classList.contains('abierta') || !!reg || medir.modo || document.body.dataset.tab !== 'mapa'; }
+function recargaSegura() { // evita ciclos: como mucho una recarga automática por minuto
+  try { const u = Number(sessionStorage.getItem('casur_recarga') || 0); if (Date.now() - u < 60000) return false; sessionStorage.setItem('casur_recarga', String(Date.now())); } catch (_) {}
+  location.reload(); return true;
+}
 function registrarSW() {
   if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) return;
   const habia = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.register('./service-worker.js').catch(e => console.warn('SW', e));
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (habia) toast('Nueva versión de la app lista.', {accion: 'Recargar', fijo: true, alAccion: () => location.reload()}); });
+  navigator.serviceWorker.register('./service-worker.js').then(r => { _swReg = r; }).catch(e => console.warn('SW', e));
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!habia) return;
+    if (Date.now() - _abiertaEn < 20000 && !ocupado() && recargaSegura()) return;
+    toast('Nueva versión de la app lista.', {accion: 'Recargar', fijo: true, alAccion: () => location.reload()});
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !_swReg || !navigator.onLine || Date.now() - _swRevisado < 300000) return;
+    _swRevisado = Date.now(); _swReg.update().catch(() => {});
+  });
+}
+/* Botón manual: descarga la versión publicada aunque el teléfono tenga guardada una anterior. No toca registros, fotos ni visitas. */
+async function actualizarApp() {
+  if (!navigator.onLine) { toast('Sin señal: conéctese para buscar la versión nueva.', {tipo: 'mal'}); return; }
+  const aviso = toast('Buscando la versión nueva…', {fijo: true});
+  try {
+    if (_swReg) await _swReg.update().catch(() => {});
+    const claves = await caches.keys();
+    await Promise.all(claves.filter(k => k.startsWith('casur-maps-shell-')).map(k => caches.delete(k)));
+  } catch (_) {}
+  aviso && aviso.remove();
+  try { sessionStorage.setItem('casur_recarga', String(Date.now())); } catch (_) {}
+  location.reload();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, {once: true}); else iniciar();
