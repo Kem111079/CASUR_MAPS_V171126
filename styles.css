@@ -307,7 +307,10 @@ svg.hist{width:100%;height:auto;display:block}
 .tabla th{position:sticky;top:0;background:var(--pri);color:var(--pri-t);text-align:right;padding:9px 8px;font-size:12.5px}
 .tabla th:first-child,.tabla td:first-child{text-align:left}
 .tabla td{padding:10px 8px;border-bottom:1px solid var(--linea);text-align:right;font-variant-numeric:tabular-nums}
-.tabla tr[data-finca] td:first-child{color:var(--verde);font-weight:700}
+.tabla tr[data-finca] td:first-child,.tabla tr[data-zona] td:first-child{color:var(--verde);font-weight:700}
+.tabla.ancha table{min-width:620px}.tabla.ancha th,.tabla.ancha td{white-space:nowrap;padding-left:6px;padding-right:6px}
+.tabla.ancha td:first-child,.tabla.ancha th:first-child{position:sticky;left:0;background:var(--sup);z-index:1}.tabla.ancha th:first-child{background:var(--pri);z-index:2}
+.tabla tr.total td{font-weight:800;background:var(--sup2)}.tabla.ancha tr.total td:first-child{background:var(--sup2)}
 #nav::before{content:'';position:absolute;left:0;right:0;top:-1px;height:3px;background:linear-gradient(90deg,#0b7f3a 0 45%,#005baa 45% 85%,#f4c542 85%)}
 #nav{position:fixed;z-index:1500;left:0;right:0;bottom:0;height:calc(var(--nav) + var(--sab));padding-bottom:var(--sab);display:grid;grid-template-columns:repeat(4,1fr);background:var(--sup);border-top:1px solid var(--linea)}
 #nav button{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--texto2);font-size:12.5px;font-weight:700}

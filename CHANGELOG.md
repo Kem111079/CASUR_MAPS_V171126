@@ -1,5 +1,22 @@
 # Cambios
 
+## V181126G · 18-nov-2026
+- **Resumen de renovación** en la pestaña Resumen: lotes, área y TCH estimado por zona, con promedio y máximo histórico.
+- **Delta esperado** = TCH estimado de las plantillas de la misma zona − TCH estimado del lote. **Delta techo** = máximo histórico del lote − TCH estimado. Ambos en t/ha y en toneladas.
+- Al tocar una zona se listan sus lotes a renovar, ordenados por las toneladas que se ganarían.
+- La tarjeta del lote muestra promedio y máximo histórico y, si se propone renovar, sus dos deltas.
+
+## V181126F · 18-nov-2026
+- Datos de renovación (`fuentes/datos_renovacion.xlsx`): 949 lotes con grupo de corte y propuesta de renovación; 222 lotes a renovar (2,408.87 ha).
+- Capa **Propuesta de renovación**: Renovar / No renovar.
+- Capa **Plantillas y socas**: plantilla y socas agrupadas por corte (2, 3, 4, 5 y más de 5).
+- Tarjeta: etiqueta "Renovar", grupo de corte y propuesta; el resumen de finca indica cuántos lotes se renuevan.
+- `tools/actualizar_renovacion.py` y paso en la acción de GitHub.
+
+## V181126E · 18-nov-2026
+- El tablero del día ya no se abre solo al iniciar la app; queda en Resumen → Tablero de hoy (se puede reactivar en Ajustes).
+- Número de corte en las etiquetas del mapa (C6 = corte 6, PL = plantía), en el título de la tarjeta y en la imagen del hallazgo. Se puede ocultar en Capas.
+
 ## V181126D · 18-nov-2026
 - **Giro del mapa más suave.** Nuevo ajuste "Giro del mapa": Suave (por defecto), Normal o Sin giro. En Suave el mapa gira solo a más de 6 km/h sostenidos, con el rumbo del tramo recorrido (13 m), ante cambios de 12° o más, como máximo cada 2 s y con un movimiento de 1 s. Quieto o caminando despacio no gira.
 - El mapa se recentra al avanzar 4 m o más, con desplazamiento suave, en lugar de en cada lectura.

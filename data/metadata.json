@@ -34,5 +34,7 @@
   "datos_al": "2026-11-18",
   "cortes_al": "",
   "lotes_con_fecha_cosecha": 949,
-  "generated_at": "2026-11-18T00:38:26"
+  "generated_at": "2026-11-18T05:31:04",
+  "fuente_renovacion": "datos_renovacion.xlsx",
+  "renovacion_lotes": 949
 }

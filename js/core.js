@@ -1,11 +1,12 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126D';
+const APP_VERSION = 'V181126G';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
   resumen: './data/aforo_resumen.json',
   cortes: './data/cortes_zafra.json',
+  renov: './data/renovacion.json',
   meta: './data/metadata.json'
 };
 const HIST_URL = './data/produccion_historica_lote.json';
@@ -94,7 +95,7 @@ function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.
 const AJUSTES_KEY = 'casur_maps_ajustes_v2';
 const S = Object.assign({
   tecnico: '', gpsPerfil: 'vehiculo', tema: 'campo', pantalla: true, vibrar: true,
-  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true, verRegistros: true, letra: 'normal', tablero: true, giro: 'suave'
+  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true, verRegistros: true, letra: 'normal', tableroAbrir: false, giro: 'suave', etqNc: true
 }, leerLS(AJUSTES_KEY, {}));
 if (!('giro' in leerLS(AJUSTES_KEY, {})) && S.orientacion === 'norte') S.giro = 'sin'; // quien ya usaba norte arriba lo conserva
 S.orientacion = S.giro === 'sin' ? 'norte' : 'rumbo';
@@ -213,7 +214,7 @@ async function leerCache(cache, url) { if (!cache) return null; try { const r = 
 async function descargarDatos(cache, meta) {
   const out = {meta};
   const claves = Object.keys(DATA_FILES).filter(k => k !== 'meta');
-  const res = await Promise.all(claves.map(k => fetchJson(DATA_FILES[k], 90000).catch(e => { if (k === 'cortes') return null; throw new Error(DATA_FILES[k].split('/').pop() + ': ' + (e.name === 'AbortError' ? 'tiempo agotado' : e.message)); })));
+  const res = await Promise.all(claves.map(k => fetchJson(DATA_FILES[k], 90000).catch(e => { if (k === 'cortes' || k === 'renov') return null; throw new Error(DATA_FILES[k].split('/').pop() + ': ' + (e.name === 'AbortError' ? 'tiempo agotado' : e.message)); })));
   claves.forEach((k, i) => { out[k] = res[i] ? res[i].json : null; });
   if (cache) {
     await Promise.all(claves.map((k, i) => res[i] ? cache.put(DATA_FILES[k], res[i].resp) : null));
@@ -225,10 +226,10 @@ async function cargarDatos() {
   const cache = await dataCache();
   const metaLocal = await leerCache(cache, DATA_FILES.meta);
   if (metaLocal) {
-    const [geo, metricas, resumen, cortes] = await Promise.all(['geo', 'metricas', 'resumen', 'cortes'].map(k => leerCache(cache, DATA_FILES[k])));
+    const [geo, metricas, resumen, cortes, renov] = await Promise.all(['geo', 'metricas', 'resumen', 'cortes', 'renov'].map(k => leerCache(cache, DATA_FILES[k])));
     if (geo && metricas) {
       setTimeout(() => buscarActualizacion(cache, metaLocal), 2500);
-      return {geo, metricas, resumen, cortes, meta: metaLocal, origen: 'local'};
+      return {geo, metricas, resumen, cortes, renov, meta: metaLocal, origen: 'local'};
     }
   }
   setLoader('Descargando datos por primera vez…');
@@ -258,20 +259,23 @@ async function cargarHistorico() {
 }
 
 /* ── Modelo por lote: une métricas, aforo y cortes de la zafra en curso ── */
-function construirLotes(geo, metricas, cortes) {
+function construirLotes(geo, metricas, cortes, renov) {
+  const RV = (renov || {}).lotes || {};
   const M = (metricas || {}).lotes || {}, C = (cortes || {}).lotes || {}, zafraFeed = (cortes || {}).zafra || '26/27';
   LOTES = {}; FINCAS = {};
   const nuevo = (cod, m = {}) => {
-    const c = C[cod];
+    const c = C[cod], rv = RV[cod] || {};
     const l = {
       cod, hac: m.hacienda_productor || 'Sin dato', codFinca: m.cod_finca || '', zona: m.zona || '', variedad: m.variedad || '',
       riego: m.riego || '', tenencia: m.tenencia || '', destino: m.destino || '', clas: m.clasificacion || '', nc: m.nc || '',
       areaAforo: num(m.area_total_ha), areaShape: 0, nPoly: 0,
       tchAnt: num(m.tch_ultima_zafra), fCorte: m.fecha_ultimo_corte || '', zafra: m.ultima_zafra_label || '',
-      fProg: m.fecha_cosecha_prog || '',
+      fProg: m.fecha_cosecha_prog || '', grCorte: rv.gr_corte || '', renovar: typeof rv.renovar === 'boolean' ? rv.renovar : null, histProm: num(rv.hist_prom), histMax: num(rv.hist_max), histN: rv.hist_n || 0,
       tchEst: num(m.aforo_actTCH_2627), tonEst: num(m.aforo_toneladas_2627), tchOpt: num(m.aforo_tch_opt_2627), tonOpt: num(m.aforo_toneladas_opt_2627),
       conAforo: m.aforo_actTCH_2627 !== undefined, cosechado: false, feats: [], bbox: null
     };
+    // El grupo de corte es más reciente que el NC del cronológico: si no coinciden, manda el grupo.
+    if (l.grCorte) { const g = /^planta/i.test(l.nc) ? 'Planta' : Number(l.nc) > 5 ? 'Mayor a 5' : l.nc ? 'Corte ' + l.nc : ''; if (g !== l.grCorte) l.nc = l.grCorte === 'Planta' ? 'Planta' : l.grCorte === 'Mayor a 5' ? '>5' : l.grCorte.replace('Corte ', ''); }
     // Corte de la zafra en curso: manda sobre la fecha anterior y, si trae TCH real, sobre el TCH de la última zafra.
     if (c && c.fecha_corte && (!l.fCorte || c.fecha_corte > l.fCorte)) {
       l.fCorte = c.fecha_corte; l.cosechado = true; l.zafra = zafraFeed;
@@ -289,7 +293,7 @@ function construirLotes(geo, metricas, cortes) {
     if (b) l.bbox = l.bbox ? [Math.min(l.bbox[0], b[0]), Math.min(l.bbox[1], b[1]), Math.max(l.bbox[2], b[2]), Math.max(l.bbox[3], b[3])] : b.slice();
   });
   Object.keys(M).forEach(cod => { if (!LOTES[cod]) nuevo(cod, M[cod]); });
-  calcularSemanas();
+  calcularSemanas(); calcularRenovacion();
   Object.values(LOTES).forEach(l => {
     l.area = l.areaAforo !== null && l.areaAforo > 0 ? l.areaAforo : l.areaShape;
     l.principal = l.feats.slice().sort((a, b) => (b.properties.Area_Ha || 0) - (a.properties.Area_Ha || 0))[0] || null;
@@ -331,6 +335,38 @@ function claseCorte(l) {
   if (diasPara(l.fProg) < 0) return 0;
   const k = l.semProg ? l.semProg.clave : '';
   return SEMANAS_PROX[0] && k === SEMANAS_PROX[0].clave ? 1 : SEMANAS_PROX[1] && k === SEMANAS_PROX[1].clave ? 2 : 3;
+}
+/* Número de corte en forma corta para etiquetas: 'C6', o 'PL' si es plantía. Viene del cronológico; no se calcula. */
+const ncCorto = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'PL' : 'C' + l.nc;
+const ncLargo = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'plantía' : 'corte ' + l.nc;
+/* ── Renovación: qué esperar ──
+   Referencia realista: lo que rinden hoy las plantillas de molienda de la misma zona (TCH estimado, ponderado por área).
+   Techo: el máximo histórico del propio lote. Ambos deltas se miden contra el TCH estimado del lote. */
+let PLANT_ZONA = {};
+function calcularRenovacion() {
+  const acc = {};
+  Object.values(LOTES).forEach(l => { if (l.grCorte === 'Planta' && esMolienda(l) && l.tchEst > 0 && l.areaAforo > 0) { const z = acc[l.zona] || (acc[l.zona] = [0, 0]); z[0] += l.tchEst * l.areaAforo; z[1] += l.areaAforo; } });
+  PLANT_ZONA = Object.fromEntries(Object.entries(acc).map(([z, v]) => [z, v[0] / v[1]]));
+}
+const deltaEsperado = l => l && l.renovar && PLANT_ZONA[l.zona] !== undefined && l.tchEst !== null ? PLANT_ZONA[l.zona] - l.tchEst : null;
+const deltaTecho = l => l && l.histMax !== null && l.tchEst !== null ? l.histMax - l.tchEst : null;
+function resumenRenovacion() {
+  const grupos = {};
+  Object.values(LOTES).filter(l => l.renovar).forEach(l => {
+    const a = l.areaAforo || 0, g = grupos[l.zona || 'Sin zona'] || (grupos[l.zona || 'Sin zona'] = {zona: l.zona || 'Sin zona', lotes: [], area: 0, est: 0, prom: 0, aProm: 0, max: 0, aMax: 0});
+    g.lotes.push(l); g.area += a; g.est += (l.tchEst || 0) * a;
+    if (l.histProm !== null) { g.prom += l.histProm * a; g.aProm += a; }
+    if (l.histMax !== null) { g.max += l.histMax * a; g.aMax += a; }
+  });
+  const filas = Object.values(grupos).map(g => {
+    const est = g.area ? g.est / g.area : 0, plant = PLANT_ZONA[g.zona] ?? null, max = g.aMax ? g.max / g.aMax : null;
+    return {zona: g.zona, lotes: g.lotes, n: g.lotes.length, area: g.area, est, prom: g.aProm ? g.prom / g.aProm : null, plant, max,
+      dEsp: plant === null ? null : plant - est, dTecho: max === null ? null : max - est,
+      tonEsp: plant === null ? 0 : (plant - est) * g.area, tonTecho: max === null ? 0 : g.max - g.est * g.aMax / (g.area || 1)};
+  }).sort((a, b) => a.zona.localeCompare(b.zona, 'es', {numeric: true}));
+  const area = filas.reduce((s, f) => s + f.area, 0), est = area ? filas.reduce((s, f) => s + f.est * f.area, 0) / area : 0;
+  const tonEsp = filas.reduce((s, f) => s + f.tonEsp, 0), tonTecho = filas.reduce((s, f) => s + f.tonTecho, 0);
+  return {filas, n: filas.reduce((s, f) => s + f.n, 0), area, est, tonEsp, tonTecho, dEsp: area ? tonEsp / area : 0, dTecho: area ? tonTecho / area : 0};
 }
 const esMolienda = l => String(l.clas || '').toLowerCase() === 'molienda';
 

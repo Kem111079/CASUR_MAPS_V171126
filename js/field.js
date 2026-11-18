@@ -188,7 +188,7 @@ async function imagenRegistro(o) {
   rr(ctx, 40, 215, W - 80, H - 255, 26, '#fff', '#dbe5dd');
   ctx.fillStyle = '#0f172a'; ctx.font = '900 56px Arial'; ctx.fillText('Lote ' + l.cod, 80, 300);
   ctx.fillStyle = '#334155'; ctx.font = '700 34px Arial'; ctx.fillText(String(l.hac || '').slice(0, 52), 80, 350);
-  ctx.font = '600 26px Arial'; ctx.fillStyle = '#64748b'; ctx.fillText([o.tablon ? 'Tablón ' + o.tablon : '', l.variedad, fmtN(l.area, ' ha')].filter(x => x && x !== '—').join(' · '), 80, 392);
+  ctx.font = '600 26px Arial'; ctx.fillStyle = '#64748b'; ctx.fillText([o.tablon ? 'Tablón ' + o.tablon : '', l.variedad, fmtN(l.area, ' ha'), ncLargo(l)].filter(x => x && x !== '—').join(' · '), 80, 392);
   const sev = {Alta: '#b91c1c', Media: '#b45309', Baja: '#0b7f3a'}[o.severidad] || '#334155';
   [['CATEGORÍA', o.categoria, '#0f172a'], ['SEVERIDAD', o.severidad, sev], ['TÉCNICO', (o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : 'No indicado').slice(0, 20), '#0f172a']].forEach((b, i) => {
     const x = 80 + i * 352; rr(ctx, x, 420, 336, 92, 18, '#f8fafc', '#e2e8f0'); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 20, 452); ctx.fillStyle = b[2]; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 20, 492);
@@ -490,12 +490,13 @@ function renderMas() {
     <div id="aforoRes" class="lista-lotes"></div>
     <label class="campo">Agrupar por${sel('aforoGrupo', [['hacienda', 'Hacienda / productor'], ['zona', 'Zona'], ['finca', 'Finca y tenencia']], aforoGrupo)}</label>
     <div class="tabla"><table><thead><tr><th>Grupo</th><th>ha mol.</th><th>Ton.</th><th>TCH</th><th>Optim.</th></tr></thead><tbody id="aforoFilas">${filasAforo(filas)}</tbody></table></div>
+    ${renovacionHtml()}
     <h3>Ajustes</h3>
     <label class="campo">Técnico<input id="ajTec" type="text" value="${esc(S.tecnico)}" placeholder="Su nombre"></label>
     <label class="campo">Uso del GPS${sel('ajGps', [['vehiculo', 'En vehículo (recomendado)'], ['campo', 'Caminando'], ['preciso', 'Punto fijo, máxima precisión']], S.gpsPerfil)}</label>
     <label class="campo">Pantalla${sel('ajTema', [['campo', 'Campo · alto contraste para sol'], ['auto', 'Automático · oscuro de 7 p. m. a 5:30 a. m.'], ['claro', 'Claro suave'], ['oscuro', 'Oscuro · madrugada']], S.tema)}</label>
     <label class="campo">Tamaño de letra${sel('ajLetra', [['normal', 'Normal'], ['grande', 'Grande'], ['muygrande', 'Muy grande']], S.letra || 'normal')}</label>
-    <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tablero ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
+    <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tableroAbrir ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
  <label class="campo">Giro del mapa con GPS${sel('ajGiro', [['suave', 'Suave · gira poco, solo al avanzar (recomendado)'], ['normal', 'Normal · sigue cada cambio de rumbo'], ['sin', 'Sin giro · norte siempre arriba']], S.giro)}</label>
     <label class="interruptor"><input type="checkbox" id="ajAuto" ${S.gpsAuto ? 'checked' : ''}><span>Activar el GPS al abrir la app</span></label>
     <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Mantener la pantalla encendida durante la visita</span></label>
@@ -506,6 +507,7 @@ function renderMas() {
     <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Buscar datos nuevos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
     ${instalarEvt ? '<div class="acciones"><button type="button" class="btn pri" onclick="instalarApp()">' + ico('download') + ' Instalar app</button></div>' : ''}`;
   $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
+  const tr = $('renovFilas'); if (tr) tr.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); });
   $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
   $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
   $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
@@ -513,12 +515,34 @@ function renderMas() {
   $('ajGps').addEventListener('change', e => { S.gpsPerfil = e.target.value; guardarAjustes(); });
   $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); pintarSeleccion(); });
   $('ajLetra').addEventListener('change', e => { S.letra = e.target.value; guardarAjustes(); aplicarTema(); });
-  $('ajTab').addEventListener('change', e => { S.tablero = e.target.checked; guardarAjustes(); });
+  $('ajTab').addEventListener('change', e => { S.tableroAbrir = e.target.checked; guardarAjustes(); });
   $('ajGiro').addEventListener('change', e => { S.giro = e.target.value; S.orientacion = S.giro === 'sin' ? 'norte' : 'rumbo'; guardarAjustes(); aplicarGiroCss(); orientar(true); pintarBrujula(); });
   $('ajAuto').addEventListener('change', e => { S.gpsAuto = e.target.checked; guardarAjustes(); });
   $('ajPant').addEventListener('change', e => { S.pantalla = e.target.checked; guardarAjustes(); S.pantalla ? pedirPantalla() : soltarPantalla(); });
   $('ajVib').addEventListener('change', e => { S.vibrar = e.target.checked; guardarAjustes(); vibrar(); });
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => { const el = $('espacio'); if (el) el.textContent = nf0.format((e.usage || 0) / 1048576) + ' MB'; }).catch(() => {});
+}
+/* ── Resumen de renovación: área por zona, TCH estimado, referencia y deltas ── */
+function renovacionHtml() {
+  const r = resumenRenovacion(); if (!r.n) return '';
+  const d = v => v === null ? '—' : signo(v), t = v => v === null ? '—' : nf1.format(v);
+  return `<h3>Renovación propuesta</h3>
+    <div class="cifras c4">${cifra('Lotes', nf0.format(r.n))}${cifra('Hectáreas', nf0.format(r.area))}${cifra('Estimado', nf1.format(r.est))}${cifra('Δ esperado', signo(r.dEsp), 'c-est')}</div>
+    <p class="pie">Delta esperado: contra las plantillas de la misma zona · ${signo(r.tonEsp, nf0)} t. Techo: contra el máximo histórico de cada lote · ${signo(r.dTecho)} t/ha · ${signo(r.tonTecho, nf0)} t.</p>
+    <div class="tabla ancha"><table><thead><tr><th>Zona</th><th>ha</th><th>Est.</th><th>Plant.</th><th>Δ esp.</th><th>Δ ton.</th><th>Máx.</th><th>Δ techo</th><th>Prom.</th><th>Lotes</th></tr></thead>
+      <tbody id="renovFilas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}"><td>${esc(f.zona)}</td><td>${nf0.format(f.area)}</td><td>${nf1.format(f.est)}</td><td>${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nf0)}</td><td>${t(f.max)}</td><td>${d(f.dTecho)}</td><td>${t(f.prom)}</td><td>${f.n}</td></tr>`).join('')}
+      <tr class="total"><td>Total</td><td>${nf0.format(r.area)}</td><td>${nf1.format(r.est)}</td><td></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nf0)}</td><td></td><td>${signo(r.dTecho)}</td><td></td><td>${r.n}</td></tr></tbody></table></div>
+    <p class="pie">Deslice la tabla para ver más columnas y toque una zona para ver sus lotes. Est. = TCH estimado · Plant. = plantillas de la zona · Máx. y Prom. = histórico del lote. Todo en t/ha, ponderado por área.</p>
+    <button type="button" class="btn sec ancho" onclick="verRenovacionMapa()">${ico('map')} Ver lotes a renovar en el mapa</button>`;
+}
+function verRenovacionMapa() { mostrarTab('mapa'); setColorear('renovacion'); temaFiltro = 'Renovar'; capaLotes.setStyle(estiloFeat); pintarLeyenda(); }
+function abrirRenovZona(zona) {
+  const f = resumenRenovacion().filas.find(x => x.zona === zona); if (!f) return;
+  const orden = f.lotes.slice().sort((a, b) => (deltaEsperado(b) ?? -1e9) * (b.areaAforo || 0) - (deltaEsperado(a) ?? -1e9) * (a.areaAforo || 0));
+  abrirHoja(`Renovación · ${zona}`, `
+    <div class="cifras c4">${cifra('Lotes', f.n)}${cifra('Área', nf0.format(f.area) + ' ha')}${cifra('Estimado', nf1.format(f.est))}${cifra('Δ esperado', f.dEsp === null ? '—' : signo(f.dEsp), 'c-est')}</div>
+    <p class="pie">Plantillas de la zona: ${f.plant === null ? '—' : nf1.format(f.plant)} t/ha · máximo histórico ${f.max === null ? '—' : nf1.format(f.max)} t/ha. Ordenados por toneladas que se ganarían.</p>
+    <div class="lista-lotes">${orden.map(l => { const de = deltaEsperado(l), dt = deltaTecho(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtN(l.areaAforo, ' ha', nf1)} · ${l.grCorte === 'Planta' ? 'plantilla' : esc(l.grCorte.toLowerCase())}<br>est. ${fmtN(l.tchEst, '', nf1)} · prom. ${fmtN(l.histProm, '', nf0)} · máx. ${fmtN(l.histMax, '', nf0)}</span><i class="chip ${de > 0 ? 'est-bien' : 'est-neutro'}">${de === null ? '—' : signo(de) + ' t/ha'}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`, 'alta');
 }
 function filasAforo(filas) {
   return filas.map(x => `<tr ${aforoGrupo === 'hacienda' ? `data-finca="${esc(x.key)}"` : ''}><td>${esc(x.key)}</td><td>${nf0.format(x.area_ha)}</td><td>${nf0.format(x.toneladas)}</td><td><b>${x.area_ha ? nf1.format(x.tch_ponderado) : '—'}</b></td><td>${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</td></tr>`).join('') || '<tr><td colspan="5">Sin coincidencias en esta agrupación.</td></tr>';
@@ -577,7 +601,7 @@ async function iniciar() {
     setLoader('Abriendo datos…');
     const d = await cargarDatos();
     DATA = d.geo; META = d.meta || {}; RESUMEN = d.resumen || {};
-    construirLotes(d.geo, d.metricas, d.cortes); construirIndice();
+    construirLotes(d.geo, d.metricas, d.cortes, d.renov); construirIndice();
     initMap(); bindBusqueda();
     $('btnGps').addEventListener('click', gpsBoton); $('btnBrujula').addEventListener('click', alternarOrientacion); aplicarGiroCss(); pintarBrujula(); $('btnCapas').addEventListener('click', abrirCapas); $('chipGps').addEventListener('click', abrirGps);
     $('hojaX').addEventListener('click', cerrarHoja); $('hojaFondo').addEventListener('click', cerrarHoja);
@@ -594,7 +618,9 @@ async function iniciar() {
     if (S.gpsAuto) iniciarGps(!conEnlace, true);
     registrarSW();
     setTimeout(avisarInstalacion, 1500);
-    if (S.tablero && !conEnlace) setTimeout(() => abrirTablero(false), 700);
+    // El tablero ya no se abre solo (salvo que se active en Ajustes); queda en Resumen > Tablero de hoy.
+    if (S.tableroAbrir && !conEnlace) setTimeout(() => abrirTablero(false), 700);
+    else { const venc = Object.values(LOTES).filter(corteVencido).length; if (venc) toast(`${venc} lote(s) con fecha de corte vencida. Actualice el programa o cargue los cortes.`, {tipo: 'mal', accion: 'Ver', ms: 12000, alAccion: () => { mostrarTab('mapa'); setColorear('semana'); }}); }
     if (navigator.onLine) setTimeout(() => cargarHistorico().catch(() => {}), 6000); // deja el histórico listo para usarlo sin señal
   } catch (e) {
     console.error(e);
