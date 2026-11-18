@@ -492,7 +492,7 @@ function renderMas() {
     <div class="tabla"><table><thead><tr><th>Grupo</th><th>ha mol.</th><th>Ton.</th><th>TCH</th><th>Optim.</th></tr></thead><tbody id="aforoFilas">${filasAforo(filas)}</tbody></table></div>
     ${renovacionHtml()}`;
   $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
-  const tr = $('renovFilas'); if (tr) tr.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); });
+  $('tabMas').querySelectorAll('.renov-filas').forEach(tb => tb.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); }));
   $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
   $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
   $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
@@ -534,16 +534,28 @@ function renderAjustes() {
 function renovacionHtml() {
   const r = resumenRenovacion(); if (!r.n) return '';
   const d = v => v === null ? '—' : signo(v), t = v => v === null ? '—' : nf1.format(v);
+  // Dos tablas que caben en la pantalla, sin deslizar hacia los lados: qué se espera ganar y qué dice el histórico.
   return `<h3>Renovación propuesta</h3>
     <div class="cifras c4">${cifra('Lotes', nf0.format(r.n))}${cifra('Hectáreas', nf0.format(r.area))}${cifra('Estimado', nf1.format(r.est))}${cifra('Δ esperado', signo(r.dEsp), 'c-est')}</div>
-    <p class="pie">Delta esperado: contra las plantillas de la misma zona · ${signo(r.tonEsp, nf0)} t. Techo: contra el máximo histórico de cada lote · ${signo(r.dTecho)} t/ha · ${signo(r.tonTecho, nf0)} t.</p>
-    <div class="tabla ancha"><table><thead><tr><th>Zona</th><th>ha</th><th>Est.</th><th>Plant.</th><th>Δ esp.</th><th>Δ ton.</th><th>Máx.</th><th>Δ techo</th><th>Prom.</th><th>Lotes</th></tr></thead>
-      <tbody id="renovFilas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}"><td>${esc(f.zona)}</td><td>${nf0.format(f.area)}</td><td>${nf1.format(f.est)}</td><td>${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nf0)}</td><td>${t(f.max)}</td><td>${d(f.dTecho)}</td><td>${t(f.prom)}</td><td>${f.n}</td></tr>`).join('')}
-      <tr class="total"><td>Total</td><td>${nf0.format(r.area)}</td><td>${nf1.format(r.est)}</td><td></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nf0)}</td><td></td><td>${signo(r.dTecho)}</td><td></td><td>${r.n}</td></tr></tbody></table></div>
-    <p class="pie">Deslice la tabla para ver más columnas y toque una zona para ver sus lotes. Est. = TCH estimado · Plant. = plantillas de la zona · Máx. y Prom. = histórico del lote. Todo en t/ha, ponderado por área.</p>
+    <h4>Qué se espera al renovar</h4>
+    <div class="tabla compacta"><table><thead><tr><th>Zona</th><th>ha</th><th>Estim.</th><th>Plantillas</th><th>Δ t/ha</th><th>Δ ton.</th></tr></thead>
+      <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}"><td>${esc(f.zona)}</td><td>${nf0.format(f.area)}</td><td>${nf1.format(f.est)}</td><td>${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nf0)}</td></tr>`).join('')}
+      <tr class="total"><td>Total</td><td>${nf0.format(r.area)}</td><td>${nf1.format(r.est)}</td><td></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nf0)}</td></tr></tbody></table></div>
+    <p class="pie">Estim. = TCH estimado del lote. Plantillas = TCH estimado de las plantillas de la misma zona. Δ = diferencia entre ambos.</p>
+    <h4>Histórico de esos lotes (techo)</h4>
+    <div class="tabla compacta"><table><thead><tr><th>Zona</th><th>Lotes</th><th>Prom.</th><th>Máximo</th><th>Δ t/ha</th><th>Δ ton.</th></tr></thead>
+      <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}"><td>${esc(f.zona)}</td><td>${f.n}</td><td>${t(f.prom)}</td><td>${t(f.max)}</td><td><b>${d(f.dTecho)}</b></td><td>${f.max === null ? '—' : signo(f.tonTecho, nf0)}</td></tr>`).join('')}
+      <tr class="total"><td>Total</td><td>${r.n}</td><td></td><td></td><td><b>${signo(r.dTecho)}</b></td><td>${signo(r.tonTecho, nf0)}</td></tr></tbody></table></div>
+    <p class="pie">Prom. y Máximo = TCH histórico de cada lote. Δ = máximo histórico menos el estimado. Todo en t/ha, ponderado por área. Toque una zona para ver sus lotes.</p>
     <button type="button" class="btn sec ancho" onclick="verRenovacionMapa()">${ico('map')} Ver lotes a renovar en el mapa</button>`;
 }
-function verRenovacionMapa() { mostrarTab('mapa'); setColorear('renovacion'); temaFiltro = 'Renovar'; capaLotes.setStyle(estiloFeat); pintarLeyenda(); }
+function verRenovacionMapa() {
+  mostrarTab('mapa'); cerrarCard(); soltarSeguimiento();
+  setColorear('renovacion'); temaFiltro = 'Renovar'; capaLotes.setStyle(estiloFeat); pintarLeyenda();
+  let bb = null; // encuadra todos los lotes a renovar
+  Object.values(LOTES).forEach(l => { if (l.renovar && l.bbox) bb = bb ? [Math.min(bb[0], l.bbox[0]), Math.min(bb[1], l.bbox[1]), Math.max(bb[2], l.bbox[2]), Math.max(bb[3], l.bbox[3])] : l.bbox.slice(); });
+  if (bb) map.fitBounds(boundsDe(bb), margenes(90, 40));
+}
 function abrirRenovZona(zona) {
   const f = resumenRenovacion().filas.find(x => x.zona === zona); if (!f) return;
   const orden = f.lotes.slice().sort((a, b) => (deltaEsperado(b) ?? -1e9) * (b.areaAforo || 0) - (deltaEsperado(a) ?? -1e9) * (a.areaAforo || 0));
