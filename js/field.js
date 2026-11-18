@@ -12,7 +12,7 @@ function obsFilaHtml(o) {
   const pend = esPendiente(o);
   return `<div class="obs sev-${esc(String(o.severidad || '').toLowerCase())}${o.resuelto ? ' resuelta' : ''}"><div class="obs-cab"><b>${esc(o.categoria)} · ${esc(o.severidad)}</b><small>${esc(fechaHora(o.fecha_hora))}${o.photo_id ? ' · 📷' : ''}</small></div>
     <p>${esc(o.nota || 'Sin nota')}</p>${o.resuelto ? `<p class="pie">✔ Resuelto el ${esc(fechaHora(o.resuelto))}</p>` : ''}
-    <div class="obs-acc">${pend ? `<button type="button" class="ok" onclick="obsResolver('${esc(o.id)}',true)">✔ Resuelto</button>` : o.resuelto ? `<button type="button" onclick="obsResolver('${esc(o.id)}',false)">↺ Reabrir</button>` : ''}<button type="button" onclick="abrirRegistro('${esc(o.codlote)}','${esc(o.id)}')">✎ Editar</button><button type="button" onclick="compartirRegistro('${esc(o.id)}')">↗ Compartir</button><button type="button" onclick="obsBorrar('${esc(o.id)}')">🗑</button></div></div>`;
+    <div class="obs-acc">${pend ? `<button type="button" class="ok" onclick="obsResolver('${esc(o.id)}',true)">✔ Resuelto</button>` : o.resuelto ? `<button type="button" onclick="obsResolver('${esc(o.id)}',false)">↺ Reabrir</button>` : ''}<button type="button" onclick="abrirRegistro('${esc(o.codlote)}','${esc(o.id)}')">✎ Editar</button>${o.pos_fuente === 'gps' ? `<button type="button" onclick="compartirRegistro('${esc(o.id)}')">↗ Compartir</button>` : ''}<button type="button" onclick="obsBorrar('${esc(o.id)}')">🗑</button></div></div>`;
 }
 function obsResolver(id, resuelto) {
   const arr = obsTodas(), o = arr.find(x => x.id === id); if (!o) return;
@@ -58,7 +58,9 @@ function nuevoRegistro() { const d = loteDestino(); if (d) abrirRegistro(d.cod);
 function registroRapido(cat) {
   const d = loteDestino();
   if (!d) { elegirLote('¿En qué lote? · ' + cat, cod => { destinoManual = cod; registroRapido(cat); }); return; }
-  const l = LOTES[d.cod], pos = posicionRegistro(d.cod), arr = obsTodas(), ahora = new Date().toISOString();
+  const g = gpsParaRegistro(d.cod);
+  if (!g.ok) { if (g.activar) iniciarGps(false); toast(g.txt, {tipo: 'mal', ms: 6000}); return; }
+  const l = LOTES[d.cod], pos = g.pos, arr = obsTodas(), ahora = new Date().toISOString();
   const o = {id: 'OBS-' + Date.now(), fecha_hora: ahora, codlote: d.cod, hacienda_productor: l.hac, tablon: selFeat && selFeat._cod === d.cod ? selFeat.properties.Tablon || '' : '',
     categoria: cat, severidad: 'Media', nota: '', lat: pos.lat, lng: pos.lng, precision_m: pos.acc, pos_fuente: pos.fuente, usuario: S.tecnico || 'CASUR Maps', photo_id: '', photo_name: '', photo_id2: ''};
   arr.push(o); if (!obsGuardar(arr)) return;
@@ -74,13 +76,16 @@ async function abrirRegistro(cod, id = '') {
   reg = {cod, id, fotos: [null, null], ids: o ? [o.photo_id || '', o.photo_id2 || ''] : ['', ''], sev: o ? o.severidad : 'Media'};
   abrirHoja((o ? 'Editar registro · ' : 'Registrar en ') + 'lote ' + cod, `
     <p class="pie">${esc(l.hac)}${selFeat && selFeat._cod === cod && selFeat.properties.Tablon ? ' · tablón ' + esc(selFeat.properties.Tablon) : ''}</p>
+    ${o ? `<div class="nota est-neutro">${o.pos_fuente === 'gps' ? '📍 Se conserva la posición GPS original del registro.' : 'Registro anterior sin posición GPS: se puede editar, pero no compartir como hallazgo.'}</div>` : '<div id="regGps" class="nota est-neutro">Comprobando GPS…</div>'}
     <label class="campo">Categoría<select id="regCat">${CATEGORIAS.map(c => `<option ${o && o.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
     <div class="campo">Severidad<div class="segmento" id="regSev">${['Baja', 'Media', 'Alta'].map(s => `<button type="button" data-v="${s}" class="${reg.sev === s ? 'activo' : ''}">${s}</button>`).join('')}</div></div>
     <label class="campo">Nota<textarea id="regNota" rows="3" placeholder="Qué se observó…">${esc(o ? o.nota : '')}</textarea></label>
     <button type="button" class="btn ter ancho" id="regVoz">🎤 Dictar nota</button>
     <div class="fotos">${[0, 1].map(i => `<label class="foto" id="regFotoL${i}"><input type="file" accept="image/*" capture="environment" data-i="${i}"><span>📷 Foto ${i + 1}</span></label>`).join('')}</div>
     <label class="campo">Técnico<input id="regTec" type="text" value="${esc((o && o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : '') || S.tecnico)}" placeholder="Su nombre (se guarda para la próxima vez)"></label>
-    <div class="acciones"><button type="button" class="btn pri" onclick="guardarRegistro(false)">Guardar</button><button type="button" class="btn sec" onclick="guardarRegistro(true)">Guardar y compartir</button></div>`, 'alta');
+    <p class="pie">En severidad alta la foto es obligatoria.</p>
+    <div class="acciones"><button type="button" class="btn pri reg-guardar" onclick="guardarRegistro(false)">Guardar</button>${!o || o.pos_fuente === 'gps' ? '<button type="button" class="btn sec reg-guardar" onclick="guardarRegistro(true)">Guardar y compartir</button>' : ''}</div>`, 'alta');
+  if (!o) { if (GPS.watch === null) iniciarGps(false); vigilarGpsRegistro(); }
   $('regSev').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; reg.sev = b.dataset.v; $('regSev').querySelectorAll('button').forEach(x => x.classList.toggle('activo', x === b)); });
   $('hojaBody').querySelectorAll('.foto input').forEach(inp => inp.addEventListener('change', async () => {
     const f = inp.files && inp.files[0], i = Number(inp.dataset.i); if (!f) return;
@@ -103,20 +108,41 @@ function alternarDictado() {
   try { _dictado.start(); b.textContent = '⏹ Detener dictado'; } catch (_) { _dictado = null; }
 }
 function detenerDictado() { if (_dictado) { try { _dictado.stop(); } catch (_) {} _dictado = null; } }
-/* Posición del registro: el GPS si el técnico está en el lote (o a menos de 30 m); si no, el centroide. */
-function posicionRegistro(cod) {
+/* Un hallazgo solo se registra georreferenciado: GPS con precisión de 30 m o mejor y el técnico dentro del lote
+   o a menos de 50 m. Así la coordenada guardada es donde realmente se hizo el registro. */
+const REG_ACC_MAX = 30, REG_DIST_MAX = 50;
+function gpsParaRegistro(cod) {
   const l = LOTES[cod], f = GPS.fix;
-  if (f && l && l.feats.some(ft => contiene(ft, f.lng, f.lat) || distFeatM(ft, f.lng, f.lat) <= 30)) return {lat: f.lat, lng: f.lng, acc: f.acc, fuente: 'gps'};
-  const c = (selFeat && selFeat._cod === cod ? centroideFeat(selFeat) : null) || centroideLote(l);
-  return c ? {lat: c[0], lng: c[1], acc: '', fuente: 'centroide'} : {lat: '', lng: '', acc: '', fuente: ''};
+  if (!l || !l.feats.length) return {ok: false, txt: 'Este lote no tiene polígono en el mapa; no se puede georreferenciar.'};
+  if (GPS.watch === null || !f) return {ok: false, activar: true, txt: 'Active el GPS: el hallazgo debe quedar georreferenciado.'};
+  if (Date.now() - (f.reloj || 0) > 30000) return {ok: false, txt: 'Esperando una lectura reciente del GPS…'};
+  if (f.acc > REG_ACC_MAX) return {ok: false, txt: `Precisión ±${f.acc} m. Espere a tener ±${REG_ACC_MAX} m o mejor (cielo despejado, sin moverse).`};
+  let d = Infinity;
+  for (const ft of l.feats) { if (contiene(ft, f.lng, f.lat)) { d = 0; break; } d = Math.min(d, distFeatM(ft, f.lng, f.lat)); }
+  if (d > REG_DIST_MAX) return {ok: false, txt: `Usted está a ${fmtDist(d)} del lote ${cod}. Debe estar dentro o a menos de ${REG_DIST_MAX} m.`};
+  return {ok: true, txt: `GPS ±${f.acc} m · ${d === 0 ? 'dentro del lote' : 'a ' + Math.round(d) + ' m del lote'}`, pos: {lat: +f.lat.toFixed(6), lng: +f.lng.toFixed(6), acc: f.acc, fuente: 'gps'}};
+}
+let _regGpsT = null;
+function vigilarGpsRegistro() {
+  clearInterval(_regGpsT);
+  const tic = () => {
+    const el = $('regGps'); if (!el || !reg || reg.id) { clearInterval(_regGpsT); return; }
+    const g = gpsParaRegistro(reg.cod);
+    el.className = 'nota ' + (g.ok ? 'est-bien' : 'est-mal'); el.textContent = (g.ok ? '📍 ' : '⚠ ') + g.txt;
+    document.querySelectorAll('.reg-guardar').forEach(b => { b.disabled = !g.ok; });
+  };
+  tic(); _regGpsT = setInterval(tic, 1000);
 }
 async function guardarRegistro(compartir) {
   if (!reg) return;
   detenerDictado();
   const arr = obsTodas(), prev = reg.id ? arr.find(x => x.id === reg.id) : null, l = LOTES[reg.cod], ahora = new Date().toISOString();
   S.tecnico = $('regTec').value.trim(); guardarAjustes();
-  const pos = prev ? {lat: prev.lat, lng: prev.lng, acc: prev.precision_m, fuente: prev.pos_fuente || ''} : posicionRegistro(reg.cod);
   const ids = reg.ids.slice();
+  if (reg.sev === 'Alta' && !reg.fotos[0] && !reg.fotos[1] && !ids[0] && !ids[1]) { toast('Severidad alta: agregue al menos una foto como evidencia.', {tipo: 'mal', ms: 5000}); return; }
+  let pos;
+  if (prev) pos = {lat: prev.lat, lng: prev.lng, acc: prev.precision_m, fuente: prev.pos_fuente || ''};
+  else { const g = gpsParaRegistro(reg.cod); if (!g.ok) { toast(g.txt, {tipo: 'mal', ms: 6000}); return; } pos = g.pos; }
   for (let i = 0; i < 2; i++) if (reg.fotos[i]) {
     ids[i] = ids[i] || `FOTO-${Date.now()}-${i}`;
     try { await fotoPut({id: ids[i], codlote: reg.cod, created_at: ahora, lat: pos.lat, lng: pos.lng, precision_m: pos.acc, mime: 'image/jpeg', file_name: `${reg.cod}_${ids[i]}.jpg`, data_url: reg.fotos[i]}); }
@@ -130,7 +156,7 @@ async function guardarRegistro(compartir) {
   });
   if (!prev) arr.push(o);
   if (!obsGuardar(arr)) return;
-  const id = o.id; reg = null; cerrarHoja(); refrescarVistas(); toast('Registro guardado en este teléfono.', {tipo: 'bien'});
+  const id = o.id; reg = null; clearInterval(_regGpsT); cerrarHoja(); refrescarVistas(); toast('Hallazgo guardado en este teléfono.', {tipo: 'bien'});
   if (compartir) compartirRegistro(id);
 }
 function obsBorrar(id) {
@@ -138,7 +164,7 @@ function obsBorrar(id) {
   const [o] = arr.splice(i, 1); obsGuardar(arr); refrescarVistas();
   toast('Registro borrado.', {accion: 'Deshacer', alAccion: () => { const a = obsTodas(); a.splice(Math.min(i, a.length), 0, o); obsGuardar(a); refrescarVistas(); }});
 }
-function refrescarVistas() { pintarInsignia(); if (selCod) renderCard(); const t = document.body.dataset.tab; if (t === 'bitacora') renderBitacora(); if (t === 'visita') renderVisita(); }
+function refrescarVistas() { pintarInsignia(); pintarRegistros(); if (selCod) renderCard(); const t = document.body.dataset.tab; if (t === 'bitacora') renderBitacora(); if (t === 'visita') renderVisita(); }
 
 /* ── Tarjeta de hallazgo como imagen para WhatsApp ── */
 function rr(ctx, x, y, w, h, r, fill, stroke) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); } }
@@ -149,7 +175,11 @@ async function imagenRegistro(o) {
   const fotos = (await Promise.all([o.photo_id, o.photo_id2].filter(Boolean).map(id => fotoGet(id).then(r => cargarImg(r && r.data_url)).catch(() => null)))).filter(Boolean);
   const W = 1200, c = document.createElement('canvas'), ctx = c.getContext('2d');
   ctx.font = '600 30px Arial'; const lineas = textoEnLineas(ctx, o.nota || 'Sin nota.', W - 200).slice(0, 12);
-  const hNota = 90 + lineas.length * 42, hFoto = fotos.length ? 470 : 0, H = 640 + hNota + hFoto + 110;
+  // Cada foto se muestra completa (sin recortar ni deformar), centrada en su espacio.
+  const cajaW = fotos.length === 2 ? (W - 180) / 2 : W - 160, cajaMaxH = fotos.length === 2 ? 560 : 820;
+  const tam = fotos.map(img => { const k = Math.min(cajaW / img.width, cajaMaxH / img.height); return {w: img.width * k, h: img.height * k}; });
+  const altoFotos = tam.length ? Math.max(...tam.map(t => t.h)) : 0;
+  const hNota = 90 + lineas.length * 42, hFoto = fotos.length ? altoFotos + 30 : 0, H = 640 + hNota + hFoto + 110;
   c.width = W; c.height = H; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#f4f7f5'; ctx.fillRect(0, 0, W, H);
   const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#0b7f3a'); g.addColorStop(1, '#005baa'); rr(ctx, 40, 40, W - 80, 150, 26, g);
@@ -170,24 +200,133 @@ async function imagenRegistro(o) {
   ctx.fillStyle = '#0f172a'; ctx.font = '600 30px Arial'; lineas.forEach((ln, i) => ctx.fillText(ln, 104, y + 90 + i * 42));
   y += hNota;
   if (fotos.length) {
-    const pw = fotos.length === 2 ? (W - 180) / 2 : W - 160, ph = hFoto - 30;
-    fotos.forEach((img, i) => { const x = 80 + i * (pw + 20), k = Math.max(pw / img.width, ph / img.height), sw = pw / k, sh = ph / k; ctx.save(); rr(ctx, x, y, pw, ph, 20, '#eee'); ctx.clip(); ctx.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, x, y, pw, ph); ctx.restore(); });
+    fotos.forEach((img, i) => { const t = tam[i], x = 80 + i * (cajaW + 20) + (cajaW - t.w) / 2, yy = y + (altoFotos - t.h) / 2; ctx.save(); rr(ctx, x, yy, t.w, t.h, 16, '#eee'); ctx.clip(); ctx.drawImage(img, x, yy, t.w, t.h); ctx.restore(); });
     y += hFoto;
   }
   ctx.fillStyle = '#64748b'; ctx.font = '600 24px Arial';
-  ctx.fillText(`${new Date(o.fecha_hora).toLocaleString('es-NI')}  ·  ${o.lat !== '' ? Number(o.lat).toFixed(6) + ', ' + Number(o.lng).toFixed(6) : 'sin coordenadas'}${o.pos_fuente === 'gps' ? ' (GPS ±' + o.precision_m + ' m)' : o.pos_fuente === 'centroide' ? ' (centro del lote)' : ''}`, 80, y + 44);
+  ctx.fillText(`${new Date(o.fecha_hora).toLocaleString('es-NI')}  ·  ${o.lat !== '' ? Number(o.lat).toFixed(6) + ', ' + Number(o.lng).toFixed(6) : 'sin coordenadas'}${o.pos_fuente === 'gps' ? ' · registrado en sitio, GPS ±' + o.precision_m + ' m' : ''}`, 80, y + 44);
   return new Promise(res => c.toBlob(res, 'image/jpeg', 0.9));
 }
-function textoRegistro(o) {
-  return `CASUR Maps · Lote ${o.codlote}\n${o.hacienda_productor || ''}\n${o.categoria} · severidad ${o.severidad}\n${o.nota || ''}\n${o.lat !== '' ? 'Ubicación: https://www.google.com/maps?q=' + Number(o.lat).toFixed(6) + ',' + Number(o.lng).toFixed(6) + '\n' : ''}Abrir lote: ${enlaceLote(o.codlote)}`;
-}
+/* Se comparte solo la imagen del hallazgo, sin texto ni enlaces. */
 async function compartirRegistro(id) {
   const o = obsTodas().find(x => x.id === id); if (!o) return;
-  const blob = await imagenRegistro(o).catch(() => null), txt = textoRegistro(o);
-  const file = blob ? new File([blob], `registro_lote_${o.codlote}.jpg`, {type: 'image/jpeg'}) : null;
-  if (file && navigator.canShare && navigator.canShare({files: [file]})) { try { await navigator.share({files: [file], text: txt, title: 'Lote ' + o.codlote}); return; } catch (e) { if (e.name === 'AbortError') return; } }
-  if (blob) descargarBlob(file.name, blob);
-  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+  if (o.pos_fuente !== 'gps') { toast('Este registro no tiene posición GPS: no se puede compartir como hallazgo.', {tipo: 'mal'}); return; }
+  const blob = await imagenRegistro(o).catch(() => null);
+  if (!blob) { toast('No se pudo generar la imagen.', {tipo: 'mal'}); return; }
+  await compartirImagen(blob, `hallazgo_lote_${o.codlote}_${o.fecha_hora.slice(0, 10)}.jpg`);
+}
+async function compartirImagen(blob, nombre) {
+  const file = new File([blob], nombre, {type: 'image/jpeg'});
+  if (navigator.canShare && navigator.canShare({files: [file]})) { try { await navigator.share({files: [file]}); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  descargarBlob(nombre, blob); toast('Imagen descargada: adjúntela en WhatsApp.', {tipo: 'bien'});
+}
+
+/* ── Hallazgos pendientes como puntos en el mapa, en la coordenada donde se registraron ── */
+let capaReg = null;
+function pintarRegistros() {
+  if (!map) return;
+  if (!capaReg) capaReg = L.layerGroup().addTo(map);
+  capaReg.clearLayers();
+  if (!S.verRegistros) return;
+  obsTodas().filter(esPendiente).forEach(o => {
+    let ll = o.lat !== '' && Number.isFinite(Number(o.lat)) ? [Number(o.lat), Number(o.lng)] : centroideLote(LOTES[codKey(o.codlote)]);
+    if (!ll) return;
+    L.marker(ll, {icon: L.divIcon({className: 'pin-reg sev-' + String(o.severidad).toLowerCase(), html: '<span>!</span>', iconSize: [26, 26], iconAnchor: [13, 13]}), zIndexOffset: 700})
+      .on('click', () => seleccionarLote(o.codlote, {full: true})).addTo(capaReg);
+  });
+}
+
+/* ── Historial del lote: visitas en las que realmente se estuvo en él ── */
+function visitasDeLote(cod) {
+  return [...VISITAS, ...(VISITA ? [VISITA] : [])].filter(v => v.lotes && v.lotes[cod] && v.lotes[cod].visitado).sort((a, b) => new Date(b.inicio) - new Date(a.inicio));
+}
+function historialHtml(cod) {
+  const vs = visitasDeLote(cod), todas = obsTodas().filter(o => codKey(o.codlote) === cod);
+  if (!vs.length) return '<h4>Historial de visitas</h4><p class="vacio">Sin visitas registradas en este teléfono.</p>';
+  const hace = Math.round((hoyLocal() - parseISO(vs[0].inicio.slice(0, 10))) / 86400000);
+  return `<h4>Historial de visitas</h4><div class="nota ${hace > 30 ? 'est-medio' : 'est-neutro'}">Última visita ${hace === 0 ? 'hoy' : hace === 1 ? 'ayer' : 'hace ' + hace + ' días'} · ${vs.length} visita(s) en total</div>` +
+    vs.slice(0, 4).map(v => { const a = new Date(v.inicio).getTime(), b = new Date(v.fin || Date.now()).getTime(), n = todas.filter(o => { const t = new Date(o.fecha_hora).getTime(); return t >= a && t <= b; }).length;
+      return `<div class="hist-fila"><b>${esc(new Date(v.inicio).toLocaleDateString('es-NI', {day: '2-digit', month: 'short', year: 'numeric'}))}</b><span>${n ? n + ' hallazgo(s)' : 'sin hallazgos'}${v.tecnico ? ' · ' + esc(v.tecnico) : ''}${v.fin ? '' : ' · en curso'}</span></div>`; }).join('');
+}
+
+/* ── Fotos del lote por fecha y comparación entre dos fechas ── */
+let cmp = null;
+async function fotosDeLote(cod) { return (await fotoAll().catch(() => [])).filter(r => codKey(r.codlote) === cod && r.data_url).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))); }
+async function pintarFotosLote(cod) {
+  const fotos = await fotosDeLote(cod), box = $('fotosLote'); if (!box || selCod !== cod) return;
+  if (!fotos.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<h4>Fotos del lote (${fotos.length})</h4><div class="tira">${fotos.slice(-12).map(f => `<button type="button" onclick="compararFotos('${esc(cod)}','${esc(f.id)}')"><img src="${f.data_url}" alt=""><span>${esc(new Date(f.created_at).toLocaleDateString('es-NI', {day: '2-digit', month: 'short'}))}</span></button>`).join('')}</div>
+    ${fotos.length > 1 ? `<button type="button" class="btn sec ancho" onclick="compararFotos('${esc(cod)}')">⇄ Comparar dos fechas</button>` : ''}`;
+}
+async function compararFotos(cod, id = '') {
+  const lista = await fotosDeLote(cod); if (!lista.length) return;
+  const i = id ? Math.max(0, lista.findIndex(f => f.id === id)) : lista.length - 1;
+  cmp = {cod, lista, a: lista.length > 1 ? (id ? (i === 0 ? 1 : 0) : 0) : 0, b: i};
+  if (cmp.a > cmp.b) [cmp.a, cmp.b] = [cmp.b, cmp.a];
+  abrirHoja('Fotos · lote ' + cod, '<div id="cmpBox"></div>', 'alta'); pintarComparacion();
+}
+function pintarComparacion() {
+  const box = $('cmpBox'); if (!box || !cmp) return;
+  const obs = obsTodas(), panel = (k, rot) => { const f = cmp.lista[cmp[k]], o = obs.find(x => x.photo_id === f.id || x.photo_id2 === f.id);
+    return `<div class="cmp-panel"><div class="cmp-cab"><button type="button" onclick="cmpMover('${k}',-1)" ${cmp[k] === 0 ? 'disabled' : ''} aria-label="Foto anterior">◀</button><span><b>${rot}</b> · ${esc(new Date(f.created_at).toLocaleDateString('es-NI', {day: '2-digit', month: 'short', year: 'numeric'}))}<small>${o ? esc(o.categoria) + ' · ' + esc(o.severidad) : ''} · ${cmp[k] + 1} de ${cmp.lista.length}</small></span><button type="button" onclick="cmpMover('${k}',1)" ${cmp[k] === cmp.lista.length - 1 ? 'disabled' : ''} aria-label="Foto siguiente">▶</button></div><img src="${f.data_url}" alt="Foto del lote"></div>`; };
+  const dias = Math.round((new Date(cmp.lista[cmp.b].created_at) - new Date(cmp.lista[cmp.a].created_at)) / 86400000);
+  box.innerHTML = cmp.lista.length > 1 ? `<p class="pie">${Math.abs(dias)} día(s) entre las dos fotos. Use las flechas para cambiar cada una.</p><div class="cmp">${panel('a', 'Antes')}${panel('b', 'Después')}</div>` : `<div class="cmp">${panel('b', 'Foto')}</div>`;
+}
+function cmpMover(k, d) { cmp[k] = Math.max(0, Math.min(cmp.lista.length - 1, cmp[k] + d)); pintarComparacion(); }
+
+/* ── Cierre de visita: resumen en pantalla e imagen para enviar por WhatsApp ── */
+function datosVisita(v) {
+  const ini = new Date(v.inicio).getTime(), fin = new Date(v.fin || Date.now()).getTime(), cods = lotesVisitados(v);
+  const obs = obsTodas().filter(o => { const t = new Date(o.fecha_hora).getTime(); return t >= ini && t <= fin; });
+  return {ini, fin, cods, obs, pend: obs.filter(esPendiente), alta: obs.filter(o => o.severidad === 'Alta')};
+}
+function cierreVisita(v) {
+  const d = datosVisita(v);
+  abrirHoja('Visita finalizada', `
+    <div class="cifras c4">${cifra('Duración', fmtDur(d.fin - d.ini))}${cifra('Distancia', fmtDist(v.dist || 0))}${cifra('Lotes', d.cods.length)}${cifra('Hallazgos', d.obs.length, d.alta.length ? 'c-alerta' : '')}</div>
+    ${d.cods.length ? `<p class="pie">Lotes visitados: ${d.cods.map(esc).join(' · ')}</p>` : '<p class="vacio">No se registró ningún lote visitado (hay que estar dentro del lote).</p>'}
+    ${d.pend.length ? `<h4>Pendientes abiertos (${d.pend.length})</h4>${d.pend.slice(0, 6).map(o => `<div class="hist-fila"><b>Lote ${esc(o.codlote)}</b><span>${esc(o.categoria)} · ${esc(o.severidad)}${o.nota ? ' · ' + esc(o.nota.slice(0, 60)) : ''}</span></div>`).join('')}` : '<div class="nota est-bien">Sin pendientes abiertos en esta visita.</div>'}
+    <button type="button" class="btn pri ancho grande" onclick="compartirVisita('${esc(v.id)}')">↗ Enviar resumen por WhatsApp</button>
+    <div class="acciones"><button type="button" class="btn sec" onclick="reporteVisita(visitaPorId('${esc(v.id)}'))">📄 Reporte completo</button><button type="button" class="btn ter" onclick="cerrarHoja()">Cerrar</button></div>`, 'alta');
+}
+async function compartirVisita(id) { const v = visitaPorId(id); if (!v) return; const blob = await imagenVisita(v); if (blob) compartirImagen(blob, `visita_${v.inicio.slice(0, 10)}.jpg`); }
+function imagenVisita(v) {
+  const d = datosVisita(v), W = 1200, filas = d.cods.slice(0, 14), pend = d.pend.slice(0, 8);
+  const feats = d.cods.flatMap(c => (LOTES[c] || {feats: []}).feats), pts = v.pts || [];
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const ext = (x, y) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; };
+  pts.forEach(p => ext(p.lng, p.lat)); feats.forEach(f => { ext(f.bbox[0], f.bbox[1]); ext(f.bbox[2], f.bbox[3]); });
+  const hayMapa = x0 < Infinity, k = hayMapa ? Math.cos((y0 + y1) / 2 * Math.PI / 180) : 1, mw = Math.max((x1 - x0) * k, 1e-5), mh = Math.max(y1 - y0, 1e-5);
+  const esc2 = hayMapa ? Math.min((W - 200) / mw, 520 / mh) : 0, hMapa = hayMapa ? mh * esc2 + 60 : 0;
+  const H = 470 + hMapa + (filas.length ? 70 + filas.length * 46 : 0) + (pend.length ? 80 + pend.length * 46 : 60) + 90;
+  const c = document.createElement('canvas'), ctx = c.getContext('2d'); c.width = W; c.height = H;
+  ctx.fillStyle = '#f4f7f5'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#0b7f3a'); g.addColorStop(1, '#005baa'); rr(ctx, 40, 40, W - 80, 150, 26, g);
+  ctx.fillStyle = '#fff'; ctx.font = '900 54px Arial'; ctx.fillText('CASUR Maps', 80, 112); ctx.font = '600 28px Arial'; ctx.fillText('Resumen de visita de campo', 80, 158);
+  rr(ctx, 40, 215, W - 80, H - 255, 26, '#fff', '#dbe5dd');
+  ctx.fillStyle = '#0f172a'; ctx.font = '900 44px Arial'; ctx.fillText(new Date(v.inicio).toLocaleDateString('es-NI', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'}), 80, 290);
+  ctx.fillStyle = '#64748b'; ctx.font = '600 28px Arial'; ctx.fillText(`${new Date(v.inicio).toLocaleTimeString('es-NI', {hour: '2-digit', minute: '2-digit'})} a ${new Date(d.fin).toLocaleTimeString('es-NI', {hour: '2-digit', minute: '2-digit'})}${v.tecnico || S.tecnico ? ' · ' + (v.tecnico || S.tecnico) : ''}`, 80, 332);
+  [['DURACIÓN', fmtDur(d.fin - d.ini)], ['DISTANCIA', fmtDist(v.dist || 0)], ['LOTES', String(d.cods.length)], ['HALLAZGOS', `${d.obs.length}${d.alta.length ? ' (' + d.alta.length + ' altos)' : ''}`]].forEach((b, i) => {
+    const x = 80 + i * 262; rr(ctx, x, 360, 248, 92, 18, '#f8fafc', '#e2e8f0'); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 18, 392); ctx.fillStyle = i === 3 && d.alta.length ? '#b91c1c' : '#0f172a'; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 18, 432);
+  });
+  let y = 480;
+  if (hayMapa) {
+    const ox = 100 + ((W - 200) - mw * esc2) / 2, X = x => ox + (x - x0) * k * esc2, Y = yy => y + 20 + (y1 - yy) * esc2;
+    feats.forEach(f => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates).forEach(p => { ctx.beginPath(); p.forEach(r => { r.forEach((q, i) => i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))); ctx.closePath(); }); ctx.fillStyle = '#e8f6ee'; ctx.fill('evenodd'); ctx.strokeStyle = '#0b7f3a'; ctx.lineWidth = 2; ctx.stroke(); }));
+    if (pts.length > 1) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(X(p.lng), Y(p.lat)) : ctx.moveTo(X(p.lng), Y(p.lat))); ctx.strokeStyle = '#0a66ff'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.stroke(); }
+    d.pend.forEach(o => { if (o.lat === '') return; ctx.beginPath(); ctx.arc(X(Number(o.lng)), Y(Number(o.lat)), 11, 0, 7); ctx.fillStyle = o.severidad === 'Alta' ? '#d7191c' : '#d9a521'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); });
+    ctx.font = '800 20px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#0b3a66';
+    d.cods.forEach(cd => { const ce = centroideLote(LOTES[cd]); if (ce) ctx.fillText(cd, X(ce[1]), Y(ce[0]) + 7); }); ctx.textAlign = 'left';
+    y += hMapa;
+  }
+  if (filas.length) {
+    ctx.fillStyle = '#0b7f3a'; ctx.font = '900 28px Arial'; ctx.fillText(`Lotes visitados (${d.cods.length})`, 80, y + 40); y += 70;
+    filas.forEach(cd => { const l = LOTES[cd] || {}, n = d.obs.filter(o => codKey(o.codlote) === cd).length; ctx.fillStyle = '#0f172a'; ctx.font = '800 28px Arial'; ctx.fillText(cd, 80, y + 26); ctx.font = '500 26px Arial'; ctx.fillStyle = '#334155'; ctx.fillText(String(l.hac || '').slice(0, 34), 230, y + 26); ctx.fillStyle = n ? '#b45309' : '#64748b'; ctx.textAlign = 'right'; ctx.fillText(n ? n + ' hallazgo(s)' : 'sin hallazgos', W - 80, y + 26); ctx.textAlign = 'left'; y += 46; });
+  }
+  ctx.fillStyle = '#0b7f3a'; ctx.font = '900 28px Arial'; ctx.fillText(pend.length ? `Pendientes abiertos (${d.pend.length})` : 'Sin pendientes abiertos', 80, y + 46); y += 80;
+  pend.forEach(o => { ctx.fillStyle = o.severidad === 'Alta' ? '#b91c1c' : '#b45309'; ctx.font = '800 26px Arial'; ctx.fillText(`Lote ${o.codlote} · ${o.categoria} · ${o.severidad}`, 80, y + 6); ctx.fillStyle = '#334155'; ctx.font = '500 24px Arial'; ctx.textAlign = 'right'; ctx.fillText(String(o.nota || '').slice(0, 38), W - 80, y + 6); ctx.textAlign = 'left'; y += 46; });
+  ctx.fillStyle = '#64748b'; ctx.font = '600 22px Arial'; ctx.fillText('Generado por CASUR Maps · ' + new Date().toLocaleString('es-NI'), 80, H - 60);
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.9));
 }
 
 /* ── Pestañas ── */
@@ -205,13 +344,14 @@ function renderBitacora() {
   const semana = todas.filter(o => Date.now() - new Date(o.fecha_hora) < 7 * 86400000).length;
   $('tabBitacora').innerHTML = `<header><h2>Bitácora</h2></header>
     <div class="destino ${d ? '' : 'sin'}"><span>${d ? `Se guardará en <b>lote ${esc(d.cod)}</b> · ${esc(LOTES[d.cod].hac)} <small>(${esc(d.por)})</small>` : 'Sin lote: active el GPS dentro de un lote o elija uno.'}</span><button type="button" onclick="elegirLote('Elegir lote', c => { destinoManual = c; renderBitacora(); })">${d ? 'Cambiar' : 'Elegir lote'}</button>${destinoManual ? '<button type="button" onclick="destinoManual=\'\';renderBitacora()" aria-label="Volver al lote del GPS">✕</button>' : ''}</div>
-    <button type="button" class="btn pri ancho grande" onclick="nuevoRegistro()">＋ Nuevo registro con nota y foto</button>
+    <button type="button" class="btn pri ancho grande" onclick="nuevoRegistro()">＋ Nuevo hallazgo con nota y foto</button>
+    <p class="pie">Todo hallazgo se guarda con GPS: debe estar en el lote, con precisión de ${REG_ACC_MAX} m o mejor.</p>
     <h3>Registro rápido · un toque</h3>
     <div class="rapidos">${[['Maleza', '🌿'], ['Plaga', '🐛'], ['Riego', '💧'], ['Sequía', '☀'], ['Despoblación', '▫'], ['Acceso', '🚧'], ['Cosecha', '🚜'], ['Seguimiento', '👁']].map(c => `<button type="button" onclick="registroRapido('${c[0]}')"><i>${c[1]}</i>${c[0]}</button>`).join('')}</div>
     <h3>Registros</h3>
     <div class="cifras c3">${cifra('Pendientes', pend.length, pend.length ? 'c-alerta' : '')}${cifra('Últimos 7 días', semana)}${cifra('Total', todas.length)}</div>
     <div class="segmento filtro">${[['pendientes', 'Pendientes'], ['todos', 'Todos'], ['resueltos', 'Resueltos']].map(f => `<button type="button" class="${bitFiltro === f[0] ? 'activo' : ''}" onclick="bitFiltro='${f[0]}';renderBitacora()">${f[1]}</button>`).join('')}</div>
-    ${lista.length ? lista.map(o => `<div class="bloque"><button type="button" class="obs-lote-btn" onclick="seleccionarLote('${esc(o.codlote)}',{zoom:true})">Lote ${esc(o.codlote)} · ${esc(o.hacienda_productor || '')} ›</button>${obsFilaHtml(o)}</div>`).join('')
+    ${lista.length ? lista.map(o => `<div class="bloque"><div class="fila-ir plana"><button type="button" class="obs-lote-btn" onclick="seleccionarLote('${esc(o.codlote)}',{zoom:true})">Lote ${esc(o.codlote)} · ${esc(o.hacienda_productor || '')} ›</button>${llegarHtml(o.codlote, o.lat, o.lng)}</div>${obsFilaHtml(o)}</div>`).join('')
       : `<p class="vacio">${todas.length ? (bitFiltro === 'pendientes' ? 'Sin pendientes: todo lo de severidad media o alta está resuelto.' : 'Nada en este filtro.') : 'Aún no hay registros. Use un botón de registro rápido o "＋ Nuevo registro".'}</p>`}
     ${todas.length ? `<h3>Respaldo</h3><p class="pie">Los registros viven solo en este teléfono. Exporte para respaldarlos.</p><div class="acciones"><button type="button" class="btn sec" onclick="exportarZip()">⬇ ZIP con fotos</button><button type="button" class="btn ter" onclick="exportarCsv()">CSV</button></div>
       <button type="button" class="btn peligro ancho" onclick="vaciarBitacora()">Borrar toda la bitácora y sus fotos</button>` : ''}`;
@@ -234,7 +374,7 @@ async function vaciarBitacora() {
 let _visT = null;
 function renderVisita() {
   const v = VISITA, el = $('tabVisita'); clearInterval(_visT);
-  const lista = LISTA.length ? `<div class="lista-lotes">${LISTA.map((x, i) => `<div class="fila-lista ${x.hecho ? 'hecho' : ''}"><button type="button" class="chk" onclick="listaMarcar('${esc(x.cod)}',${!x.hecho})">${x.hecho ? '✓' : i + 1}</button><button type="button" class="ir" onclick="seleccionarLote('${esc(x.cod)}',{zoom:true})"><b>${esc(x.cod)}</b><span>${esc((LOTES[x.cod] || {}).hac || '')}</span></button><button type="button" class="quitar" onclick="listaToggle('${esc(x.cod)}')" aria-label="Quitar">✕</button></div>`).join('')}</div><button type="button" class="btn ter ancho" onclick="listaVaciar()">Vaciar lista</button>`
+  const lista = LISTA.length ? `<div class="lista-lotes">${LISTA.map((x, i) => `<div class="fila-lista ${x.hecho ? 'hecho' : ''}"><button type="button" class="chk" onclick="listaMarcar('${esc(x.cod)}',${!x.hecho})">${x.hecho ? '✓' : i + 1}</button><button type="button" class="ir" onclick="seleccionarLote('${esc(x.cod)}',{zoom:true})"><b>${esc(x.cod)}</b><span>${esc((LOTES[x.cod] || {}).hac || '')}</span></button>${llegarHtml(x.cod)}<button type="button" class="quitar" onclick="listaToggle('${esc(x.cod)}')" aria-label="Quitar">✕</button></div>`).join('')}</div><button type="button" class="btn ter ancho" onclick="listaVaciar()">Vaciar lista</button>`
     : '<p class="vacio">Agregue lotes desde su tarjeta con "＋ Lista del día". Aparecen numerados en el mapa y se marcan solos al visitarlos.</p>';
   const previas = VISITAS.slice(-10).reverse().map(x => `<div class="bloque"><b>${esc(new Date(x.inicio).toLocaleString('es-NI', {dateStyle: 'medium', timeStyle: 'short'}))}</b><p>${fmtDur(new Date(x.fin || x.inicio) - new Date(x.inicio))} · ${fmtDist(x.dist || 0)} · ${lotesVisitados(x).length} lote(s)</p>
       <div class="obs-acc"><button type="button" onclick="reporteVisita(visitaPorId('${x.id}'))">📄 Reporte</button><button type="button" onclick="verRuta(visitaPorId('${x.id}'))">🗺 Ruta</button><button type="button" onclick="csvVisita(visitaPorId('${x.id}'))">CSV</button><button type="button" onclick="borrarVisita('${x.id}')">🗑</button></div></div>`).join('');
@@ -392,7 +532,8 @@ async function iniciar() {
     $('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) mostrarTab(b.dataset.tab); });
     $('medirDeshacer').addEventListener('click', medirDeshacer); $('medirFin').addEventListener('click', medirCerrar);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarHoja(); cerrarSugerencias(); } });
-    pintarGpsBtn(); pintarLista(); actualizarRed(); pintarInsignia();
+    pintarGpsBtn(); pintarLista(); actualizarRed(); pintarInsignia(); pintarRegistros();
+    $('btnPanorama').addEventListener('click', alternarPanorama);
     $('loader').hidden = true; map.invalidateSize();
     await cargarVisitas();
     const lote = new URLSearchParams(location.search).get('lote'), conEnlace = lote && LOTES[codKey(lote)];

@@ -1,5 +1,23 @@
 # Cambios
 
+## V181126B · 18-nov-2026
+**Hallazgos georreferenciados**
+- Un hallazgo solo se guarda con GPS: precisión de 30 m o mejor y el técnico dentro del lote o a menos de 50 m. Aplica también al registro rápido. El formulario muestra el estado del GPS en vivo.
+- En severidad alta la foto es obligatoria.
+- Al compartir se envía solo la imagen, sin texto ni enlaces. Los registros antiguos sin GPS no se comparten.
+- La imagen muestra cada foto completa y centrada, sin recorte; lleva la coordenada, la precisión y la hora.
+
+**Mapa**
+- Hallazgos pendientes como puntos de color en la coordenada donde se registraron.
+- Botón de vista de alrededores (aleja a unos 2 km y vuelve con otro toque).
+- "Llegar" sale de la fila principal de la tarjeta y pasa al buscador, la lista del día, los lotes de una finca y los pendientes (al punto exacto). Queda también dentro de "Más".
+- El seguimiento del GPS respeta el zoom elegido.
+
+**Lote y visita**
+- Historial de visitas del lote y días desde la última.
+- Fotos del lote por fecha y comparación de dos fechas.
+- Cierre de visita con resumen e imagen para enviar por WhatsApp.
+
 ## V181126 · 18-nov-2026
 **Datos**
 - El Excel de estimados trae `Fecha Cosecha`: 949 lotes con fecha programada (11-dic-2026 a 15-abr-2027).

@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126';
+const APP_VERSION = 'V181126B';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -40,6 +40,13 @@ function haversineM(lon1, lat1, lon2, lat2) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
+const urlLlegar = (lat, lng) => `https://www.google.com/maps/dir/?api=1&destination=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}&travelmode=driving`;
+/* Enlace "Llegar" para las listas donde se elige a qué lote ir. */
+function llegarHtml(cod, lat, lng) {
+  if (lat === undefined || lat === '' || lat === null) { const c = centroideLote(LOTES[cod]); if (!c) return ''; lat = c[0]; lng = c[1]; }
+  return `<a class="llegar" href="${urlLlegar(lat, lng)}" target="_blank" rel="noopener" aria-label="Cómo llegar al lote ${esc(cod)}">➤</a>`;
+}
+
 /* ── Avisos no bloqueantes (reemplazan a alert) ── */
 function toast(msg, opts = {}) {
   const box = $('toasts'); if (!box) return;
@@ -59,7 +66,7 @@ function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.
 const AJUSTES_KEY = 'casur_maps_ajustes_v2';
 const S = Object.assign({
   tecnico: '', gpsPerfil: 'vehiculo', tema: 'campo', pantalla: true, vibrar: true,
-  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true
+  colorear: 'ninguno', etiquetas: true, base: 'claro', selModo: 'lote', orientacion: 'rumbo', gpsAuto: true, verRegistros: true
 }, leerLS(AJUSTES_KEY, {}));
 function guardarAjustes() { escribirLS(AJUSTES_KEY, S); }
 function leerLS(k, def) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? def; } catch (_) { return def; } }

@@ -66,6 +66,7 @@ function initMap() {
   capaMedir = L.layerGroup().addTo(map);
   map.on('click', e => { if (medir.modo) medirPunto(e.latlng); });
   map.on('moveend zoomend', () => { etiquetasDebounce(); guardarVista(); });
+  map.on('zoomend', () => { if (panorama && map.getZoom() > 15.5) { panorama = null; pintarPanorama(); } });
   map.on('dragstart', () => { if (typeof GPS !== 'undefined') { GPS.siguiendo = false; pintarGpsBtn(); } });
   const v = leerLS(VISTA_KEY, null);
   if (v && Number.isFinite(v.lat)) map.setView([v.lat, v.lng], v.z); else map.fitBounds(capaLotes.getBounds(), margenes(20, 20, 10));
@@ -221,7 +222,7 @@ function sugerir(q) {
     items = [...ini, ...cont].slice(0, 9);
     if (!items.length) { box.innerHTML = '<div class="sug-vacio">Sin coincidencias. Pruebe con el código o parte del nombre.</div>'; box.classList.add('abierta'); return; }
   }
-  box.innerHTML = items.map(it => `<button type="button" data-tipo="${it.tipo}" data-cod="${esc(it.cod)}"><i>${it.tipo === 'finca' ? '🏡' : (it.ico || '▣')}</i><span><b>${esc(it.cod)}</b><small>${esc(it.txt)}${it.sinMapa ? ' · sin polígono' : ''}</small></span></button>`).join('');
+  box.innerHTML = items.map(it => `<div class="sug-fila"><button type="button" data-tipo="${it.tipo}" data-cod="${esc(it.cod)}"><i>${it.tipo === 'finca' ? '🏡' : (it.ico || '▣')}</i><span><b>${esc(it.cod)}</b><small>${esc(it.txt)}${it.sinMapa ? ' · sin polígono' : ''}</small></span></button>${it.tipo === 'lote' ? llegarHtml(it.cod) : ''}</div>`).join('');
   box.classList.add('abierta');
 }
 function cerrarSugerencias() { $('sugerencias').classList.remove('abierta'); }
@@ -301,8 +302,7 @@ function renderCard() {
     </div>
     ${corteHtml(l)}
     <div class="acciones">
-      ${llegar ? `<a class="btn pri" href="${llegar}" target="_blank" rel="noopener">➤ Llegar</a>` : '<button class="btn pri" disabled>➤ Llegar</button>'}
-      <button type="button" class="btn sec" onclick="abrirRegistro(selCod)">＋ Registrar</button>
+      <button type="button" class="btn pri" onclick="abrirRegistro(selCod)">＋ Registrar hallazgo</button>
       <button type="button" class="btn ter" onclick="cardAlternar()">${cardFull ? 'Menos ▾' : 'Más ▴'}</button>
     </div>
     <div class="solo-full">
@@ -319,6 +319,7 @@ function renderCard() {
       ${tab ? '<p class="pie">TCH, edad, variedad y aforo son datos del lote completo; el shape no los trae por tablón.</p>' : ''}
       ${tablones.length > 1 ? `<h4>Tablones del lote (${tablones.length})</h4><div class="tablones">${tablones.map(f => `<button type="button" class="${f === selFeat ? 'activo' : ''}" onclick="seleccionarTablon(${f._i})"><b>${esc(f.properties.Tablon || '—')}</b><span>${nf.format(f.properties.Area_Ha)} ha</span></button>`).join('')}</div>` : ''}
       <div class="mini-acc">
+        ${llegar ? `<a href="${llegar}" target="_blank" rel="noopener">➤ Llegar</a>` : ''}
         <button type="button" onclick="favToggle(selCod)">${fav ? '★ Favorito' : '☆ Favorito'}</button>
         <button type="button" onclick="listaToggle(selCod)">${enLista ? '✓ En lista del día' : '＋ Lista del día'}</button>
         <button type="button" onclick="fijarLote(selCod)">${fijado ? '🔒 Lote fijado' : '🔓 Fijar lote'}</button>
@@ -328,10 +329,12 @@ function renderCard() {
       </div>
       <button type="button" class="btn sec ancho" id="btnHist" onclick="alternarHistorico()">📈 Histórico TCH</button>
       <div id="histBox" hidden></div>
+      ${typeof historialHtml === 'function' ? historialHtml(l.cod) : ''}
+      <div id="fotosLote"></div>
       <div class="obs-lote"><h4>Registros de este lote</h4>${obs.length ? obs.slice(0, 5).map(obsFilaHtml).join('') : '<p class="vacio">Sin registros en este teléfono.</p>'}</div>
       <p class="pie">Datos al ${fechaCorta(META.datos_al || META.generated_at)}${META.cortes_al ? ' · cortes al ' + fechaCorta(META.cortes_al) : ' · sin cortes de la zafra en curso'}</p>
     </div>`;
-  ajustarCard(); if (cardFull) el.scrollTop = 0;
+  ajustarCard(); if (cardFull) { el.scrollTop = 0; if (typeof pintarFotosLote === 'function') pintarFotosLote(l.cod); }
 }
 function cardAlternar() { cardFull = !cardFull; renderCard(); }
 function acercarLote() { const l = LOTES[selCod]; if (l && l.bbox) { soltarSeguimiento(); cardFull = false; renderCard(); map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, 290), {maxZoom: 19})); } }
@@ -377,7 +380,7 @@ function abrirFinca(nombre, zoom = false) {
     <div class="cifras c4">${cifra('Lotes', ls.length)}${cifra('Área molienda', nf0.format(area) + ' ha')}${cifra('Toneladas', nf0.format(ton))}${cifra('TCH pond.', area ? nf1.format(ton / area) : '—', 'c-est')}</div>
     <p class="pie">Área total ${nf0.format(areaTot)} ha · optimista ${area ? nf1.format(tonOpt / area) : '—'} t/ha · ${rojos.length} lote(s) en prioridad alta</p>
     <div class="acciones"><button type="button" class="btn sec" onclick="verFincaEnMapa('${esc(nombre).replace(/'/g, '&#39;')}')">⌕ Ver en mapa</button></div>
-    <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${fmtN(l.area, ' ha', nf1)} · ant. ${fmtN(l.tchAnt, '', nf0)} · est. ${l.tchEst > 0 ? nf0.format(l.tchEst) : '—'}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>`; }).join('')}</div>`);
+    <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${fmtN(l.area, ' ha', nf1)} · ant. ${fmtN(l.tchAnt, '', nf0)} · est. ${l.tchEst > 0 ? nf0.format(l.tchEst) : '—'}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`);
   if (zoom) verFincaEnMapa(nombre, false);
 }
 function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) { soltarSeguimiento(); map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); } }
@@ -390,14 +393,26 @@ function abrirCapas() {
     <h4>Al tocar el mapa, seleccionar</h4><div class="opciones col" id="opSel">${op('sel', 'lote', 'Lote completo', S.selModo !== 'tablon')}${op('sel', 'tablon', 'Tablón', S.selModo === 'tablon')}</div>
     <h4>Colorear lotes por</h4><div class="opciones col" id="opColor">${Object.entries(TEMAS).map(([k, t]) => op('color', k, t.t, S.colorear === k)).join('')}</div>
     <label class="interruptor"><input type="checkbox" id="opEtq" ${S.etiquetas ? 'checked' : ''}><span>Mostrar etiquetas (finca · lote · tablón según acercamiento)</span></label>
+    <label class="interruptor"><input type="checkbox" id="opReg" ${S.verRegistros ? 'checked' : ''}><span>Mostrar en el mapa los hallazgos pendientes</span></label>
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">📏 Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">⬡ Medir área</button></div>
     <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();soltarSeguimiento();map.fitBounds(capaLotes.getBounds(),margenes(20,20,10))">🗺 Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">⬇ Guardar esta zona sin señal</button></div>`);
   $('opBase').addEventListener('change', e => setBase(e.target.value));
   $('opSel').addEventListener('change', e => setSelModo(e.target.value));
+  $('opReg').addEventListener('change', e => { S.verRegistros = e.target.checked; guardarAjustes(); pintarRegistros(); });
   $('opColor').addEventListener('change', e => setColorear(e.target.value));
   $('opEtq').addEventListener('change', e => { S.etiquetas = e.target.checked; guardarAjustes(); actualizarEtiquetas(); });
 }
+
+/* ── Vista de alrededores: aleja lo justo para ver los lotes vecinos (~2 km) y vuelve con otro toque ── */
+let panorama = null;
+function alternarPanorama() {
+  if (panorama) { const p = panorama; panorama = null; map.setView(GPS.siguiendo && GPS.fix ? [GPS.fix.lat, GPS.fix.lng] : p.c, p.z); pintarPanorama(); return; }
+  const z = map.getZoom(), c = map.getCenter(), foco = GPS.siguiendo && GPS.fix ? [GPS.fix.lat, GPS.fix.lng] : (selCod && centroideLote(LOTES[selCod])) || c;
+  if (z <= 14) { toast('Ya está en vista amplia.'); return; }
+  panorama = {c, z}; map.setView(foco, Math.min(15, z - 2)); pintarPanorama();
+}
+function pintarPanorama() { const b = $('btnPanorama'); if (b) { b.classList.toggle('activo', !!panorama); b.setAttribute('aria-label', panorama ? 'Volver a la vista anterior' : 'Ver alrededores'); } }
 
 /* ── Medición de distancia y área ── */
 const medir = {modo: null, pts: []};

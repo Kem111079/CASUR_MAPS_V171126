@@ -16,7 +16,7 @@ function gpsIcono() {
 }
 function gpsBoton() {
   if (GPS.watch === null) return iniciarGps();
-  if (GPS.fix) { GPS.siguiendo = true; map.setView([GPS.fix.lat, GPS.fix.lng], Math.max(map.getZoom(), 17)); orientar(); pintarGpsBtn(); }
+  if (GPS.fix) { GPS.siguiendo = true; panorama = null; pintarPanorama(); map.setView([GPS.fix.lat, GPS.fix.lng], Math.max(map.getZoom(), 17)); orientar(); pintarGpsBtn(); }
 }
 /* Rumbo arriba: con seguimiento activo el mapa gira para que el sentido de avance quede hacia arriba. */
 function orientar() {
@@ -58,12 +58,14 @@ function alPosicion(pos) {
     h = (Math.atan2(y, x) / r + 360) % 360;
   }
   if (h !== null) { const d = Number.isFinite(GPS.rumbo) ? ((h - GPS.rumbo + 540) % 360) - 180 : 0; GPS.rumbo = Number.isFinite(GPS.rumbo) ? (Math.abs(d) < 3 ? GPS.rumbo : (GPS.rumbo + d * .3 + 360) % 360) : h; }
-  GPS.fix = {lat, lng, acc, v, t};
+  const primera = !GPS.fix;
+  GPS.fix = {lat, lng, acc, v, t, reloj: Date.now()};
   if (!GPS.marcador) {
     GPS.circulo = L.circle([lat, lng], {radius: acc, color: '#0a66ff', weight: 1, fillOpacity: .08, interactive: false}).addTo(map);
     GPS.marcador = L.marker([lat, lng], {icon: gpsIcono(), interactive: false, zIndexOffset: 1000}).addTo(map);
   } else { GPS.marcador.setLatLng([lat, lng]); GPS.marcador.setIcon(gpsIcono()); GPS.circulo.setLatLng([lat, lng]); GPS.circulo.setRadius(acc); }
-  if (GPS.siguiendo) map.setView([lat, lng], Math.max(map.getZoom(), 17), {animate: true});
+  // Solo la primera lectura acerca el mapa; después se respeta el zoom elegido (por ejemplo, la vista de alrededores).
+  if (GPS.siguiendo) map.setView([lat, lng], primera ? Math.max(map.getZoom(), 17) : map.getZoom(), {animate: true});
   if (v === null || v > 0.8 || Number.isFinite(c.heading)) orientar(); // parado no se gira: el rumbo del GPS no es fiable
   const cands = detectarLote();
   visitaPunto(cands);
@@ -149,8 +151,8 @@ async function finalizarVisita() {
   if (!VISITA) return;
   VISITA.fin = new Date().toISOString(); VISITAS.push(VISITA);
   await kvSet('visitas', VISITAS); await kvSet('visita_activa', null);
-  const n = lotesVisitados(VISITA).length; VISITA = null; soltarPantalla(); dibujarRuta(null); renderVisita();
-  toast(`Visita guardada: ${n} lote(s).`, {tipo: 'bien', accion: 'Reporte', alAccion: () => reporteVisita(VISITAS[VISITAS.length - 1])});
+  const v = VISITA; VISITA = null; soltarPantalla(); dibujarRuta(null); renderVisita(); if (selCod) renderCard();
+  cierreVisita(v);
 }
 const lotesVisitados = v => Object.keys(v.lotes || {}).filter(c => v.lotes[c].visitado);
 function visitaPunto(cands) {
