@@ -1,5 +1,10 @@
 # Cambios
 
+## V181126I · 18-nov-2026
+- La app se actualiza sola al abrir cuando hay versión nueva (si no hay nada a medio hacer); si llega más tarde, avisa con un botón.
+- Revisa si hay versión nueva cada vez que vuelve a primer plano.
+- Botón "Actualizar la app" en Resumen → Datos, que fuerza la descarga de la versión publicada sin tocar registros, fotos ni visitas.
+
 ## V181126H · 18-nov-2026
 - **Plantilla única de datos** `fuentes/Plantilla_CASUR_Maps.xlsx`: una fila por lote con aforo, fecha de cosecha, número de corte, renovación, zafra anterior y cortes reales. Reemplaza a los tres Excel sueltos.
 - Las herramientas leen la plantilla; toneladas y grupo de corte se calculan solos.
