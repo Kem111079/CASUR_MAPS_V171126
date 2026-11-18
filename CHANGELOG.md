@@ -1,5 +1,28 @@
 # Cambios
 
+## V181126C · 18-nov-2026
+**Diseño**
+- Iconos de línea propios en lugar de emojis (se ven igual en todos los teléfonos).
+- Transiciones suaves en tarjeta, hojas, pestañas y avisos; realce breve del lote al seleccionarlo.
+- Tarjeta más limpia: "Lote / Tablón" pasa a un control pequeño junto al título; estado y fecha de corte en una sola línea.
+- Pantalla de carga y pestaña Resumen con la marca CASUR.
+
+**Visualización**
+- Mini gráfico del TCH de las últimas zafras en la tarjeta.
+- Al seleccionar un lote, el resto del mapa se atenúa.
+- Leyenda interactiva: tocar una clase la resalta en el mapa.
+- Progreso de la visita sobre el mapa (lotes de la lista visitados, tiempo y distancia).
+
+**Práctica**
+- Tema automático (oscuro de 7 p. m. a 5:30 a. m.) y tamaño de letra ajustable.
+- Deslizar un registro: derecha lo resuelve, izquierda lo borra.
+- Acciones principales fijas abajo en Bitácora y Visita; el botón de capas baja a la esquina inferior izquierda.
+
+**Interactiva**
+- Toque largo sobre un lote: menú rápido (registrar, lista del día, llegar, ficha, favorito, tablón).
+- Tablero del día al abrir: pendientes, lotes por visitar, cortes de la semana y fechas vencidas.
+- Confirmación animada al guardar.
+
 ## V181126B · 18-nov-2026
 **Hallazgos georreferenciados**
 - Un hallazgo solo se guarda con GPS: precisión de 30 m o mejor y el técnico dentro del lote o a menos de 50 m. Aplica también al registro rápido. El formulario muestra el estado del GPS en vivo.

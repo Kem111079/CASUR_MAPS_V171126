@@ -126,7 +126,7 @@ function abrirGps() {
     <div class="cifras c4">${cifra('Precisión', f ? '±' + f.acc + ' m' : '—')}${cifra('Velocidad', f && f.v !== null ? (f.v * 3.6).toFixed(0) + ' km/h' : '—')}${cifra('Rumbo', Number.isFinite(GPS.rumbo) ? Math.round(GPS.rumbo) + '°' : '—')}${cifra('Perfil', P.txt)}</div>
     ${f && f.acc > 30 ? '<div class="nota est-medio">Precisión baja: elija el lote de la lista o fíjelo desde la tarjeta.</div>' : ''}
     <h4>Lotes cercanos</h4><div class="lista-lotes">${lista}</div>
-    <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();detenerGps()">⏹ Detener GPS</button>${GPS.fijado ? `<button type="button" class="btn sec" onclick="fijarLote(GPS.fijado);cerrarHoja()">🔓 Liberar ${esc(GPS.fijado)}</button>` : ''}</div>`);
+    <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();detenerGps()">${ico('stop')} Detener GPS</button>${GPS.fijado ? `<button type="button" class="btn sec" onclick="fijarLote(GPS.fijado);cerrarHoja()">${ico('unlock')} Liberar ${esc(GPS.fijado)}</button>` : ''}</div>`);
 }
 
 /* ── Visita de campo (une "visita" y "recorrido"): ruta, distancia y lotes realmente pisados ── */
@@ -140,18 +140,19 @@ async function cargarVisitas() {
     await kvSet('visitas', VISITAS);
   }
   VISITA = await kvGet('visita_activa', null);
+  pintarProgreso();
   if (VISITA) { dibujarRuta(VISITA); pedirPantalla(); toast('Hay una visita en curso.', {accion: 'Ver', alAccion: () => mostrarTab('visita')}); }
 }
 function iniciarVisita() {
   if (VISITA) return;
   VISITA = {id: 'VIS-' + Date.now(), inicio: new Date().toISOString(), fin: null, pts: [], lotes: {}, dist: 0, tecnico: S.tecnico || ''};
-  kvSet('visita_activa', VISITA); iniciarGps(); pedirPantalla(); dibujarRuta(VISITA); renderVisita(); toast('Visita iniciada.', {tipo: 'bien'});
+  kvSet('visita_activa', VISITA); iniciarGps(); pedirPantalla(); dibujarRuta(VISITA); renderVisita(); pintarProgreso(); confirmar('Visita iniciada');
 }
 async function finalizarVisita() {
   if (!VISITA) return;
   VISITA.fin = new Date().toISOString(); VISITAS.push(VISITA);
   await kvSet('visitas', VISITAS); await kvSet('visita_activa', null);
-  const v = VISITA; VISITA = null; soltarPantalla(); dibujarRuta(null); renderVisita(); if (selCod) renderCard();
+  const v = VISITA; VISITA = null; pintarProgreso(); soltarPantalla(); dibujarRuta(null); renderVisita(); if (selCod) renderCard();
   cierreVisita(v);
 }
 const lotesVisitados = v => Object.keys(v.lotes || {}).filter(c => v.lotes[c].visitado);
@@ -171,6 +172,7 @@ function visitaPunto(cands) {
   });
   if (rutaLinea) rutaLinea.addLatLng([f.lat, f.lng]);
   if (VISITA.pts.length % 5 === 0) kvSet('visita_activa', VISITA);
+  pintarProgreso();
   if (document.body.dataset.tab === 'visita') renderVisita();
 }
 function dibujarRuta(v) {
@@ -182,17 +184,27 @@ function dibujarRuta(v) {
 function verRuta(v) { mostrarTab('mapa'); dibujarRuta(v); if (v && v.pts.length > 1) soltarSeguimiento();
   if (v && v.pts.length > 1) map.fitBounds(L.latLngBounds(v.pts.map(p => [p.lat, p.lng])), margenes(90, 40)); }
 
+/* Progreso de la visita sobre el mapa: lotes de la lista ya visitados y tiempo transcurrido. */
+function pintarProgreso() {
+  const el = $('chipVisita'); if (!el) return;
+  if (!VISITA) { el.hidden = true; return; }
+  const total = LISTA.length, hechos = LISTA.filter(x => x.hecho).length, n = lotesVisitados(VISITA).length;
+  el.hidden = false;
+  el.innerHTML = `<b>${ico('route')} Visita · ${total ? `${hechos} de ${total} lotes` : `${n} lote${n === 1 ? '' : 's'}`}</b><small>${fmtDur(Date.now() - new Date(VISITA.inicio))} · ${fmtDist(VISITA.dist)}</small>${total ? `<i><u style="width:${Math.round(hechos / total * 100)}%"></u></i>` : ''}`;
+}
+setInterval(() => { if (typeof VISITA !== 'undefined' && VISITA) pintarProgreso(); }, 30000);
+
 /* ── Lista de trabajo del día ── */
 let LISTA = leerLS(LISTA_KEY, []);
 const listaTiene = cod => LISTA.some(x => x.cod === cod);
-function listaGuardar() { escribirLS(LISTA_KEY, LISTA); pintarLista(); if (document.body.dataset.tab === 'visita') { const q = $('planQ') ? $('planQ').value : ''; renderVisita(); if (q) { $('planQ').value = q; planBuscar(q); } } if (selCod) renderCard(); }
+function listaGuardar() { escribirLS(LISTA_KEY, LISTA); pintarLista(); pintarProgreso(); if (document.body.dataset.tab === 'visita') { const q = $('planQ') ? $('planQ').value : ''; renderVisita(); if (q) { $('planQ').value = q; planBuscar(q); } } if (selCod) renderCard(); }
 function listaToggle(cod) { if (listaTiene(cod)) LISTA = LISTA.filter(x => x.cod !== cod); else LISTA.push({cod, hecho: false}); listaGuardar(); toast(listaTiene(cod) ? `Lote ${cod} agregado a la lista del día.` : `Lote ${cod} quitado de la lista.`); }
-function listaMarcar(cod, hecho) { const x = LISTA.find(i => i.cod === cod); if (x && x.hecho !== hecho) { x.hecho = hecho; listaGuardar(); if (hecho) toast(`✓ Lote ${cod} visitado.`, {tipo: 'bien'}); } }
+function listaMarcar(cod, hecho) { const x = LISTA.find(i => i.cod === cod); if (x && x.hecho !== hecho) { x.hecho = hecho; listaGuardar(); if (hecho) toast(`Lote ${cod} visitado.`, {tipo: 'bien'}); } }
 function listaVaciar() { LISTA = []; listaGuardar(); }
 function pintarLista() {
   if (!capaLista) return;
   capaLista.clearLayers();
-  LISTA.forEach((x, i) => { const c = centroideLote(LOTES[x.cod]); if (c) L.marker(c, {icon: L.divIcon({className: 'pin-lista' + (x.hecho ? ' hecho' : ''), html: `<span>${x.hecho ? '✓' : i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15]}), zIndexOffset: 500}).on('click', () => seleccionarLote(x.cod)).addTo(capaLista); });
+  LISTA.forEach((x, i) => { const c = centroideLote(LOTES[x.cod]); if (c) L.marker(c, {icon: L.divIcon({className: 'pin-lista' + (x.hecho ? ' hecho' : ''), html: `<span>${x.hecho ? ico('check') : i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15]}), zIndexOffset: 500}).on('click', () => seleccionarLote(x.cod)).addTo(capaLista); });
 }
 
 /* ── Pantalla encendida durante la visita ── */

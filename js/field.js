@@ -10,9 +10,9 @@ const obsDeLote = cod => obsTodas().filter(o => codKey(o.codlote) === cod).rever
 const fechaHora = iso => new Date(iso).toLocaleString('es-NI', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
 function obsFilaHtml(o) {
   const pend = esPendiente(o);
-  return `<div class="obs sev-${esc(String(o.severidad || '').toLowerCase())}${o.resuelto ? ' resuelta' : ''}"><div class="obs-cab"><b>${esc(o.categoria)} · ${esc(o.severidad)}</b><small>${esc(fechaHora(o.fecha_hora))}${o.photo_id ? ' · 📷' : ''}</small></div>
-    <p>${esc(o.nota || 'Sin nota')}</p>${o.resuelto ? `<p class="pie">✔ Resuelto el ${esc(fechaHora(o.resuelto))}</p>` : ''}
-    <div class="obs-acc">${pend ? `<button type="button" class="ok" onclick="obsResolver('${esc(o.id)}',true)">✔ Resuelto</button>` : o.resuelto ? `<button type="button" onclick="obsResolver('${esc(o.id)}',false)">↺ Reabrir</button>` : ''}<button type="button" onclick="abrirRegistro('${esc(o.codlote)}','${esc(o.id)}')">✎ Editar</button>${o.pos_fuente === 'gps' ? `<button type="button" onclick="compartirRegistro('${esc(o.id)}')">↗ Compartir</button>` : ''}<button type="button" onclick="obsBorrar('${esc(o.id)}')">🗑</button></div></div>`;
+  return `<div class="obs sev-${esc(String(o.severidad || '').toLowerCase())}${o.resuelto ? ' resuelta' : ''}"><div class="obs-cab"><b>${esc(o.categoria)} · ${esc(o.severidad)}</b><small>${esc(fechaHora(o.fecha_hora))}${o.photo_id ? ' · ' + ico('camera') : ''}</small></div>
+    <p>${esc(o.nota || 'Sin nota')}</p>${o.resuelto ? `<p class="pie">${ico('check')} Resuelto el ${esc(fechaHora(o.resuelto))}</p>` : ''}
+    <div class="obs-acc">${pend ? `<button type="button" class="ok" onclick="obsResolver('${esc(o.id)}',true)">${ico('check')} Resuelto</button>` : o.resuelto ? `<button type="button" onclick="obsResolver('${esc(o.id)}',false)">${ico('rotate')} Reabrir</button>` : ''}<button type="button" onclick="abrirRegistro('${esc(o.codlote)}','${esc(o.id)}')">${ico('edit')} Editar</button>${o.pos_fuente === 'gps' ? `<button type="button" onclick="compartirRegistro('${esc(o.id)}')">${ico('share')} Compartir</button>` : ''}<button type="button" onclick="obsBorrar('${esc(o.id)}')">${ico('trash')}</button></div></div>`;
 }
 function obsResolver(id, resuelto) {
   const arr = obsTodas(), o = arr.find(x => x.id === id); if (!o) return;
@@ -65,6 +65,7 @@ function registroRapido(cat) {
     categoria: cat, severidad: 'Media', nota: '', lat: pos.lat, lng: pos.lng, precision_m: pos.acc, pos_fuente: pos.fuente, usuario: S.tecnico || 'CASUR Maps', photo_id: '', photo_name: '', photo_id2: ''};
   arr.push(o); if (!obsGuardar(arr)) return;
   vibrar(40); refrescarVistas();
+  confirmar(`${cat} · lote ${d.cod}`);
   toast(`${cat} registrado en lote ${d.cod}.`, {tipo: 'bien', accion: 'Nota / foto', ms: 8000, alAccion: () => abrirRegistro(d.cod, o.id)});
 }
 
@@ -76,12 +77,12 @@ async function abrirRegistro(cod, id = '') {
   reg = {cod, id, fotos: [null, null], ids: o ? [o.photo_id || '', o.photo_id2 || ''] : ['', ''], sev: o ? o.severidad : 'Media'};
   abrirHoja((o ? 'Editar registro · ' : 'Registrar en ') + 'lote ' + cod, `
     <p class="pie">${esc(l.hac)}${selFeat && selFeat._cod === cod && selFeat.properties.Tablon ? ' · tablón ' + esc(selFeat.properties.Tablon) : ''}</p>
-    ${o ? `<div class="nota est-neutro">${o.pos_fuente === 'gps' ? '📍 Se conserva la posición GPS original del registro.' : 'Registro anterior sin posición GPS: se puede editar, pero no compartir como hallazgo.'}</div>` : '<div id="regGps" class="nota est-neutro">Comprobando GPS…</div>'}
+    ${o ? `<div class="nota est-neutro">${o.pos_fuente === 'gps' ? ico('pin') + ' Se conserva la posición GPS original del registro.' : 'Registro anterior sin posición GPS: se puede editar, pero no compartir como hallazgo.'}</div>` : '<div id="regGps" class="nota est-neutro">Comprobando GPS…</div>'}
     <label class="campo">Categoría<select id="regCat">${CATEGORIAS.map(c => `<option ${o && o.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
     <div class="campo">Severidad<div class="segmento" id="regSev">${['Baja', 'Media', 'Alta'].map(s => `<button type="button" data-v="${s}" class="${reg.sev === s ? 'activo' : ''}">${s}</button>`).join('')}</div></div>
     <label class="campo">Nota<textarea id="regNota" rows="3" placeholder="Qué se observó…">${esc(o ? o.nota : '')}</textarea></label>
-    <button type="button" class="btn ter ancho" id="regVoz">🎤 Dictar nota</button>
-    <div class="fotos">${[0, 1].map(i => `<label class="foto" id="regFotoL${i}"><input type="file" accept="image/*" capture="environment" data-i="${i}"><span>📷 Foto ${i + 1}</span></label>`).join('')}</div>
+    <button type="button" class="btn ter ancho" id="regVoz">${ico('mic')} Dictar nota</button>
+    <div class="fotos">${[0, 1].map(i => `<label class="foto" id="regFotoL${i}"><input type="file" accept="image/*" capture="environment" data-i="${i}"><span>${ico('camera')} Foto ${i + 1}</span></label>`).join('')}</div>
     <label class="campo">Técnico<input id="regTec" type="text" value="${esc((o && o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : '') || S.tecnico)}" placeholder="Su nombre (se guarda para la próxima vez)"></label>
     <p class="pie">En severidad alta la foto es obligatoria.</p>
     <div class="acciones"><button type="button" class="btn pri reg-guardar" onclick="guardarRegistro(false)">Guardar</button>${!o || o.pos_fuente === 'gps' ? '<button type="button" class="btn sec reg-guardar" onclick="guardarRegistro(true)">Guardar y compartir</button>' : ''}</div>`, 'alta');
@@ -92,10 +93,10 @@ async function abrirRegistro(cod, id = '') {
     try { reg.fotos[i] = await comprimirFoto(f); pintarFotoReg(i, reg.fotos[i]); } catch (e) { toast(e.message, {tipo: 'mal'}); }
   }));
   $('regVoz').addEventListener('click', alternarDictado);
-  if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) $('regVoz').textContent = '🎤 Use el micrófono del teclado para dictar';
+  if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) $('regVoz').innerHTML = ico('mic') + ' Use el micrófono del teclado para dictar';
   for (let i = 0; i < 2; i++) if (reg.ids[i]) { const r = await fotoGet(reg.ids[i]).catch(() => null); if (r && reg && reg.id === id) pintarFotoReg(i, r.data_url); }
 }
-function pintarFotoReg(i, url) { const l = $('regFotoL' + i); if (l) { l.style.backgroundImage = `url(${url})`; l.classList.add('con-foto'); l.querySelector('span').textContent = '↻ Cambiar'; } }
+function pintarFotoReg(i, url) { const l = $('regFotoL' + i); if (l) { l.style.backgroundImage = `url(${url})`; l.classList.add('con-foto'); l.querySelector('span').innerHTML = ico('rotate') + ' Cambiar'; } }
 function alternarDictado() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition, b = $('regVoz');
   if (!SR) { $('regNota').focus(); return; }
@@ -104,8 +105,8 @@ function alternarDictado() {
   _dictado = new SR(); _dictado.lang = 'es-NI'; _dictado.interimResults = true; _dictado.continuous = true;
   _dictado.onresult = e => { let t = ''; for (const r of e.results) t += r[0].transcript; const n = $('regNota'); if (n) n.value = (base ? base + ' ' : '') + t.trim(); };
   _dictado.onerror = e => { toast(e.error === 'network' ? 'El dictado necesita señal.' : 'No se pudo usar el micrófono.', {tipo: 'mal'}); detenerDictado(); };
-  _dictado.onend = () => { _dictado = null; if (b) b.textContent = '🎤 Dictar nota'; };
-  try { _dictado.start(); b.textContent = '⏹ Detener dictado'; } catch (_) { _dictado = null; }
+  _dictado.onend = () => { _dictado = null; if (b) b.innerHTML = ico('mic') + ' Dictar nota'; };
+  try { _dictado.start(); b.innerHTML = ico('stop') + ' Detener dictado'; } catch (_) { _dictado = null; }
 }
 function detenerDictado() { if (_dictado) { try { _dictado.stop(); } catch (_) {} _dictado = null; } }
 /* Un hallazgo solo se registra georreferenciado: GPS con precisión de 30 m o mejor y el técnico dentro del lote
@@ -128,7 +129,7 @@ function vigilarGpsRegistro() {
   const tic = () => {
     const el = $('regGps'); if (!el || !reg || reg.id) { clearInterval(_regGpsT); return; }
     const g = gpsParaRegistro(reg.cod);
-    el.className = 'nota ' + (g.ok ? 'est-bien' : 'est-mal'); el.textContent = (g.ok ? '📍 ' : '⚠ ') + g.txt;
+    el.className = 'nota ' + (g.ok ? 'est-bien' : 'est-mal'); el.innerHTML = ico(g.ok ? 'pin' : 'alert') + ' ' + esc(g.txt);
     document.querySelectorAll('.reg-guardar').forEach(b => { b.disabled = !g.ok; });
   };
   tic(); _regGpsT = setInterval(tic, 1000);
@@ -156,7 +157,7 @@ async function guardarRegistro(compartir) {
   });
   if (!prev) arr.push(o);
   if (!obsGuardar(arr)) return;
-  const id = o.id; reg = null; clearInterval(_regGpsT); cerrarHoja(); refrescarVistas(); toast('Hallazgo guardado en este teléfono.', {tipo: 'bien'});
+  const id = o.id; reg = null; clearInterval(_regGpsT); cerrarHoja(); refrescarVistas(); confirmar('Hallazgo guardado');
   if (compartir) compartirRegistro(id);
 }
 function obsBorrar(id) {
@@ -256,7 +257,7 @@ async function pintarFotosLote(cod) {
   const fotos = await fotosDeLote(cod), box = $('fotosLote'); if (!box || selCod !== cod) return;
   if (!fotos.length) { box.innerHTML = ''; return; }
   box.innerHTML = `<h4>Fotos del lote (${fotos.length})</h4><div class="tira">${fotos.slice(-12).map(f => `<button type="button" onclick="compararFotos('${esc(cod)}','${esc(f.id)}')"><img src="${f.data_url}" alt=""><span>${esc(new Date(f.created_at).toLocaleDateString('es-NI', {day: '2-digit', month: 'short'}))}</span></button>`).join('')}</div>
-    ${fotos.length > 1 ? `<button type="button" class="btn sec ancho" onclick="compararFotos('${esc(cod)}')">⇄ Comparar dos fechas</button>` : ''}`;
+    ${fotos.length > 1 ? `<button type="button" class="btn sec ancho" onclick="compararFotos('${esc(cod)}')">${ico('swap')} Comparar dos fechas</button>` : ''}`;
 }
 async function compararFotos(cod, id = '') {
   const lista = await fotosDeLote(cod); if (!lista.length) return;
@@ -268,7 +269,7 @@ async function compararFotos(cod, id = '') {
 function pintarComparacion() {
   const box = $('cmpBox'); if (!box || !cmp) return;
   const obs = obsTodas(), panel = (k, rot) => { const f = cmp.lista[cmp[k]], o = obs.find(x => x.photo_id === f.id || x.photo_id2 === f.id);
-    return `<div class="cmp-panel"><div class="cmp-cab"><button type="button" onclick="cmpMover('${k}',-1)" ${cmp[k] === 0 ? 'disabled' : ''} aria-label="Foto anterior">◀</button><span><b>${rot}</b> · ${esc(new Date(f.created_at).toLocaleDateString('es-NI', {day: '2-digit', month: 'short', year: 'numeric'}))}<small>${o ? esc(o.categoria) + ' · ' + esc(o.severidad) : ''} · ${cmp[k] + 1} de ${cmp.lista.length}</small></span><button type="button" onclick="cmpMover('${k}',1)" ${cmp[k] === cmp.lista.length - 1 ? 'disabled' : ''} aria-label="Foto siguiente">▶</button></div><img src="${f.data_url}" alt="Foto del lote"></div>`; };
+    return `<div class="cmp-panel"><div class="cmp-cab"><button type="button" onclick="cmpMover('${k}',-1)" ${cmp[k] === 0 ? 'disabled' : ''} aria-label="Foto anterior">${ico('chevLeft')}</button><span><b>${rot}</b> · ${esc(new Date(f.created_at).toLocaleDateString('es-NI', {day: '2-digit', month: 'short', year: 'numeric'}))}<small>${o ? esc(o.categoria) + ' · ' + esc(o.severidad) : ''} · ${cmp[k] + 1} de ${cmp.lista.length}</small></span><button type="button" onclick="cmpMover('${k}',1)" ${cmp[k] === cmp.lista.length - 1 ? 'disabled' : ''} aria-label="Foto siguiente">${ico('chevRight')}</button></div><img src="${f.data_url}" alt="Foto del lote"></div>`; };
   const dias = Math.round((new Date(cmp.lista[cmp.b].created_at) - new Date(cmp.lista[cmp.a].created_at)) / 86400000);
   box.innerHTML = cmp.lista.length > 1 ? `<p class="pie">${Math.abs(dias)} día(s) entre las dos fotos. Use las flechas para cambiar cada una.</p><div class="cmp">${panel('a', 'Antes')}${panel('b', 'Después')}</div>` : `<div class="cmp">${panel('b', 'Foto')}</div>`;
 }
@@ -286,8 +287,8 @@ function cierreVisita(v) {
     <div class="cifras c4">${cifra('Duración', fmtDur(d.fin - d.ini))}${cifra('Distancia', fmtDist(v.dist || 0))}${cifra('Lotes', d.cods.length)}${cifra('Hallazgos', d.obs.length, d.alta.length ? 'c-alerta' : '')}</div>
     ${d.cods.length ? `<p class="pie">Lotes visitados: ${d.cods.map(esc).join(' · ')}</p>` : '<p class="vacio">No se registró ningún lote visitado (hay que estar dentro del lote).</p>'}
     ${d.pend.length ? `<h4>Pendientes abiertos (${d.pend.length})</h4>${d.pend.slice(0, 6).map(o => `<div class="hist-fila"><b>Lote ${esc(o.codlote)}</b><span>${esc(o.categoria)} · ${esc(o.severidad)}${o.nota ? ' · ' + esc(o.nota.slice(0, 60)) : ''}</span></div>`).join('')}` : '<div class="nota est-bien">Sin pendientes abiertos en esta visita.</div>'}
-    <button type="button" class="btn pri ancho grande" onclick="compartirVisita('${esc(v.id)}')">↗ Enviar resumen por WhatsApp</button>
-    <div class="acciones"><button type="button" class="btn sec" onclick="reporteVisita(visitaPorId('${esc(v.id)}'))">📄 Reporte completo</button><button type="button" class="btn ter" onclick="cerrarHoja()">Cerrar</button></div>`, 'alta');
+    <button type="button" class="btn pri ancho grande" onclick="compartirVisita('${esc(v.id)}')">${ico('share')} Enviar resumen por WhatsApp</button>
+    <div class="acciones"><button type="button" class="btn sec" onclick="reporteVisita(visitaPorId('${esc(v.id)}'))">${ico('file')} Reporte completo</button><button type="button" class="btn ter" onclick="cerrarHoja()">Cerrar</button></div>`, 'alta');
 }
 async function compartirVisita(id) { const v = visitaPorId(id); if (!v) return; const blob = await imagenVisita(v); if (blob) compartirImagen(blob, `visita_${v.inicio.slice(0, 10)}.jpg`); }
 function imagenVisita(v) {
@@ -336,6 +337,26 @@ function mostrarTab(t) {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('activo', b.dataset.tab === t));
   if (t === 'visita') renderVisita(); else if (t === 'bitacora') renderBitacora(); else if (t === 'mas') renderMas(); else setTimeout(() => map && map.invalidateSize(), 50);
 }
+/* Gesto sobre un registro: deslizar a la derecha lo resuelve, a la izquierda lo borra (ambos con deshacer). */
+function activarDeslizar(cont) {
+  cont.querySelectorAll('.desliza').forEach(el => {
+    let x0 = 0, y0 = 0, dx = 0, activo = false, id = null;
+    el.addEventListener('pointerdown', e => { if (e.target.closest('button,a')) return; x0 = e.clientX; y0 = e.clientY; dx = 0; activo = false; id = e.pointerId; });
+    el.addEventListener('pointermove', e => {
+      if (e.pointerId !== id) return; dx = e.clientX - x0;
+      if (!activo && Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(e.clientY - y0) * 1.4) { activo = true; try { el.setPointerCapture(id); } catch (_) {} }
+      if (activo) { el.style.transition = 'none'; el.style.transform = `translateX(${dx}px)`; el.dataset.gesto = dx > 0 ? 'resolver' : 'borrar'; el.style.opacity = String(Math.max(.35, 1 - Math.abs(dx) / 320)); }
+    });
+    const fin = () => {
+      if (id === null) return; id = null; el.style.transition = '';
+      const o = obsTodas().find(x => x.id === el.dataset.id);
+      if (activo && Math.abs(dx) > 96 && o) { el.style.transform = `translateX(${dx > 0 ? 110 : -110}%)`; el.style.opacity = '0'; setTimeout(() => { if (dx > 0) { if (esPendiente(o)) obsResolver(o.id, true); else refrescarVistas(); } else obsBorrar(o.id); }, 160); }
+      else { el.style.transform = ''; el.style.opacity = ''; delete el.dataset.gesto; }
+      activo = false;
+    };
+    el.addEventListener('pointerup', fin); el.addEventListener('pointercancel', fin);
+  });
+}
 let bitFiltro = 'pendientes';
 function renderBitacora() {
   const todas = obsTodas().slice().reverse(), pend = todas.filter(esPendiente), d = loteDestino();
@@ -343,18 +364,20 @@ function renderBitacora() {
   const lista = bitFiltro === 'pendientes' ? pend : bitFiltro === 'resueltos' ? todas.filter(o => o.resuelto) : todas;
   const semana = todas.filter(o => Date.now() - new Date(o.fecha_hora) < 7 * 86400000).length;
   $('tabBitacora').innerHTML = `<header><h2>Bitácora</h2></header>
-    <div class="destino ${d ? '' : 'sin'}"><span>${d ? `Se guardará en <b>lote ${esc(d.cod)}</b> · ${esc(LOTES[d.cod].hac)} <small>(${esc(d.por)})</small>` : 'Sin lote: active el GPS dentro de un lote o elija uno.'}</span><button type="button" onclick="elegirLote('Elegir lote', c => { destinoManual = c; renderBitacora(); })">${d ? 'Cambiar' : 'Elegir lote'}</button>${destinoManual ? '<button type="button" onclick="destinoManual=\'\';renderBitacora()" aria-label="Volver al lote del GPS">✕</button>' : ''}</div>
-    <button type="button" class="btn pri ancho grande" onclick="nuevoRegistro()">＋ Nuevo hallazgo con nota y foto</button>
+    <div class="destino ${d ? '' : 'sin'}"><span>${d ? `Se guardará en <b>lote ${esc(d.cod)}</b> · ${esc(LOTES[d.cod].hac)} <small>(${esc(d.por)})</small>` : 'Sin lote: active el GPS dentro de un lote o elija uno.'}</span><button type="button" onclick="elegirLote('Elegir lote', c => { destinoManual = c; renderBitacora(); })">${d ? 'Cambiar' : 'Elegir lote'}</button>${destinoManual ? '<button type="button" onclick="destinoManual=\'\';renderBitacora()" aria-label="Volver al lote del GPS">' + ico('x') + '</button>' : ''}</div>
     <p class="pie">Todo hallazgo se guarda con GPS: debe estar en el lote, con precisión de ${REG_ACC_MAX} m o mejor.</p>
     <h3>Registro rápido · un toque</h3>
-    <div class="rapidos">${[['Maleza', '🌿'], ['Plaga', '🐛'], ['Riego', '💧'], ['Sequía', '☀'], ['Despoblación', '▫'], ['Acceso', '🚧'], ['Cosecha', '🚜'], ['Seguimiento', '👁']].map(c => `<button type="button" onclick="registroRapido('${c[0]}')"><i>${c[1]}</i>${c[0]}</button>`).join('')}</div>
+    <div class="rapidos">${['Maleza', 'Plaga', 'Riego', 'Sequía', 'Despoblación', 'Acceso', 'Cosecha', 'Seguimiento'].map(c => `<button type="button" onclick="registroRapido('${c}')">${ico(ICONO_CAT[c])}${c}</button>`).join('')}</div>
     <h3>Registros</h3>
     <div class="cifras c3">${cifra('Pendientes', pend.length, pend.length ? 'c-alerta' : '')}${cifra('Últimos 7 días', semana)}${cifra('Total', todas.length)}</div>
     <div class="segmento filtro">${[['pendientes', 'Pendientes'], ['todos', 'Todos'], ['resueltos', 'Resueltos']].map(f => `<button type="button" class="${bitFiltro === f[0] ? 'activo' : ''}" onclick="bitFiltro='${f[0]}';renderBitacora()">${f[1]}</button>`).join('')}</div>
-    ${lista.length ? lista.map(o => `<div class="bloque"><div class="fila-ir plana"><button type="button" class="obs-lote-btn" onclick="seleccionarLote('${esc(o.codlote)}',{zoom:true})">Lote ${esc(o.codlote)} · ${esc(o.hacienda_productor || '')} ›</button>${llegarHtml(o.codlote, o.lat, o.lng)}</div>${obsFilaHtml(o)}</div>`).join('')
-      : `<p class="vacio">${todas.length ? (bitFiltro === 'pendientes' ? 'Sin pendientes: todo lo de severidad media o alta está resuelto.' : 'Nada en este filtro.') : 'Aún no hay registros. Use un botón de registro rápido o "＋ Nuevo registro".'}</p>`}
-    ${todas.length ? `<h3>Respaldo</h3><p class="pie">Los registros viven solo en este teléfono. Exporte para respaldarlos.</p><div class="acciones"><button type="button" class="btn sec" onclick="exportarZip()">⬇ ZIP con fotos</button><button type="button" class="btn ter" onclick="exportarCsv()">CSV</button></div>
-      <button type="button" class="btn peligro ancho" onclick="vaciarBitacora()">Borrar toda la bitácora y sus fotos</button>` : ''}`;
+    ${lista.length ? lista.map(o => `<div class="bloque desliza" data-id="${esc(o.id)}"><div class="fila-ir plana"><button type="button" class="obs-lote-btn" onclick="seleccionarLote('${esc(o.codlote)}',{zoom:true})">Lote ${esc(o.codlote)} · ${esc(o.hacienda_productor || '')} ›</button>${llegarHtml(o.codlote, o.lat, o.lng)}</div>${obsFilaHtml(o)}</div>`).join('')
+      : `<p class="vacio">${todas.length ? (bitFiltro === 'pendientes' ? 'Sin pendientes: todo lo de severidad media o alta está resuelto.' : 'Nada en este filtro.') : 'Aún no hay registros. Use un botón de registro rápido o "Nuevo hallazgo".'}</p>`}
+    ${todas.length ? `<h3>Respaldo</h3><p class="pie">Los registros viven solo en este teléfono. Exporte para respaldarlos.</p><div class="acciones"><button type="button" class="btn sec" onclick="exportarZip()">${ico('download')} ZIP con fotos</button><button type="button" class="btn ter" onclick="exportarCsv()">CSV</button></div>
+      <button type="button" class="btn peligro ancho" onclick="vaciarBitacora()">Borrar toda la bitácora y sus fotos</button>` : ''}
+    <div class="barra-accion"><button type="button" class="btn pri grande" onclick="nuevoRegistro()">${ico('plus')} Nuevo hallazgo</button></div>`;
+  if (lista.length) $('tabBitacora').querySelector('.segmento.filtro').insertAdjacentHTML('afterend', '<p class="pie">Deslice un registro a la derecha para resolverlo o a la izquierda para borrarlo.</p>');
+  activarDeslizar($('tabBitacora'));
 }
 const CSV_OBS = ['id', 'fecha_hora', 'codlote', 'hacienda_productor', 'tablon', 'categoria', 'severidad', 'nota', 'lat', 'lng', 'precision_m', 'pos_fuente', 'usuario', 'photo_name', 'photo_id2', 'estado', 'resuelto'];
 function csvBitacora() { return '﻿' + [CSV_OBS.join(','), ...obsTodas().map(o => csvLinea(CSV_OBS.map(h => h === 'estado' ? (o.resuelto ? 'Resuelto' : esPendiente(o) ? 'Pendiente' : 'Informativo') : o[h])))].join('\n'); }
@@ -374,20 +397,21 @@ async function vaciarBitacora() {
 let _visT = null;
 function renderVisita() {
   const v = VISITA, el = $('tabVisita'); clearInterval(_visT);
-  const lista = LISTA.length ? `<div class="lista-lotes">${LISTA.map((x, i) => `<div class="fila-lista ${x.hecho ? 'hecho' : ''}"><button type="button" class="chk" onclick="listaMarcar('${esc(x.cod)}',${!x.hecho})">${x.hecho ? '✓' : i + 1}</button><button type="button" class="ir" onclick="seleccionarLote('${esc(x.cod)}',{zoom:true})"><b>${esc(x.cod)}</b><span>${esc((LOTES[x.cod] || {}).hac || '')}</span></button>${llegarHtml(x.cod)}<button type="button" class="quitar" onclick="listaToggle('${esc(x.cod)}')" aria-label="Quitar">✕</button></div>`).join('')}</div><button type="button" class="btn ter ancho" onclick="listaVaciar()">Vaciar lista</button>`
-    : '<p class="vacio">Agregue lotes desde su tarjeta con "＋ Lista del día". Aparecen numerados en el mapa y se marcan solos al visitarlos.</p>';
+  const lista = LISTA.length ? `<div class="lista-lotes">${LISTA.map((x, i) => `<div class="fila-lista ${x.hecho ? 'hecho' : ''}"><button type="button" class="chk" onclick="listaMarcar('${esc(x.cod)}',${!x.hecho})">${x.hecho ? ico('check') : i + 1}</button><button type="button" class="ir" onclick="seleccionarLote('${esc(x.cod)}',{zoom:true})"><b>${esc(x.cod)}</b><span>${esc((LOTES[x.cod] || {}).hac || '')}</span></button>${llegarHtml(x.cod)}<button type="button" class="quitar" onclick="listaToggle('${esc(x.cod)}')" aria-label="Quitar">${ico('x')}</button></div>`).join('')}</div><button type="button" class="btn ter ancho" onclick="listaVaciar()">Vaciar lista</button>`
+    : '<p class="vacio">Agregue lotes desde su tarjeta con "Lista del día". Aparecen numerados en el mapa y se marcan solos al visitarlos.</p>';
   const previas = VISITAS.slice(-10).reverse().map(x => `<div class="bloque"><b>${esc(new Date(x.inicio).toLocaleString('es-NI', {dateStyle: 'medium', timeStyle: 'short'}))}</b><p>${fmtDur(new Date(x.fin || x.inicio) - new Date(x.inicio))} · ${fmtDist(x.dist || 0)} · ${lotesVisitados(x).length} lote(s)</p>
-      <div class="obs-acc"><button type="button" onclick="reporteVisita(visitaPorId('${x.id}'))">📄 Reporte</button><button type="button" onclick="verRuta(visitaPorId('${x.id}'))">🗺 Ruta</button><button type="button" onclick="csvVisita(visitaPorId('${x.id}'))">CSV</button><button type="button" onclick="borrarVisita('${x.id}')">🗑</button></div></div>`).join('');
+      <div class="obs-acc"><button type="button" onclick="reporteVisita(visitaPorId('${x.id}'))">${ico('file')} Reporte</button><button type="button" onclick="verRuta(visitaPorId('${x.id}'))">${ico('map')} Ruta</button><button type="button" onclick="csvVisita(visitaPorId('${x.id}'))">CSV</button><button type="button" onclick="borrarVisita('${x.id}')">${ico('trash')}</button></div></div>`).join('');
   el.innerHTML = `<header><h2>Visita de campo</h2><p>Registra ruta, distancia y los lotes en los que realmente estuvo.</p></header>
     ${v ? `<div class="cifras c4 grande">${cifra('Tiempo', `<em id="visTiempo">${fmtDur(Date.now() - new Date(v.inicio))}</em>`)}${cifra('Distancia', fmtDist(v.dist))}${cifra('Lotes', lotesVisitados(v).length)}${cifra('GPS', GPS.fix ? '±' + GPS.fix.acc + ' m' : '—')}</div>
       ${lotesVisitados(v).length ? `<p class="pie">Visitados: ${lotesVisitados(v).map(esc).join(' · ')}</p>` : ''}
-      <div class="acciones"><button type="button" class="btn peligro" onclick="finalizarVisita()">⏹ Finalizar visita</button><button type="button" class="btn sec" onclick="verRuta(VISITA)">🗺 Ver ruta</button></div>`
-      : '<button type="button" class="btn pri ancho grande" onclick="iniciarVisita()">▶ Iniciar visita</button>'}
+      <div class="acciones"><button type="button" class="btn sec" onclick="verRuta(VISITA)">${ico('map')} Ver ruta</button></div>`
+      : '<p class="vacio">Sin visita en curso. Use el botón de abajo para iniciar.</p>'}
     <h3>Lista del día</h3>
     <label class="campo">Planificar: agregar finca o lote<input id="planQ" type="search" placeholder="Nombre de finca, productor o código de lote" autocomplete="off" autocapitalize="characters"></label>
     <div id="planRes" class="lista-lotes"></div>
     ${lista}
-    <h3>Visitas anteriores</h3>${previas || '<p class="vacio">Sin visitas guardadas.</p>'}`;
+    <h3>Visitas anteriores</h3>${previas || '<p class="vacio">Sin visitas guardadas.</p>'}
+    <div class="barra-accion">${v ? `<button type="button" class="btn peligro grande" onclick="finalizarVisita()">${ico('stop')} Finalizar visita</button>` : `<button type="button" class="btn pri grande" onclick="iniciarVisita()">${ico('play')} Iniciar visita</button>`}</div>`;
   $('planQ').addEventListener('input', e => planBuscar(e.target.value));
   $('planRes').addEventListener('click', planClick);
   if (v) _visT = setInterval(() => { const t = $('visTiempo'); if (t && VISITA) t.textContent = fmtDur(Date.now() - new Date(VISITA.inicio)); else clearInterval(_visT); }, 1000);
@@ -399,8 +423,8 @@ function planBuscar(q) {
   if (!t) { res.innerHTML = ''; return; }
   const fincas = Object.values(FINCAS).filter(f => sinTildes(f.nombre).includes(t)).sort((a, b) => b.lotes.length - a.lotes.length).slice(0, 4);
   const lotes = Object.values(LOTES).filter(l => l.nPoly && l.cod.startsWith(t)).sort((a, b) => a.cod.length - b.cod.length || a.cod.localeCompare(b.cod, 'es', {numeric: true})).slice(0, 6);
-  res.innerHTML = fincas.map(f => { const g = planGrupos(f); return `<div class="plan-finca"><b>🏡 ${esc(f.nombre)}</b><div class="obs-acc"><button type="button" data-finca="${esc(f.nombre)}" data-g="todos">＋ Todos (${g.todos.length})</button>${g.alta.length ? `<button type="button" data-finca="${esc(f.nombre)}" data-g="alta">＋ Prioridad alta (${g.alta.length})</button>` : ''}${g.corte.length ? `<button type="button" data-finca="${esc(f.nombre)}" data-g="corte">＋ Corte próximo (${g.corte.length})</button>` : ''}</div></div>`; }).join('') +
-    lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtN(l.area, ' ha', nf1)}</span><i class="chip ${listaTiene(l.cod) ? 'est-bien' : 'est-neutro'}">${listaTiene(l.cod) ? '✓ en lista' : '＋ agregar'}</i></button>`).join('') || '<p class="vacio">Sin coincidencias.</p>';
+  res.innerHTML = fincas.map(f => { const g = planGrupos(f); return `<div class="plan-finca"><b>${ico('home')} ${esc(f.nombre)}</b><div class="obs-acc"><button type="button" data-finca="${esc(f.nombre)}" data-g="todos">${ico('plus')} Todos (${g.todos.length})</button>${g.alta.length ? `<button type="button" data-finca="${esc(f.nombre)}" data-g="alta">${ico('plus')} Prioridad alta (${g.alta.length})</button>` : ''}${g.corte.length ? `<button type="button" data-finca="${esc(f.nombre)}" data-g="corte">${ico('plus')} Corte próximo (${g.corte.length})</button>` : ''}</div></div>`; }).join('') +
+    lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtN(l.area, ' ha', nf1)}</span><i class="chip ${listaTiene(l.cod) ? 'est-bien' : 'est-neutro'}">${listaTiene(l.cod) ? ico('check') + ' en lista' : ico('plus') + ' agregar'}</i></button>`).join('') || '<p class="vacio">Sin coincidencias.</p>';
 }
 function planClick(e) {
   const b = e.target.closest('button'); if (!b) return;
@@ -458,7 +482,9 @@ let aforoGrupo = 'hacienda', instalarEvt = null;
 function renderMas() {
   const g = (RESUMEN.resumen || {}).global || {}, filas = ((RESUMEN.resumen || {})[aforoGrupo] || []);
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
-  $('tabMas').innerHTML = `<header><h2>Resumen aforo 26/27</h2></header>
+  $('tabMas').innerHTML = `<div class="marca"><img src="./assets/logo_casur.png" alt="CASUR"><div><b>CASUR Maps</b><span>Departamento de Negocios de Caña</span></div></div>
+    <button type="button" class="btn sec ancho" onclick="abrirTablero(true)">${ico('board')} Tablero de hoy</button>
+    <header><h2>Resumen aforo 26/27</h2></header>
     <div class="cifras c4">${cifra('Área molienda', nf0.format(g.area_ha || 0) + ' ha')}${cifra('Toneladas', nf0.format(g.toneladas || 0))}${cifra('TCH pond.', fmtN(g.tch_ponderado, '', nf), 'c-est')}${cifra('TCH optimista', fmtN(g.tch_opt_ponderado, '', nf))}</div>
     <label class="campo">Buscar finca o lote<input id="aforoQ" type="search" placeholder="Nombre de finca, productor o código de lote" autocomplete="off" autocapitalize="characters" enterkeyhint="search"></label>
     <div id="aforoRes" class="lista-lotes"></div>
@@ -467,7 +493,9 @@ function renderMas() {
     <h3>Ajustes</h3>
     <label class="campo">Técnico<input id="ajTec" type="text" value="${esc(S.tecnico)}" placeholder="Su nombre"></label>
     <label class="campo">Uso del GPS${sel('ajGps', [['vehiculo', 'En vehículo (recomendado)'], ['campo', 'Caminando'], ['preciso', 'Punto fijo, máxima precisión']], S.gpsPerfil)}</label>
-    <label class="campo">Pantalla${sel('ajTema', [['campo', 'Campo · alto contraste para sol'], ['claro', 'Claro suave'], ['oscuro', 'Oscuro · madrugada']], S.tema)}</label>
+    <label class="campo">Pantalla${sel('ajTema', [['campo', 'Campo · alto contraste para sol'], ['auto', 'Automático · oscuro de 7 p. m. a 5:30 a. m.'], ['claro', 'Claro suave'], ['oscuro', 'Oscuro · madrugada']], S.tema)}</label>
+    <label class="campo">Tamaño de letra${sel('ajLetra', [['normal', 'Normal'], ['grande', 'Grande'], ['muygrande', 'Muy grande']], S.letra || 'normal')}</label>
+    <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tablero ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
  <label class="campo">Orientación del mapa con GPS${sel('ajOri', [['rumbo', 'Rumbo arriba · el mapa gira con su avance'], ['norte', 'Norte arriba · el mapa no gira']], S.orientacion)}</label>
     <label class="interruptor"><input type="checkbox" id="ajAuto" ${S.gpsAuto ? 'checked' : ''}><span>Activar el GPS al abrir la app</span></label>
     <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Mantener la pantalla encendida durante la visita</span></label>
@@ -475,15 +503,17 @@ function renderMas() {
     <h3>Datos</h3>
     <div class="kvs"><div><span>Datos al</span><b>${fechaCorta(META.datos_al || META.generated_at)}</b></div><div><span>Cortes de zafra al</span><b>${META.cortes_al ? fechaCorta(META.cortes_al) : 'Sin cargar'}</b></div><div><span>Shape</span><b>${esc(META.fuente_shape || '—')}</b></div><div><span>Aforo</span><b>${esc(META.fuente_aforo_version || META.fuente_aforo || '—')}</b></div><div><span>Polígonos / lotes</span><b>${nf0.format(META.poligonos || 0)} / ${nf0.format(META.codlotes_shape || 0)}</b></div><div><span>Versión de la app</span><b>${APP_VERSION}</b></div><div><span>Espacio usado</span><b id="espacio">…</b></div></div>
     ${META.cortes_al ? '' : '<div class="nota est-medio">Sin cortes de la zafra en curso: la edad y el TCH anterior vienen de la zafra 25/26.</div>'}
-    <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">⟳ Buscar datos nuevos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
-    ${instalarEvt ? '<div class="acciones"><button type="button" class="btn pri" onclick="instalarApp()">⬇ Instalar app</button></div>' : ''}`;
+    <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Buscar datos nuevos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
+    ${instalarEvt ? '<div class="acciones"><button type="button" class="btn pri" onclick="instalarApp()">' + ico('download') + ' Instalar app</button></div>' : ''}`;
   $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
   $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
   $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
   $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
   $('ajTec').addEventListener('change', e => { S.tecnico = e.target.value.trim(); guardarAjustes(); });
   $('ajGps').addEventListener('change', e => { S.gpsPerfil = e.target.value; guardarAjustes(); });
-  $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); });
+  $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); pintarSeleccion(); });
+  $('ajLetra').addEventListener('change', e => { S.letra = e.target.value; guardarAjustes(); aplicarTema(); });
+  $('ajTab').addEventListener('change', e => { S.tablero = e.target.checked; guardarAjustes(); });
   $('ajOri').addEventListener('change', e => { S.orientacion = e.target.value; guardarAjustes(); orientar(); pintarBrujula(); });
   $('ajAuto').addEventListener('change', e => { S.gpsAuto = e.target.checked; guardarAjustes(); });
   $('ajPant').addEventListener('change', e => { S.pantalla = e.target.checked; guardarAjustes(); S.pantalla ? pedirPantalla() : soltarPantalla(); });
@@ -500,7 +530,7 @@ function buscarAforo(q) {
   if (!t) { res.innerHTML = ''; return; }
   const fincas = ((RESUMEN.resumen || {}).hacienda || []).filter(x => sinTildes(x.key).includes(t)).slice(0, 6);
   const lotes = Object.values(LOTES).filter(l => l.cod.startsWith(t)).sort((a, b) => a.cod.length - b.cod.length || a.cod.localeCompare(b.cod, 'es', {numeric: true})).slice(0, 8);
-  res.innerHTML = fincas.map(x => `<button type="button" data-finca="${esc(x.key)}"><b>🏡</b><span><strong>${esc(x.key)}</strong><br>${nf0.format(x.area_ha)} ha mol. · ${nf0.format(x.toneladas)} t · TCH ${x.area_ha ? nf1.format(x.tch_ponderado) : '—'} · optim. ${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</span></button>`).join('') +
+  res.innerHTML = fincas.map(x => `<button type="button" data-finca="${esc(x.key)}"><b>${ico('home')}</b><span><strong>${esc(x.key)}</strong><br>${nf0.format(x.area_ha)} ha mol. · ${nf0.format(x.toneladas)} t · TCH ${x.area_ha ? nf1.format(x.tch_ponderado) : '—'} · optim. ${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</span></button>`).join('') +
     lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)}<br>${fmtN(l.area, ' ha', nf1)} · ${l.conAforo ? `${esc(l.clas || '')} · est. ${l.tchEst > 0 ? nf1.format(l.tchEst) : '—'} · optim. ${l.tchOpt > 0 ? nf1.format(l.tchOpt) : '—'} · ${l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '— t'}` : 'sin aforo 26/27'}</span></button>`).join('') ||
     '<p class="vacio">Sin coincidencias. Pruebe con el código del lote o parte del nombre.</p>';
 }
@@ -516,6 +546,28 @@ function avisarInstalacion() {
   if (_avisoInst || appInstalada() || !$('loader').hidden) return;
   if (instalarEvt) { _avisoInst = true; toast('Instale CASUR Maps en este teléfono para abrirla sin señal.', {accion: 'Instalar', ms: 15000, alAccion: instalarApp}); }
   else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) { _avisoInst = true; toast('Para instalar: toque Compartir y luego "Agregar a inicio".', {ms: 12000}); }
+}
+
+/* ── Tablero del día: lo que hay que atender hoy, en una sola pantalla ── */
+function abrirTablero(forzar) {
+  const pend = obsTodas().filter(esPendiente), altas = pend.filter(o => o.severidad === 'Alta');
+  const porVisitar = LISTA.filter(x => !x.hecho), venc = Object.values(LOTES).filter(corteVencido);
+  const w = SEMANAS_PROX[0], sem = w ? Object.values(LOTES).filter(l => claseCorte(l) === 1) : [];
+  const hoyCorte = Object.values(LOTES).filter(l => l.fProg && !l.cosechado && diasPara(l.fProg) === 0);
+  if (!forzar && (!pend.length && !porVisitar.length && !venc.length && !sem.length && !VISITA)) return;
+  if (!forzar && $('hoja').classList.contains('abierta')) return;
+  const tarj = (icono, n, rot, cls, accion) => `<button type="button" class="tb ${cls}" onclick="${accion}">${ico(icono)}<b>${n}</b><span>${rot}</span></button>`;
+  abrirHoja(new Date().toLocaleDateString('es-NI', {weekday: 'long', day: 'numeric', month: 'long'}).replace(/^./, c => c.toUpperCase()), `
+    <div class="tablero">
+      ${tarj('alert', pend.length, pend.length === 1 ? 'hallazgo pendiente' : 'hallazgos pendientes', altas.length ? 'mal' : pend.length ? 'medio' : '', "cerrarHoja();bitFiltro='pendientes';mostrarTab('bitacora')")}
+      ${tarj('listPlus', porVisitar.length, 'lotes por visitar', porVisitar.length ? 'info' : '', "cerrarHoja();mostrarTab('visita')")}
+      ${tarj('calendar', sem.length, w ? `cortes sem. ${w.sem} (${rangoSemana(w)})` : 'cortes próximos', sem.length ? 'info' : '', "cerrarHoja();mostrarTab('mapa');setColorear('semana')")}
+      ${tarj('clock', venc.length, 'fechas de corte vencidas', venc.length ? 'mal' : '', "cerrarHoja();mostrarTab('mapa');setColorear('semana')")}
+    </div>
+    ${altas.length ? `<h4>Severidad alta</h4>${altas.slice(0, 3).map(o => `<div class="hist-fila"><b>Lote ${esc(o.codlote)}</b><span>${esc(o.categoria)}${o.nota ? ' · ' + esc(o.nota.slice(0, 50)) : ''}</span></div>`).join('')}` : ''}
+    ${hoyCorte.length ? `<div class="nota est-medio">${ico('calendar')} Hoy se cortan ${hoyCorte.length} lote(s): ${hoyCorte.slice(0, 8).map(l => esc(l.cod)).join(' · ')}</div>` : ''}
+    ${venc.length ? `<div class="nota est-mal">${ico('alert')} ${venc.length} lote(s) con fecha de corte vencida. Actualice el programa o cargue los cortes.</div>` : ''}
+    <div class="acciones">${VISITA ? `<button type="button" class="btn sec" onclick="cerrarHoja();mostrarTab('visita')">${ico('route')} Visita en curso</button>` : `<button type="button" class="btn pri" onclick="cerrarHoja();iniciarVisita()">${ico('play')} Iniciar visita</button>`}<button type="button" class="btn ter" onclick="cerrarHoja()">Ir al mapa</button></div>`);
 }
 
 /* ── Arranque ── */
@@ -542,8 +594,7 @@ async function iniciar() {
     if (S.gpsAuto) iniciarGps(!conEnlace, true);
     registrarSW();
     setTimeout(avisarInstalacion, 1500);
-    const venc = Object.values(LOTES).filter(corteVencido).length;
-    if (venc) toast(`${venc} lote(s) con fecha de corte vencida. Actualice el programa o cargue los cortes.`, {tipo: 'mal', accion: 'Ver', ms: 12000, alAccion: () => { mostrarTab('mapa'); setColorear('semana'); }});
+    if (S.tablero && !conEnlace) setTimeout(() => abrirTablero(false), 700);
     if (navigator.onLine) setTimeout(() => cargarHistorico().catch(() => {}), 6000); // deja el histórico listo para usarlo sin señal
   } catch (e) {
     console.error(e);
