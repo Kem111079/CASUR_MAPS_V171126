@@ -29,7 +29,7 @@ p{margin:6px 0}
 
 /* Mapa y controles flotantes */
 #vistaMapa{position:fixed;inset:0 0 calc(var(--nav) + var(--sab)) 0;overflow:hidden}
-#map{position:absolute;background:var(--sup2);--rot:0deg;--contra:0deg;transform:rotate(var(--rot));transform-origin:50% 50%;transition:transform .5s linear}
+#map{position:absolute;background:var(--sup2);--rot:0deg;--contra:0deg;transform:rotate(var(--rot));transform-origin:50% 50%;transition:transform var(--giro-dur,1s) ease-in-out}
 #atrib{position:absolute;z-index:860;left:76px;bottom:4px;font-size:10px;color:var(--texto2);background:color-mix(in srgb,var(--sup) 75%,transparent);border-radius:6px;padding:1px 5px;pointer-events:none}
 body.con-card #atrib{display:none}
 [data-base=ninguno] #map{background:var(--fondo)}
@@ -62,7 +62,7 @@ body.con-card .fab.capas{bottom:calc(var(--card-h,230px) + 14px)}
 body.con-card .fab{bottom:calc(var(--card-h,230px) + 14px)}
 body.con-card.card-full .fab{display:none}
 .fab.brujula{width:50px;height:50px;right:17px;bottom:88px;color:var(--texto2)}
-.fab.brujula svg{transition:transform .5s linear}
+.fab.brujula svg{transition:transform 1s ease-in-out}
 .fab.brujula.rumbo{border-color:var(--acento)}
 body.con-card .fab.brujula{bottom:calc(var(--card-h,230px) + 84px)}
 .fab.panorama{width:50px;height:50px;right:17px;bottom:148px;color:var(--texto2)}
@@ -148,6 +148,7 @@ body.con-card .leyenda{display:none}
 .linea-estado{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14.5px;font-weight:600;color:var(--texto2)}
 .linea-estado .pronto{color:var(--medio);font-weight:800}.linea-estado b{color:var(--texto);font-weight:900}
 .chispa{display:block;width:76px;height:18px;margin:2px auto 0;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chispa-txt{display:block;font-size:12px;font-weight:800;color:var(--texto2);line-height:1.1;font-variant-numeric:tabular-nums}
 .chispa.sube{stroke:var(--bien)}.chispa.baja{stroke:var(--mal)}.chispa circle{fill:currentColor;stroke:none}.chispa.sube circle{fill:var(--bien)}.chispa.baja circle{fill:var(--mal)}
 .menu-rapido{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .menu-rapido button,.menu-rapido a{min-height:86px;border:2px solid var(--linea);border-radius:14px;background:var(--sup);color:var(--texto);font-weight:800;font-size:13.5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-decoration:none;padding:6px;text-align:center}
