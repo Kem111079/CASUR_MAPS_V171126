@@ -2,7 +2,7 @@
    - Aplicación: se sirve desde caché al instante y se refresca en segundo plano.
    - data/: no se toca aquí; la app administra su propia copia y solo descarga cuando cambia la versión.
    - Mapa base: caché aparte con tope, para que nunca desplace a los polígonos. */
-const VERSION = 'v181126g';
+const VERSION = 'v181126h';
 const SHELL = 'casur-maps-shell-' + VERSION;
 const TILES = 'casur-tiles-v1';
 const TILES_MAX = 2500;
@@ -45,7 +45,7 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.includes('/data/') || url.pathname.includes('/casur_suertes_operativo/')) return;
+  if (url.pathname.includes('/data/') || url.pathname.includes('/fuentes/') || url.pathname.includes('/casur_suertes_operativo/')) return;
   e.respondWith((async () => {
     const c = await caches.open(SHELL), hit = await c.match(req, {ignoreSearch: true});
     const red = fetch(req).then(r => { if (r.ok) c.put(req, r.clone()); return r; }).catch(() => null);

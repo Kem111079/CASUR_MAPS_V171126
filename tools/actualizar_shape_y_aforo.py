@@ -43,13 +43,22 @@ COLS = {
     "tn": ["tn"],
     "hhhsss": ["hhhsss"],
     "tch": ["acttch_2627", "acttch"],
-    "ton": ["toneladas"],
-    "tch_opt": ["tch opt", "tch opti"],
-    "ton_opt": ["ton opti", "ton opt"],
+    "tch_opt": ["tch opt", "tch opti", "tch optimista"],
     "clas": ["clasificacion", "clasificación"],
 }
-# Columnas opcionales: si el Excel no las trae, se conserva el dato de la carga anterior.
-COLS_OPC = {"fecha_cosecha": ["fecha cosecha", "fecha de cosecha", "fecha corte", "fecha de corte", "fecha_cosecha"]}
+# Columnas opcionales: si el Excel no las trae (o la celda está vacía), se conserva el dato de la carga anterior.
+# Toneladas y Ton Opti se calculan (TCH × área) cuando no vienen.
+COLS_OPC = {
+    "ton": ["toneladas"],
+    "ton_opt": ["ton opti", "ton opt"],
+    "fecha_cosecha": ["fecha cosecha", "fecha de cosecha", "fecha corte", "fecha de corte", "fecha_cosecha"],
+    "zona": ["zona"],
+    "variedad": ["variedad"],
+    "riego": ["riego", "tipo de riego", "tipo riego"],
+    "nc": ["nc", "numero de corte", "número de corte", "n. corte"],
+    "fecha_ult_corte": ["fecha ultimo corte", "fecha último corte", "fecha_ultimo_corte"],
+    "tch_ant": ["tch ultima zafra", "tch última zafra", "tch anterior", "tch_ultima_zafra"],
+}
 
 
 def a_iso(v):
@@ -59,6 +68,13 @@ def a_iso(v):
     if isinstance(v, date):
         return v.isoformat()
     d = parse_iso(v)
+    if d is None:
+        for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y"):
+            try:
+                d = datetime.strptime(str(v).strip()[:10], fmt).date()
+                break
+            except (TypeError, ValueError):
+                pass
     return d.isoformat() if d else ""
 
 
@@ -67,6 +83,8 @@ def norm(v):
 
 
 def key(v):
+    if isinstance(v, float) and v.is_integer():  # Excel puede entregar 3801.0
+        v = int(v)
     return norm(v).upper()
 
 
@@ -125,8 +143,8 @@ def leer_excel(path):
     version = next((norm(c) for row in rows[:hdr_i] for c in row if norm(c).lower().startswith("version")), "")
     out, dups, vacias = {}, [], 0
     for n, row in enumerate(rows[hdr_i + 1:], start=hdr_i + 2):
-        g = lambda c: row[idx[c]] if idx[c] < len(row) else None
-        cod, ste = norm(g("cod")), norm(g("ste"))
+        g = lambda c: row[idx[c]] if c in idx and idx[c] < len(row) else None
+        cod, ste = key(g("cod")), norm(g("ste"))
         if not cod or not ste:
             vacias += 1
             continue
@@ -137,12 +155,25 @@ def leer_excel(path):
         out[k] = {
             "hhhsss": k, "cod_hacienda": cod, "nombre_hacienda": norm(g("nombre")), "suerte": ste,
             "area_ha": num(g("area")) or 0.0, "destino": norm(g("destino")), "tn": norm(g("tn")).upper(),
-            "actTCH": num(g("tch")) or 0.0, "toneladas": num(g("ton")) or 0.0,
-            "tch_opt": num(g("tch_opt")) or 0.0, "ton_opt": num(g("ton_opt")) or 0.0,
+            "actTCH": num(g("tch")) or 0.0, "tch_opt": num(g("tch_opt")) or 0.0,
             "clasificacion": norm(g("clas")), "_row": n,
         }
+        o = out[k]
+        o["toneladas"] = num(g("ton")) if num(g("ton")) is not None else o["actTCH"] * o["area_ha"]
+        o["ton_opt"] = num(g("ton_opt")) if num(g("ton_opt")) is not None else o["tch_opt"] * o["area_ha"]
         if "fecha_cosecha" in idx:
-            out[k]["fecha_cosecha"] = a_iso(g("fecha_cosecha"))
+            o["fecha_cosecha"] = a_iso(g("fecha_cosecha"))
+        # Datos de la plantilla única: solo cuentan si la celda trae algo.
+        for campo in ("zona", "variedad", "riego"):
+            if norm(g(campo)):
+                o["x_" + campo] = norm(g(campo))
+        if norm(g("nc")):
+            nc = g("nc")
+            o["x_nc"] = "Planta" if norm(nc).lower().startswith("plant") else key(nc)
+        if a_iso(g("fecha_ult_corte")):
+            o["x_fecha_ult_corte"] = a_iso(g("fecha_ult_corte"))
+        if num(g("tch_ant")) is not None:
+            o["x_tch_ant"] = num(g("tch_ant"))
     return out, {"hoja": ws.title, "version": version, "duplicados": dups, "trae_fecha_cosecha": "fecha_cosecha" in idx}
 
 
@@ -289,19 +320,30 @@ def main():
         tenencia, gr_tn = TENENCIA.get(x["tn"], (prev.get("tenencia", ""), prev.get("gr_tn", "")))
         if prev.get("tn") == x["tn"] and prev.get("gr_tn"):
             gr_tn = prev["gr_tn"]
-        variedad = (sh or {}).get("variedad") or prev.get("variedad", "")
+        variedad = x.get("x_variedad") or (sh or {}).get("variedad") or prev.get("variedad", "")
         if prev.get("variedad") and variedad != prev["variedad"]:
             cambios["variedad"].append({"codlote": k, "antes": prev["variedad"], "ahora": variedad})
         rec.update({
             "hhhsss": k, "cod_hacienda": x["cod_hacienda"], "nombre_hacienda": x["nombre_hacienda"], "suerte": x["suerte"],
             "area_ha": r2(x["area_ha"]), "variedad": variedad, "destino": x["destino"], "tn": x["tn"],
             "hacienda": f"{x['nombre_hacienda']} (CODIGO: {x['cod_hacienda']}; TENENCIA: {x['tn']})",
-            "zona": prev.get("zona") or (sh or {}).get("zona", ""),
+            "zona": x.get("x_zona") or prev.get("zona") or (sh or {}).get("zona", ""),
             "actTCH": r2(x["actTCH"]), "toneladas": r2(x["toneladas"]), "tch_opt": r2(x["tch_opt"]), "ton_opt": r2(x["ton_opt"]),
             "clasificacion": x["clasificacion"], "tenencia": tenencia, "gr_tn": gr_tn, "_row": x["_row"],
         })
         if "fecha_cosecha" in x:  # fecha de cosecha programada para la zafra en curso
             rec["fecha_cosecha"] = x["fecha_cosecha"]
+        if x.get("x_riego"):
+            rec["tipo_riego"] = x["x_riego"]
+        if x.get("x_nc"):
+            rec.update({"nc": x["x_nc"], "nc_display": x["x_nc"], "nc_source": "plantilla"})
+        if x.get("x_fecha_ult_corte"):
+            rec["fecha_ult_corte"] = x["x_fecha_ult_corte"]
+        if x.get("x_tch_ant") is not None:
+            rec["tch_ant"] = r2(x["x_tch_ant"])
+        rec["_variedad_excel"] = bool(x.get("x_variedad"))
+        rec["_ult_corte_excel"] = bool(x.get("x_fecha_ult_corte"))
+        rec["_tch_ant_excel"] = x.get("x_tch_ant") is not None
         if rec.get("fecha_ult_corte"):
             rec["edad"] = edad_meses(rec["fecha_ult_corte"], hoy)
         if x["actTCH"] > 0 and x["tch_opt"] < x["actTCH"]:
@@ -359,13 +401,22 @@ def main():
                       "clasificacion": a["clasificacion"], "cod_finca": a["cod_hacienda"],
                       "nc": a.get("nc_display") if a.get("nc_display") not in (None, "", "—") else None,
                       "fecha_cosecha_prog": a.get("fecha_cosecha") or None})
+            # Lo que la plantilla trae sobre riego, último corte y TCH anterior también alimenta la ficha del lote.
+            if a.get("tipo_riego"):
+                m["riego"] = a["tipo_riego"]
+            if a.get("_ult_corte_excel"):
+                m["fecha_ultimo_corte"] = m["fecha_base_edad"] = a["fecha_ult_corte"]
+            if a.get("_tch_ant_excel"):
+                m["tch_ultima_zafra"] = a["tch_ant"]
+            if a.get("variedad"):
+                m["variedad"] = a["variedad"]
         else:
             for campo in ("aforo_actTCH_2627", "aforo_toneladas_2627", "aforo_tch_opt_2627", "aforo_toneladas_opt_2627"):
                 m.pop(campo, None)
         if sh:
             m["area_shape_total_ha"] = round(sh["area"], 4)
             m["poligonos_shape"] = sh["n"]
-            if sh["variedad"]:
+            if sh["variedad"] and not (a and a.get("_variedad_excel")):
                 m["variedad"] = sh["variedad"]
             m.setdefault("hacienda_productor", sh["finca"])
             m["cod_finca"] = sh["codfinca"]

@@ -1,4 +1,6 @@
-# Regenera data/ cuando se sube un shape, un Excel de estimados o un Excel de cortes a fuentes/.
+# Regenera data/ cuando cambia algo en fuentes/.
+# Normal: se sube fuentes/Plantilla_CASUR_Maps.xlsx (una fila por lote) y de ahí salen aforo, fechas de corte,
+# renovación y cortes reales. También admite los archivos sueltos de antes (Estimados*, Cortes*, *renovacion*).
 name: Actualizar datos CASUR Maps
 on:
   push:
@@ -7,6 +9,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+concurrency: actualizar-datos
 jobs:
   actualizar:
     runs-on: ubuntu-latest
@@ -16,23 +19,25 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install geopandas pyogrio openpyxl
-      - name: Shape + estimados
+      - name: Procesar fuentes
         run: |
-          SHAPE=$(ls -t fuentes/*.gpkg fuentes/*.zip fuentes/*.shp 2>/dev/null | head -1 || true)
-          EXCEL=$(ls -t fuentes/[Ee]stimados*.xlsx 2>/dev/null | head -1 || true)
-          if [ -n "$SHAPE" ] && [ -n "$EXCEL" ]; then
-            python tools/actualizar_shape_y_aforo.py "$SHAPE" "$EXCEL" --salida data
+          set -e
+          SHAPE=$(ls fuentes/*.gpkg fuentes/*.zip fuentes/*.shp 2>/dev/null | head -1 || true)
+          PLANT=$(ls fuentes/[Pp]lantilla*.xlsx 2>/dev/null | head -1 || true)
+          if [ -z "$SHAPE" ]; then echo "Falta el shape en fuentes/"; exit 1; fi
+          if [ -n "$PLANT" ]; then
+            echo "Usando la plantilla única: $PLANT"
+            python tools/actualizar_shape_y_aforo.py "$SHAPE" "$PLANT" --salida data
+            python tools/actualizar_cortes.py "$PLANT" --salida data
+            python tools/actualizar_renovacion.py "$PLANT" --salida data
           else
-            echo "Falta el shape o el Excel de estimados en fuentes/; se omite."
+            EXCEL=$(ls fuentes/[Ee]stimados*.xlsx 2>/dev/null | head -1 || true)
+            CORTES=$(ls fuentes/[Cc]ortes*.xlsx fuentes/[Cc]ortes*.csv 2>/dev/null | head -1 || true)
+            RENOV=$(ls fuentes/*[Rr]enovacion*.xlsx 2>/dev/null | head -1 || true)
+            if [ -n "$EXCEL" ]; then python tools/actualizar_shape_y_aforo.py "$SHAPE" "$EXCEL" --salida data; fi
+            if [ -n "$CORTES" ]; then python tools/actualizar_cortes.py "$CORTES" --salida data; fi
+            if [ -n "$RENOV" ]; then python tools/actualizar_renovacion.py "$RENOV" --salida data; fi
           fi
-      - name: Cortes de zafra
-        run: |
-          CORTES=$(ls -t fuentes/[Cc]ortes*.xlsx fuentes/[Cc]ortes*.csv 2>/dev/null | head -1 || true)
-          if [ -n "$CORTES" ]; then python tools/actualizar_cortes.py "$CORTES" --salida data; fi
-      - name: Renovación y grupo de corte
-        run: |
-          RENOV=$(ls -t fuentes/*[Rr]enovacion*.xlsx 2>/dev/null | head -1 || true)
-          if [ -n "$RENOV" ]; then python tools/actualizar_renovacion.py "$RENOV" --salida data; fi
       - name: Publicar datos
         run: |
           git config user.name "github-actions[bot]"
