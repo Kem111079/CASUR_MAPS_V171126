@@ -335,7 +335,7 @@ function mostrarTab(t) {
   if (document.body.dataset.tab === t) return;
   document.body.dataset.tab = t;
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('activo', b.dataset.tab === t));
-  if (t === 'visita') renderVisita(); else if (t === 'bitacora') renderBitacora(); else if (t === 'mas') renderMas(); else setTimeout(() => map && map.invalidateSize(), 50);
+  if (t === 'visita') renderVisita(); else if (t === 'bitacora') renderBitacora(); else if (t === 'mas') renderMas(); else if (t === 'ajustes') renderAjustes(); else setTimeout(() => map && map.invalidateSize(), 50);
 }
 /* Gesto sobre un registro: deslizar a la derecha lo resuelve, a la izquierda lo borra (ambos con deshacer). */
 function activarDeslizar(cont) {
@@ -490,8 +490,17 @@ function renderMas() {
     <div id="aforoRes" class="lista-lotes"></div>
     <label class="campo">Agrupar por${sel('aforoGrupo', [['hacienda', 'Hacienda / productor'], ['zona', 'Zona'], ['finca', 'Finca y tenencia']], aforoGrupo)}</label>
     <div class="tabla"><table><thead><tr><th>Grupo</th><th>ha mol.</th><th>Ton.</th><th>TCH</th><th>Optim.</th></tr></thead><tbody id="aforoFilas">${filasAforo(filas)}</tbody></table></div>
-    ${renovacionHtml()}
-    <h3>Ajustes</h3>
+    ${renovacionHtml()}`;
+  $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
+  const tr = $('renovFilas'); if (tr) tr.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); });
+  $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
+  $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
+  $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
+}
+/* ── Pestaña Ajustes: preferencias del teléfono, datos y actualización ── */
+function renderAjustes() {
+  const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
+  $('tabAjustes').innerHTML = `<header><h2>Ajustes</h2></header>
     <label class="campo">Técnico<input id="ajTec" type="text" value="${esc(S.tecnico)}" placeholder="Su nombre"></label>
     <label class="campo">Uso del GPS${sel('ajGps', [['vehiculo', 'En vehículo (recomendado)'], ['campo', 'Caminando'], ['preciso', 'Punto fijo, máxima precisión']], S.gpsPerfil)}</label>
     <label class="campo">Pantalla${sel('ajTema', [['campo', 'Campo · alto contraste para sol'], ['auto', 'Automático · oscuro de 7 p. m. a 5:30 a. m.'], ['claro', 'Claro suave'], ['oscuro', 'Oscuro · madrugada']], S.tema)}</label>
@@ -507,13 +516,8 @@ function renderMas() {
     <div class="nota est-neutro"><b>Para actualizar los datos:</b> descargue la plantilla, edítela en Excel y súbala a la carpeta <b>fuentes</b> del repositorio con el mismo nombre. En unos minutos los teléfonos reciben los datos nuevos.</div>
     <div class="acciones"><a class="btn sec" href="./fuentes/Plantilla_CASUR_Maps.xlsx" download>${ico('download')} Descargar plantilla</a><a class="btn ter" href="https://github.com/Kem111079/CASUR_MAPS_V171126/upload/main/fuentes" target="_blank" rel="noopener">${ico('share')} Subir a GitHub</a></div>
     <div class="acciones"><button type="button" class="btn pri" onclick="actualizarApp()">${ico('download')} Actualizar la app (versión ${APP_VERSION})</button></div>
-    <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Buscar datos nuevos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
+    <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Descargar datos de nuevo</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
     ${instalarEvt ? '<div class="acciones"><button type="button" class="btn pri" onclick="instalarApp()">' + ico('download') + ' Instalar app</button></div>' : ''}`;
-  $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
-  const tr = $('renovFilas'); if (tr) tr.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); });
-  $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
-  $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
-  $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
   $('ajTec').addEventListener('change', e => { S.tecnico = e.target.value.trim(); guardarAjustes(); });
   $('ajGps').addEventListener('change', e => { S.gpsPerfil = e.target.value; guardarAjustes(); });
   $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); pintarSeleccion(); });
@@ -525,6 +529,7 @@ function renderMas() {
   $('ajVib').addEventListener('change', e => { S.vibrar = e.target.checked; guardarAjustes(); vibrar(); });
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => { const el = $('espacio'); if (el) el.textContent = nf0.format((e.usage || 0) / 1048576) + ' MB'; }).catch(() => {});
 }
+
 /* ── Resumen de renovación: área por zona, TCH estimado, referencia y deltas ── */
 function renovacionHtml() {
   const r = resumenRenovacion(); if (!r.n) return '';
@@ -562,8 +567,8 @@ function buscarAforo(q) {
     '<p class="vacio">Sin coincidencias. Pruebe con el código del lote o parte del nombre.</p>';
 }
 async function revisarDatos() { buscarActualizacion(await dataCache(), META, true); }
-async function borrarMapas() { try { await caches.delete('casur-tiles-v1'); toast('Mapas base guardados borrados.'); renderMas(); } catch (_) {} }
-async function instalarApp() { if (!instalarEvt) return; instalarEvt.prompt(); await instalarEvt.userChoice.catch(() => null); instalarEvt = null; if (document.body.dataset.tab === 'mas') renderMas(); }
+async function borrarMapas() { try { await caches.delete('casur-tiles-v1'); toast('Mapas base guardados borrados.'); renderAjustes(); } catch (_) {} }
+async function instalarApp() { if (!instalarEvt) return; instalarEvt.prompt(); await instalarEvt.userChoice.catch(() => null); instalarEvt = null; if (document.body.dataset.tab === 'ajustes') renderAjustes(); }
 const appInstalada = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 let _avisoInst = false;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instalarEvt = e; avisarInstalacion(); });

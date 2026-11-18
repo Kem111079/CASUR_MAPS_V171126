@@ -297,7 +297,7 @@ svg.hist{width:100%;height:auto;display:block}
 .tab{display:none;position:fixed;inset:0 0 calc(var(--nav) + var(--sab)) 0;z-index:1200;overflow:auto;-webkit-overflow-scrolling:touch;background:var(--fondo);padding:calc(16px + var(--sat)) 16px 28px}
 .tab>*{max-width:640px;margin-left:auto;margin-right:auto}
 .tab header p{color:var(--texto2);font-size:14.5px}
-[data-tab=visita] #tabVisita,[data-tab=bitacora] #tabBitacora,[data-tab=mas] #tabMas{display:block;animation:entra .2s ease-out}
+[data-tab=visita] #tabVisita,[data-tab=bitacora] #tabBitacora,[data-tab=mas] #tabMas,[data-tab=ajustes] #tabAjustes{display:block;animation:entra .2s ease-out}
 @keyframes entra{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 #tabVisita,#tabBitacora{padding-bottom:110px}
 .barra-accion{position:fixed;z-index:1250;left:0;right:0;bottom:calc(var(--nav) + var(--sab));padding:10px 16px;background:linear-gradient(to top,var(--fondo) 70%,transparent);display:flex;max-width:none!important}
@@ -312,7 +312,7 @@ svg.hist{width:100%;height:auto;display:block}
 .tabla.ancha td:first-child,.tabla.ancha th:first-child{position:sticky;left:0;background:var(--sup);z-index:1}.tabla.ancha th:first-child{background:var(--pri);z-index:2}
 .tabla tr.total td{font-weight:800;background:var(--sup2)}.tabla.ancha tr.total td:first-child{background:var(--sup2)}
 #nav::before{content:'';position:absolute;left:0;right:0;top:-1px;height:3px;background:linear-gradient(90deg,#0b7f3a 0 45%,#005baa 45% 85%,#f4c542 85%)}
-#nav{position:fixed;z-index:1500;left:0;right:0;bottom:0;height:calc(var(--nav) + var(--sab));padding-bottom:var(--sab);display:grid;grid-template-columns:repeat(4,1fr);background:var(--sup);border-top:1px solid var(--linea)}
+#nav{position:fixed;z-index:1500;left:0;right:0;bottom:0;height:calc(var(--nav) + var(--sab));padding-bottom:var(--sab);display:grid;grid-template-columns:repeat(5,1fr);background:var(--sup);border-top:1px solid var(--linea)}
 #nav button{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--texto2);font-size:12.5px;font-weight:700}
 #nav svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #nav button{transition:color .15s}#nav svg{transition:transform .15s}#nav button.activo svg{transform:translateY(-2px)}
