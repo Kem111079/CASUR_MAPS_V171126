@@ -65,7 +65,7 @@ function initMap() {
     }
   }).addTo(map);
   // Velo: al seleccionar un lote, el resto del mapa baja de intensidad (una sola figura; no se restilan 8,000 polígonos).
-  capaSel = L.geoJSON(null, {interactive: false, style: f => f._tenue ? {color: '#ffd400', weight: 2, opacity: .9, dashArray: '6 6', fillOpacity: 0} : {color: '#ffd400', weight: 4.5, opacity: 1, fillColor: '#ffd400', fillOpacity: .18}}).addTo(map);
+  capaSel = L.geoJSON(null, {interactive: false, style: estiloSel}).addTo(map);
   capaEtiquetas = L.layerGroup().addTo(map);
   capaLista = L.layerGroup().addTo(map);
   capaMedir = L.layerGroup().addTo(map);
@@ -73,11 +73,18 @@ function initMap() {
   map.on('moveend zoomend', () => { etiquetasDebounce(); guardarVista(); });
   map.on('zoomend', () => { if (panorama && map.getZoom() > 15.5) { panorama = null; pintarPanorama(); } });
   map.on('dragstart', () => { if (typeof GPS !== 'undefined') { GPS.siguiendo = false; pintarGpsBtn(); } });
+  // La leyenda se pliega con el primer arrastre o zoom del usuario; fitBounds, setView y el GPS no disparan estos eventos.
+  map.on('dragstart dblclick', leyPorUsuario);
+  const cont = map.getContainer();
+  cont.addEventListener('wheel', leyPorUsuario, {passive: true});
+  cont.addEventListener('touchstart', e => { if (e.touches.length > 1) leyPorUsuario(); }, {passive: true});
+  cont.addEventListener('keydown', e => { if (['+', '-', '=', '_', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) leyPorUsuario(); });
+  $('leyenda').addEventListener('pointerdown', () => { if (!leyPlegada) leyArmar(); }); // usar la leyenda reinicia los 30 s
   const v = leerLS(VISTA_KEY, null);
   if (v && Number.isFinite(v.lat)) map.setView([v.lat, v.lng], v.z); else map.fitBounds(capaLotes.getBounds(), margenes(20, 20, 10));
   // Se agrega con la vista ya definida y antes de cualquier selección, para quedar bajo el resaltado y sobre los lotes.
   capaVelo = L.rectangle([[5, -95], [18, -78]], {interactive: false, stroke: false, fillColor: '#ffffff', fillOpacity: 0}).addTo(map);
-  actualizarEtiquetas(); pintarLeyenda();
+  actualizarEtiquetas(); pintarLeyenda(); leyArmar();
 }
 let _vistaT = null;
 function guardarVista() { clearTimeout(_vistaT); _vistaT = setTimeout(() => { const c = map.getCenter(); escribirLS(VISTA_KEY, {lat: c.lat, lng: c.lng, z: map.getZoom()}); }, 600); }
@@ -85,7 +92,7 @@ function setBase(nombre, repintar = true) {
   if (baseActiva) map.removeLayer(baseActiva);
   baseActiva = baseLayers[nombre]; baseActiva.addTo(map); S.base = nombre; guardarAjustes();
   document.body.dataset.base = nombre;
-  if (repintar && capaLotes) { capaLotes.setStyle(estiloFeat); actualizarEtiquetas(); }
+  if (repintar && capaLotes) { restilar(); actualizarEtiquetas(); }
 }
 
 /* ── Capas temáticas: una sola variable a la vez, rampa única y leyenda con hectáreas ── */
@@ -93,7 +100,20 @@ const GR_CORTE = ['Planta', 'Corte 2', 'Corte 3', 'Corte 4', 'Corte 5', 'Mayor a
 const RAMPA = ['#0d0887', '#7e03a8', '#cc4778', '#f89540', '#f0f921'];
 // Producción (t/ha): < 40 rojo · 40–55 morado · 55–70 mostaza · 70–85 verde · > 85 verde oscuro
 const RAMPA_TCH = ['#d7191c', '#7e03a8', '#d4a017', '#3fa34d', '#14532d'];
-const CATS = ['#1f77b4', '#ff7f0e', '#d62728', '#9467bd', '#17becf', '#8c564b', '#e377c2'];
+/* Categóricas: paleta Okabe-Ito (segura para daltonismo) fijada por valor, para que un color no cambie cuando cambian las hectáreas.
+   Los valores nuevos toman un color de reserva por orden de área; más allá de 8 colores van a «Otras».
+   «Sin dato», «Sin aforo» y «VARIEDADES» son neutros: gris rayado y al final de la leyenda. */
+const OI = {azul: '#0072B2', naranja: '#E69F00', verde: '#009E73', purpura: '#CC79A7', celeste: '#56B4E9', amarillo: '#F0E442', bermellon: '#D55E00'};
+const CATS_RESERVA = ['#882255', '#44AA99', '#999933', '#332288', '#AA4499'];
+const CATS_MAX = 8, COLOR_OTRAS = '#7b8794';
+const CAT_COLORES = {
+  zona: {'1-Sur': OI.azul, '2-Centro': OI.naranja, '3-Norte': OI.verde, '5-Productores': OI.purpura},
+  riego: {Gravedad: OI.azul, Secano: OI.naranja, Goteo: OI.verde, Aspersion: OI.celeste, Ventana: OI.amarillo, Pivote: OI.purpura, 'Mini-Aspersion': '#882255'},
+  variedad: {'CP 72-2086': OI.azul, 'NA 56-42': OI.naranja, 'B 82-333': OI.verde, 'RB 84-5210': OI.purpura, 'RB 86-7515': OI.celeste, 'CG02-163': OI.amarillo, 'MX 79-431': OI.bermellon},
+  destino: {Molienda: OI.verde, Semilla: OI.celeste, 'Sin Caña': OI.amarillo, 'Baja rentabilidad': OI.bermellon, Investigacion: OI.purpura}
+};
+const CAT_NEUTROS = new Set(['', 'SIN DATO', 'SIN AFORO', 'VARIEDADES', 'SIN DEFINIR']);
+const esNeutro = k => CAT_NEUTROS.has(sinTildes(k).trim());
 const TEMAS = {
   ninguno: {t: 'Sin color'},
   tchEst: {t: 'TCH estimado 26/27', u: 't/ha', val: l => esMolienda(l) && l.tchEst > 0 ? l.tchEst : null, cortes: [40, 55, 70, 85], rampa: RAMPA_TCH},
@@ -111,7 +131,7 @@ const TEMAS = {
     {txt: 'Fecha vencida', color: '#d7191c'},
     {txt: SEMANAS_PROX[0] ? `Sem. ${SEMANAS_PROX[0].sem} · ${rangoSemana(SEMANAS_PROX[0])}` : 'Próxima semana', color: '#ff8c00'},
     {txt: SEMANAS_PROX[1] ? `Sem. ${SEMANAS_PROX[1].sem} · ${rangoSemana(SEMANAS_PROX[1])}` : 'Semana siguiente', color: '#1f77b4'},
-    {txt: 'Más adelante', color: '#cfd8df'},
+    {txt: 'Más adelante', color: '#cde8c4'},
     {txt: 'Cosechado', color: '#6b7280'}]}
 };
 if (!TEMAS[S.colorear]) S.colorear = 'ninguno'; // capas retiradas (TCH última zafra, brecha)
@@ -121,21 +141,27 @@ function prepararTema() {
   const T = TEMAS[S.colorear] || TEMAS.ninguno, lotes = Object.values(LOTES).filter(l => l.nPoly);
   if (T.cortes) {
     const c = T.cortes, rotulos = [`< ${c[0]}`, ...c.slice(0, -1).map((v, i) => `${v} – ${c[i + 1]}`), `> ${c[c.length - 1]}`];
-    const ha = new Array(rotulos.length).fill(0); let sin = 0;
+    const ha = new Array(rotulos.length).fill(0), n = ha.slice(); let sin = 0, nSin = 0;
     const R = T.rampa || RAMPA;
-    lotes.forEach(l => { const v = T.val(l); if (v === null || v === undefined) { sin += l.areaShape; return; } let i = c.findIndex(x => v < x); if (i < 0) i = c.length; temaColor.set(l.cod, R[i]); temaClase.set(l.cod, rotulos[i]); ha[i] += l.areaShape; });
-    temaLeyenda = rotulos.map((r, i) => ({color: R[i], txt: r, ha: ha[i]})); if (sin > 0) temaLeyenda.push({color: null, txt: 'Sin dato', ha: sin});
+    lotes.forEach(l => { const v = T.val(l); if (v === null || v === undefined) { sin += l.areaShape; nSin++; return; } let i = c.findIndex(x => v < x); if (i < 0) i = c.length; temaColor.set(l.cod, R[i]); temaClase.set(l.cod, rotulos[i]); ha[i] += l.areaShape; n[i]++; });
+    temaLeyenda = rotulos.map((r, i) => ({color: R[i], txt: r, ha: ha[i], n: n[i]})).filter(x => x.n);
+    if (sin > 0) temaLeyenda.push({color: null, txt: 'Sin dato', ha: sin, n: nSin});
   } else if (T.clases) {
-    const defs = T.clases(), ha = defs.map(() => 0), n = defs.map(() => 0); let sin = 0;
-    lotes.forEach(l => { const i = T.clave(l); if (i === null) { sin += l.areaShape; return; } temaColor.set(l.cod, defs[i].color); temaClase.set(l.cod, defs[i].txt); ha[i] += l.areaShape; n[i]++; });
+    const defs = T.clases(), ha = defs.map(() => 0), n = defs.map(() => 0); let sin = 0, nSin = 0;
+    lotes.forEach(l => { const i = T.clave(l); if (i === null) { sin += l.areaShape; nSin++; return; } temaColor.set(l.cod, defs[i].color); temaClase.set(l.cod, defs[i].txt); ha[i] += l.areaShape; n[i]++; });
     temaLeyenda = defs.map((d, i) => ({color: d.color, txt: d.txt, ha: ha[i], n: n[i]})).filter(x => x.n);
-    if (sin > 0) temaLeyenda.push({color: null, txt: T.sin || 'Sin dato', ha: sin});
+    if (sin > 0) temaLeyenda.push({color: null, txt: T.sin || 'Sin dato', ha: sin, n: nSin});
   } else if (T.cat) {
-    const ha = {}; lotes.forEach(l => { const k = T.cat(l); ha[k] = (ha[k] || 0) + l.areaShape; });
-    const orden = Object.keys(ha).sort((a, b) => ha[b] - ha[a]), top = orden.slice(0, CATS.length), col = {};
-    top.forEach((k, i) => { col[k] = CATS[i]; temaLeyenda.push({color: CATS[i], txt: k, ha: ha[k]}); });
-    const resto = orden.slice(CATS.length).reduce((s, k) => s + ha[k], 0); if (resto > 0) temaLeyenda.push({color: '#9aa3ad', txt: 'Otras', ha: resto});
-    lotes.forEach(l => { const k = T.cat(l); temaColor.set(l.cod, col[k] || '#9aa3ad'); temaClase.set(l.cod, col[k] ? k : 'Otras'); });
+    const ha = {}, n = {}; lotes.forEach(l => { const k = T.cat(l); ha[k] = (ha[k] || 0) + l.areaShape; n[k] = (n[k] || 0) + 1; });
+    const fijos = CAT_COLORES[S.colorear] || {}, reserva = CATS_RESERVA.slice(), col = {};
+    const orden = Object.keys(ha).sort((a, b) => ha[b] - ha[a]), reales = orden.filter(k => !esNeutro(k)), neutros = orden.filter(esNeutro);
+    let usados = reales.filter(k => fijos[k]).length;
+    reales.forEach(k => { if (fijos[k]) col[k] = fijos[k]; else if (usados < CATS_MAX && reserva.length) { col[k] = reserva.shift(); usados++; } });
+    reales.filter(k => col[k]).forEach(k => temaLeyenda.push({color: col[k], txt: k, ha: ha[k], n: n[k]}));
+    const otras = reales.filter(k => !col[k]);
+    if (otras.length) temaLeyenda.push({color: COLOR_OTRAS, txt: 'Otras', ha: otras.reduce((s, k) => s + ha[k], 0), n: otras.reduce((s, k) => s + n[k], 0)});
+    neutros.forEach(k => temaLeyenda.push({color: null, txt: k, ha: ha[k], n: n[k]}));
+    lotes.forEach(l => { const k = T.cat(l); if (esNeutro(k)) { temaClase.set(l.cod, k); return; } temaColor.set(l.cod, col[k] || COLOR_OTRAS); temaClase.set(l.cod, col[k] ? k : 'Otras'); });
   }
 }
 function estiloFeat(f) {
@@ -146,18 +172,70 @@ function estiloFeat(f) {
   if (!c) return {color: sat ? '#ffffff' : '#7b8794', weight: .8, opacity: .7, fillColor: '#9aa3ad', fillOpacity: .12};
   return {color: sat ? '#ffffff' : '#1c2733', weight: sat ? 1.2 : .7, opacity: .9, fillColor: c, fillOpacity: sat ? .55 : .68};
 }
-function setColorear(modo) {
-  S.colorear = modo; temaFiltro = null; guardarAjustes(); prepararTema(); capaLotes.setStyle(estiloFeat); pintarLeyenda(); actualizarEtiquetas();
+/* Resaltado del lote seleccionado. Sin capa: contorno dorado y relleno amarillo suave.
+   Con capa temática: solo contorno dorado grueso (con halo oscuro para que se vea sobre la mostaza) y el lote
+   conserva el color de su clase, redibujado sobre el velo que atenúa el resto del mapa. */
+function estiloSel(f) {
+  if (f._tenue) return {color: '#ffd400', weight: 2, opacity: .9, dashArray: '6 6', fillOpacity: 0};
+  if (S.colorear === 'ninguno') return {color: '#ffd400', weight: 4.5, opacity: 1, fillColor: '#ffd400', fillOpacity: .18};
+  if (f._halo) return {color: '#1c2733', weight: 9, opacity: .5, fill: false};
+  const e = estiloFeat(f);
+  return {color: '#ffd400', weight: 5, opacity: 1, fillColor: e.fillColor, fillOpacity: e.fillOpacity};
 }
+function setColorear(modo) {
+  S.colorear = modo; temaFiltro = null; guardarAjustes(); prepararTema(); restilar();
+  leyPlegada = false; pintarLeyenda(); leyArmar(); actualizarEtiquetas();
+}
+/* Vuelve a pintar los lotes y el resaltado del lote seleccionado (cambio de capa, filtro o mapa base). */
+function restilar() { capaLotes.setStyle(estiloFeat); if (capaSel) capaSel.setStyle(estiloSel); }
+function filtrarClase(clase) { temaFiltro = clase; restilar(); pintarLeyenda(); leyArmar(); }
+
+/* ── Leyenda: desplegada al cambiar de capa; se pliega sola a los 30 s sin uso o al primer arrastre o zoom
+   del usuario (no con fitBounds ni con el GPS). Con un filtro de clase activo no se pliega sola.
+   Plegada es una píldora con el nombre de la capa y una franja de colores; un toque la despliega. ── */
+const LEY_MS = 30000;
+let leyPlegada = false, _leyT = null, _leyCardCod = '';
+const leyVisible = () => S.colorear !== 'ninguno' && temaLeyenda.length > 0;
+function leyArmar() { clearTimeout(_leyT); _leyT = null; if (!leyPlegada && temaFiltro === null && leyVisible()) _leyT = setTimeout(() => leyPlegar(), LEY_MS); }
+function leyPlegar(forzar = false) { clearTimeout(_leyT); _leyT = null; if (leyPlegada || (temaFiltro !== null && !forzar)) return; leyPlegada = true; pintarLeyenda(); }
+function leyDesplegar() {
+  leyPlegada = false; pintarLeyenda(); leyArmar();
+  const cu = document.querySelector('#leyenda .ley-cuerpo'), b = cu && cu.querySelector('strong'); // con un lote abierto, mostrar la fila de su clase
+  if (b) { const f = b.closest('button'), y = f.offsetTop - cu.offsetTop; if (y + f.offsetHeight > cu.clientHeight) cu.scrollTop = y - 8; }
+}
+function leyAlternar() { if (leyPlegada) leyDesplegar(); else leyPlegar(true); }
+function leyPorUsuario() { if (!leyPlegada && leyVisible()) leyPlegar(); }
+/* Con la tarjeta abierta la leyenda queda como píldora (al abrir o cambiar de lote); el usuario puede volver a desplegarla. */
+function leyPorCard(vis) {
+  if (vis && selCod !== _leyCardCod) { _leyCardCod = selCod; leyPlegada = true; clearTimeout(_leyT); _leyT = null; pintarLeyenda(); }
+  else if (!vis && _leyCardCod) { _leyCardCod = ''; pintarLeyenda(); }
+}
+const pctTxt = p => p > 0 && p < 1 ? '< 1 %' : nf0.format(p) + ' %';
+const lotesTxt = n => n === 1 ? '1 lote' : nf0.format(n) + ' lotes';
 function pintarLeyenda() {
   const el = $('leyenda'); if (!el) return;
-  if (S.colorear === 'ninguno' || !temaLeyenda.length) { el.classList.add('oculta'); return; }
-  const T = TEMAS[S.colorear];
-  el.classList.remove('oculta');
-  el.innerHTML = `<button type="button" class="ley-cab" onclick="this.parentElement.classList.toggle('plegada')"><b>${esc(T.t)}</b>${T.u ? ` <small>${esc(T.u)}</small>` : ''}<i>${ico('chevDown')}</i></button><div class="ley-cuerpo">` +
-    temaLeyenda.map(x => `<button type="button" class="${temaFiltro === x.txt ? 'activo' : temaFiltro !== null ? 'apagado' : ''}" data-clase="${esc(x.txt)}"><span class="ley-color" style="${x.color ? 'background:' + x.color : ''}"></span><span>${esc(x.txt)}</span><em>${x.n ? x.n + ' · ' : ''}${nf0.format(x.ha)} ha</em></button>`).join('') +
+  if (!leyVisible()) { el.classList.add('oculta'); clearTimeout(_leyT); _leyT = null; return; }
+  const T = TEMAS[S.colorear], total = temaLeyenda.reduce((s, x) => s + x.ha, 0) || 1;
+  const filtro = temaFiltro !== null ? temaLeyenda.find(x => x.txt === temaFiltro) : null;
+  const claseSel = selCod && LOTES[selCod] ? (temaClase.get(selCod) || T.sin || 'Sin dato') : null;
+  const antes = el.classList.contains('plegada'), estabaOculta = el.classList.contains('oculta');
+  el.className = 'leyenda' + (leyPlegada ? ' plegada' : '') + (filtro ? ' con-filtro' : '');
+  el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Leyenda: ' + T.t);
+  const muestra = c => `<span class="ley-color" style="${c ? 'background:' + c : ''}"></span>`;
+  const franja = `<span class="ley-franja" aria-hidden="true">${temaLeyenda.filter(x => x.color).slice(0, 8).map(x => `<span style="background:${x.color}"></span>`).join('')}</span>`;
+  const cab = leyPlegada && filtro
+    ? `${muestra(filtro.color)}<span class="ley-pf"><small>${esc(T.t)}</small><b>Solo ${esc(rotulo(filtro.txt))} · ${nf0.format(filtro.ha)} ha</b></span>`
+    : leyPlegada ? `${franja}<b>${esc(T.t)}</b>` : `<b>${esc(T.t)}</b>${T.u ? ` <small>${esc(T.u)}</small>` : ''}`;
+  el.innerHTML = `<button type="button" class="ley-cab" aria-expanded="${!leyPlegada}" aria-controls="leyCuerpo" aria-label="${esc(T.t)}: ${leyPlegada ? 'mostrar' : 'ocultar'} leyenda${filtro ? ' (filtro: ' + esc(rotulo(filtro.txt)) + ')' : ''}">${cab}<i>${ico('chevDown')}</i></button>` +
+    (leyPlegada && filtro ? `<button type="button" class="ley-quitar" aria-label="Quitar filtro y ver todos los lotes">${ico('x')}</button>` : '') +
+    `<div class="ley-cuerpo" id="leyCuerpo">` +
+    temaLeyenda.map(x => { const p = x.ha / total * 100, on = temaFiltro === x.txt; return `<button type="button" class="${on ? 'activo' : temaFiltro !== null ? 'apagado' : ''}${x.color ? '' : ' neutro'}" data-clase="${esc(x.txt)}" aria-pressed="${on}" style="--p:${Math.min(100, p).toFixed(1)}%${x.color ? ';--c:' + x.color : ''}">${muestra(x.color)}<span class="ley-txt"><b>${esc(rotulo(x.txt))}</b><small>${x.n ? lotesTxt(x.n) + ' · ' : ''}${nf0.format(x.ha)} ha${claseSel === x.txt ? ' · <strong>este lote</strong>' : ''}</small></span><em>${pctTxt(p)}</em></button>`; }).join('') +
     `<small class="ley-pista">${temaFiltro !== null ? 'Toque de nuevo para ver todo' : 'Toque una clase para resaltarla'}</small></div>`;
-  el.querySelector('.ley-cuerpo').onclick = e => { const b = e.target.closest('button[data-clase]'); if (!b) return; temaFiltro = temaFiltro === b.dataset.clase ? null : b.dataset.clase; capaLotes.setStyle(estiloFeat); pintarLeyenda(); };
+  el.querySelector('.ley-cab').onclick = leyAlternar;
+  const q = el.querySelector('.ley-quitar'); if (q) q.onclick = () => filtrarClase(null);
+  el.querySelector('.ley-cuerpo').onclick = e => { const b = e.target.closest('button[data-clase]'); if (!b) return; filtrarClase(temaFiltro === b.dataset.clase ? null : b.dataset.clase); };
+  if (!estabaOculta && antes !== leyPlegada && el.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    el.animate([{opacity: .3, transform: 'scale(.96)'}, {opacity: 1, transform: 'none'}], {duration: 250, easing: 'cubic-bezier(.2,.8,.2,1)'});
 }
 
 /* ── Etiquetas por nivel de zoom: finca → lote → tablón ── */
@@ -293,10 +371,15 @@ function pintarSeleccion() {
   capaVelo.setStyle({fillColor: oscuro ? '#000000' : '#ffffff', fillOpacity: l && l.nPoly ? (oscuro ? .38 : .42) : 0});
   if (!l) return;
   // Por tablón: se resalta el tablón y el resto del lote queda con contorno punteado.
-  l.feats.forEach(f => { if (!porTablon() || f === selFeat) capaSel.addData(Object.assign({}, f, {_tenue: false})); else capaSel.addData(Object.assign({}, f, {_tenue: true})); });
-  // Realce breve al seleccionar: el relleno aparece intenso y baja en ~350 ms.
+  const tema = S.colorear !== 'ninguno';
+  l.feats.forEach(f => {
+    const tenue = porTablon() && f !== selFeat;
+    if (tema && !tenue) capaSel.addData(Object.assign({}, f, {_tenue: false, _halo: true}));
+    capaSel.addData(Object.assign({}, f, {_tenue: tenue, _halo: false}));
+  });
+  // Realce breve al seleccionar: sin capa, el relleno aparece intenso y baja en ~350 ms; con capa, solo el contorno se afina.
   const turno = ++_pulso, t0 = performance.now();
-  const paso = t => { if (turno !== _pulso) return; const k = Math.min(1, (t - t0) / 350); capaSel.eachLayer(ly => { if (!ly.feature._tenue) ly.setStyle({fillOpacity: .55 - .37 * k}); }); if (k < 1) requestAnimationFrame(paso); };
+  const paso = t => { if (turno !== _pulso) return; const k = Math.min(1, (t - t0) / 350); capaSel.eachLayer(ly => { const ft = ly.feature; if (ft._tenue || ft._halo) return; ly.setStyle(tema ? {weight: 9 - 4 * k} : {fillOpacity: .55 - .37 * k}); }); if (k < 1) requestAnimationFrame(paso); };
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(paso);
 }
 /* Toque largo sobre un lote: menú rápido sin abrir la tarjeta completa. */
@@ -318,7 +401,7 @@ function seleccionarTablon(i) { const f = DATA.features[i]; if (f) seleccionarLo
 function cerrarCard() { selCod = ''; selFeat = null; pintarSeleccion(); $('card').className = 'card oculta'; ajustarCard(); }
 function ajustarCard() {
   const el = $('card'), vis = !el.classList.contains('oculta');
-  document.body.classList.toggle('con-card', vis); document.body.classList.toggle('card-full', vis && cardFull);
+  document.body.classList.toggle('con-card', vis); document.body.classList.toggle('card-full', vis && cardFull); leyPorCard(vis);
   if (vis && !cardFull) document.body.style.setProperty('--card-h', Math.round(el.getBoundingClientRect().height) + 'px');
 }
 function cifra(rot, val, cls = '', extra = '') { return `<div class="${cls}"><span>${rot}</span><b>${val}</b>${extra}</div>`; }
@@ -361,8 +444,8 @@ function renderCard() {
       <div class="kvs">
         ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nf.format(aT)} ha · ${nf.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nf.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : kv('Tablón tocado', pt.Tablon)}
         ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nf.format(l.areaShape)} ha en shape` : 'Sin polígono')}
-        ${kv('Variedad', l.variedad)}${kv('Zona', l.zona)}${kv('Riego', l.riego)}${kv('Tenencia', l.tenencia)}
-        ${kv('Clasificación', l.clas || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
+        ${kv('Variedad', rotulo(l.variedad))}${kv('Zona', l.zona)}${kv('Riego', rotulo(l.riego))}${kv('Tenencia', l.tenencia)}
+        ${kv('Clasificación', rotulo(l.clas) || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
         ${kv('Grupo de corte', l.grCorte ? (l.grCorte === 'Planta' ? 'Plantilla' : 'Soca · ' + l.grCorte.toLowerCase()) : '')}${kv('Propuesta de renovación', l.renovar === true ? 'Sí, renovar' : l.renovar === false ? 'No' : '')}
         ${kv('Promedio histórico', l.histProm !== null ? `${nf1.format(l.histProm)} t/ha · ${l.histN} zafras` : '')}${kv('Máximo histórico', l.histMax !== null ? nf1.format(l.histMax) + ' t/ha' : '')}
         ${l.renovar && deltaEsperado(l) !== null ? kv('Al renovar, esperado', `${signo(deltaEsperado(l))} t/ha (plantillas de la zona: ${nf1.format(PLANT_ZONA[l.zona])})`) + kv('Al renovar, techo', deltaTecho(l) === null ? '' : `${signo(deltaTecho(l))} t/ha (su máximo)`) : ''}
@@ -439,7 +522,12 @@ function abrirFinca(nombre, zoom = false) {
 }
 function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) { soltarSeguimiento(); map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); } }
 
-/* ── Hoja de capas y herramientas ── */
+/* ── Hoja de capas y herramientas ──
+   Elegir capa o mapa base aplica el cambio, cierra la hoja para ver el resultado y ofrece Deshacer durante 4 s.
+   Los interruptores y «Al tocar el mapa» no la cierran: se suelen cambiar varios seguidos. */
+const BASES_TXT = {claro: 'Calles', satelite: 'Satélite', ninguno: 'Sin mapa'};
+function cerrarCapasPronto() { setTimeout(() => { if ($('opColor') && $('hoja').classList.contains('abierta')) cerrarHoja(); }, 200); }
+function avisoCambio(txt, deshacer) { toast(txt, {accion: 'Deshacer', ms: 4000, alAccion: deshacer}); }
 function abrirCapas() {
   const op = (grupo, val, txt, act) => `<label class="opcion"><input type="radio" name="${grupo}" value="${val}" ${act ? 'checked' : ''}><span>${txt}</span></label>`;
   abrirHoja('Capas y herramientas', `
@@ -452,10 +540,10 @@ function abrirCapas() {
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">${ico('ruler')} Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">${ico('hexagon')} Medir área</button></div>
     <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();soltarSeguimiento();map.fitBounds(capaLotes.getBounds(),margenes(20,20,10))">${ico('map')} Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">${ico('download')} Guardar esta zona sin señal</button></div>`);
-  $('opBase').addEventListener('change', e => setBase(e.target.value));
+  $('opBase').addEventListener('change', e => { const prev = S.base, val = e.target.value; setBase(val); cerrarCapasPronto(); avisoCambio('Mapa base: ' + BASES_TXT[val], () => setBase(prev)); });
   $('opSel').addEventListener('change', e => setSelModo(e.target.value));
   $('opReg').addEventListener('change', e => { S.verRegistros = e.target.checked; guardarAjustes(); pintarRegistros(); });
-  $('opColor').addEventListener('change', e => setColorear(e.target.value));
+  $('opColor').addEventListener('change', e => { const prev = S.colorear, val = e.target.value; setColorear(val); cerrarCapasPronto(); avisoCambio('Capa: ' + TEMAS[val].t, () => setColorear(prev)); });
   $('opEtq').addEventListener('change', e => { S.etiquetas = e.target.checked; guardarAjustes(); actualizarEtiquetas(); });
   $('opNc').addEventListener('change', e => { S.etqNc = e.target.checked; guardarAjustes(); actualizarEtiquetas(); });
 }

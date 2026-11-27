@@ -381,12 +381,16 @@ function resumenRenovacion() {
   return {filas, n: filas.reduce((s, f) => s + f.n, 0), area, est, tonEsp, tonTecho, dEsp: area ? tonEsp / area : 0, dTecho: area ? tonTecho / area : 0};
 }
 const esMolienda = l => String(l.clas || '').toLowerCase() === 'molienda';
+/* Rótulos para mostrar: corrige tildes y mayúsculas de valores que vienen así de la fuente (no cambia los datos). */
+const ROTULOS = {Aspersion: 'Aspersión', 'Mini-Aspersion': 'Miniaspersión', Investigacion: 'Investigación', 'Sin Caña': 'Sin caña',
+  VARIEDADES: 'Varias / sin definir', PLATANO: 'Plátano', 'Baja Prod': 'Baja producción'};
+const rotulo = v => ROTULOS[v] ?? v;
 
 /* Semáforo agronómico. Mismos umbrales de versiones anteriores; se agregan estados informativos. */
 function estadoLote(l) {
   if (!l) return {cls: 'neutro', txt: 'Sin dato'};
   if (l.cosechado) return {cls: 'info', txt: 'Cosechado ' + (l.zafra || ''), det: 'Corte ' + fechaCorta(l.fCorte)};
-  if (l.conAforo && l.clas && !esMolienda(l)) return {cls: 'neutro', txt: l.clas, det: 'Fuera del área de molienda'};
+  if (l.conAforo && l.clas && !esMolienda(l)) return {cls: 'neutro', txt: rotulo(l.clas), det: 'Fuera del área de molienda'};
   const edad = edadMeses(l);
   if (l.tchAnt === null && edad === null) return {cls: 'neutro', txt: 'Sin histórico', det: 'Sin TCH ni fecha de corte'};
   if (l.tchAnt !== null && l.tchAnt < 55) return {cls: 'mal', txt: 'Prioridad alta', det: 'TCH anterior bajo'};
