@@ -904,30 +904,48 @@ async function reporteVisita(v) {
 let aforoGrupo = 'hacienda', aforoTodas = false, instalarEvt = null;
 const AFORO_TOP = 10; // filas del resumen a la vista (las de más toneladas); el resto con «Ver las N»
 const AFORO_GRUPOS = [['hacienda', 'Finca'], ['zona', 'Zona'], ['finca', 'Finca y tenencia']];
-function renderMas() {
-  const g = (RESUMEN.resumen || {}).global || {}, filas = ((RESUMEN.resumen || {})[aforoGrupo] || []);
+/* Resumen por bloques (pestañas internas): Panorama · Zafra · Fincas · Renovación. Recuerda la última.
+   En tableta horizontal, Panorama queda fijo a la izquierda y la pestaña elegida a la derecha. */
+const MAS_VISTAS = [['panorama', 'Panorama'], ['zafra', 'Zafra'], ['fincas', 'Fincas'], ['renov', 'Renovación']];
+let masVista = (() => { try { return localStorage.getItem('casur_mas_vista') || 'panorama'; } catch (_) { return 'panorama'; } })();
+let aforoAbierta = false;
+const masAncho = () => window.matchMedia('(min-width:1000px)').matches;
+function verMas(v) { masVista = v; try { localStorage.setItem('casur_mas_vista', v); } catch (_) {} renderMas(); $('tabMas').scrollTop = 0; }
+function aforoHtml() {
+  const filas = ((RESUMEN.resumen || {})[aforoGrupo] || []);
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
-  $('tabMas').innerHTML = `<div class="marca"><img src="./assets/logo_casur.png" alt="CASUR"><div><b>CASUR Maps</b><span>Departamento de Negocios de Caña</span></div></div>
-    <div class="mas-grid"><div class="mas-c1">${ejecutivoHtml()}</div><div class="mas-c2">
-    <button type="button" class="btn sec ancho" onclick="abrirTablero(true)">${ico('board')} Tablero de hoy</button>
-    <header><h2>Resumen aforo 26/27</h2><p>Datos al ${fechaCorta(META.datos_al || META.generated_at)} · TCH en t/ha, ponderado por área</p></header>
-    <div class="cifras c4">${cifra('Área molienda', conUnidad(nfHa.format(g.area_ha || 0), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(g.toneladas || 0), ' t'))}${cifra('TCH estimado 26/27', fmtTch(g.tch_ponderado), 'c-est')}${cifra('TCH optimista', fmtTch(g.tch_opt_ponderado))}</div>
+  return `<header><h2>Aforo 26/27 por ${aforoGrupo === 'zona' ? 'zona' : 'finca'}</h2><p>Datos al ${fechaCorta(META.datos_al || META.generated_at)} · TCH en t/ha, ponderado por área</p></header>
     <label class="campo">Buscar finca o lote<input id="aforoQ" type="search" placeholder="Nombre de la finca o código del lote" autocomplete="off" autocapitalize="characters" enterkeyhint="search"></label>
     <div id="aforoRes" class="lista-lotes"></div>
+    <details class="aforo-det"${aforoAbierta ? ' open' : ''}><summary>${ico('file')} Tabla del aforo <small>${nf0.format(filas.length)} ${aforoGrupo === 'hacienda' ? 'fincas' : 'filas'} · área, toneladas y TCH</small></summary>
     <label class="campo">Agrupar por${sel('aforoGrupo', AFORO_GRUPOS, aforoGrupo)}</label>
     <div class="tabla"><table><thead><tr><th>${(AFORO_GRUPOS.find(o => o[0] === aforoGrupo) || AFORO_GRUPOS[0])[1]}</th><th title="Área de molienda (ha)">Área (ha)</th><th title="Toneladas estimadas 26/27">Ton.</th><th title="TCH estimado 26/27 (t/ha)">TCH est.</th><th title="TCH optimista (t/ha)">TCH opt.</th></tr></thead><tbody id="aforoFilas">${filasAforo(aforoTodas ? filas : filas.slice(0, AFORO_TOP))}</tbody></table></div>
     ${filas.length > AFORO_TOP ? `<button type="button" class="btn ter ancho" id="aforoMas" aria-expanded="${aforoTodas}">${aforoTodas ? `${ico('chevUp')} Ver solo las ${AFORO_TOP} primeras` : `${ico('chevDown')} Ver las ${nf0.format(filas.length)} ${aforoGrupo === 'hacienda' ? 'fincas' : 'filas'}`}</button>` : ''}
-    <p class="pie">${filas.length > AFORO_TOP && !aforoTodas ? `Las ${AFORO_TOP} de más toneladas. ` : ''}Área de molienda en ha. TCH est. = TCH estimado 26/27 · TCH opt. = TCH optimista (t/ha, ponderados por área).</p>
-    <div id="renovBox"></div></div></div>`;
-  pintarRenovBox();
-  const mas = $('aforoMas');
-  if (mas) mas.addEventListener('click', () => { aforoTodas = !aforoTodas; const y = $('tabMas').scrollTop; renderMas(); $('tabMas').scrollTop = y; if (!aforoTodas) $('aforoMas').scrollIntoView({block: 'nearest'}); });
-  $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; aforoTodas = false; renderMas(); });
-  $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
-  $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
-  $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
+    <p class="pie">${filas.length > AFORO_TOP && !aforoTodas ? `Las ${AFORO_TOP} de más toneladas. ` : ''}Área de molienda en ha. TCH est. = TCH estimado 26/27 · TCH opt. = TCH optimista (t/ha, ponderados por área).</p></details>`;
+}
+function renderMas() {
+  const P = ejecutivoPartes(), ancho = masAncho();
+  let v = MAS_VISTAS.some(x => x[0] === masVista) ? masVista : 'panorama';
+  if (ancho && v === 'panorama') v = 'zafra'; // en tableta Panorama ya está fijo a la izquierda
+  const tabs = MAS_VISTAS.filter(x => !(ancho && x[0] === 'panorama'));
+  const cuerpo = v === 'panorama' ? P.panorama : v === 'zafra' ? P.zafra : v === 'fincas' ? P.ranking + aforoHtml() : '<div id="renovBox"></div>';
+  $('tabMas').innerHTML = `<div class="marca"><img src="./assets/logo_casur.png" alt="CASUR"><div><b>CASUR Maps</b><span>Departamento de Negocios de Caña</span></div></div>
+    <div class="mas-grid">${ancho ? `<div class="mas-c1">${P.panorama}</div>` : ''}<div class="mas-c2">
+    <div class="mas-tabs" role="tablist" aria-label="Bloques del resumen">${tabs.map(x => `<button type="button" role="tab" aria-selected="${x[0] === v}" class="${x[0] === v ? 'activo' : ''}" onclick="verMas('${x[0]}')">${x[1]}</button>`).join('')}</div>
+    <div class="mas-cuerpo" role="tabpanel">${cuerpo}</div></div></div>`;
+  if (v === 'renov') pintarRenovBox();
+  if (v === 'fincas') {
+    const mas = $('aforoMas');
+    if (mas) mas.addEventListener('click', () => { aforoTodas = !aforoTodas; const y = $('tabMas').scrollTop; renderMas(); $('tabMas').scrollTop = y; if (!aforoTodas) $('aforoMas').scrollIntoView({block: 'nearest'}); });
+    $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; aforoTodas = false; const y = $('tabMas').scrollTop; renderMas(); $('tabMas').scrollTop = y; });
+    $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
+    document.querySelector('#tabMas .aforo-det').addEventListener('toggle', e => { aforoAbierta = e.target.open; });
+    $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
+    $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
+  }
   // Filas que se tocan: también con teclado (Enter o espacio), como un botón. Se enlaza una sola vez (la pestaña se repinta).
-  if (!$('tabMas').dataset.teclado) { $('tabMas').dataset.teclado = '1'; $('tabMas').addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[role=button]'); if (!tr || (e.key !== 'Enter' && e.key !== ' ')) return; e.preventDefault(); tr.click(); }); }
+  if (!$('tabMas').dataset.teclado) { $('tabMas').dataset.teclado = '1'; $('tabMas').addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[role=button]'); if (!tr || (e.key !== 'Enter' && e.key !== ' ')) return; e.preventDefault(); tr.click(); });
+    window.matchMedia('(min-width:1000px)').addEventListener('change', () => { if (document.body.dataset.tab === 'mas') renderMas(); }); }
 }
 /* Renovación del Resumen en su propio contenedor: se repinta sola cuando llega el histórico. */
 function pintarRenovBox() {
@@ -1215,6 +1233,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 
 /* Novedades de la versión, en lenguaje sencillo (se muestran al actualizar y desde Ajustes). */
 const NOVEDADES = [
+  ['Resumen por bloques', 'Panorama, Zafra, Fincas y Renovación en pestañas: cada vista cabe en pantalla, sin tanto desplazamiento.'],
   ['Resumen ejecutivo', '«Cómo vamos»: toneladas, TCH frente a 25/26, avance de zafra por mes y ranking por zona y finca.'],
   ['Ver en el mapa', 'Lotes TCH < 40, corte de la próxima semana, lotes a renovar y fechas vencidas, con lista y CSV.'],
   ['Tarjeta del lote', 'Semáforo Bien / Atención / Crítico y franja con toneladas, cambio frente a 25/26 y días al corte.'],
@@ -1252,8 +1271,8 @@ function datosEjecutivo() {
     zonas: grupo('zona').filter(z => z.k !== 'Sin dato').sort((a, b) => b.est - a.est), fincas: grupo('hac').filter(f => f.area >= 30)};
 }
 const deltaHtml = (d, base, u = ' t/ha') => d === null || base === null ? '' : `<b class="delta ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : ''}">${signo(d)}${u} (${signo(d / base * 100, nf0)} %)</b>`;
-function ejecutivoHtml() {
-  const e = datosEjecutivo(); if (!e.mol.length) return '';
+function ejecutivoPartes() {
+  const e = datosEjecutivo(); if (!e.mol.length) return {panorama: '', zafra: '', ranking: ''};
   const g = (RESUMEN.resumen || {}).global || {};
   const d = e.est !== null && e.prev !== null ? e.est - e.prev : null, maxT = Math.max(e.est || 0, e.prev || 0, 1);
   const pctCos = e.area ? e.aCos / e.area * 100 : 0, pctProg = e.area ? e.aProgHoy / e.area * 100 : 0;
@@ -1268,19 +1287,28 @@ function ejecutivoHtml() {
     ['prox', ico('calendar'), 'Corte de la próxima semana', w0 ? todos.filter(l => !l.cosechado && l.semProg && l.semProg.clave === w0.clave).length : 0],
     ['renov', ico('sprout'), 'Lotes a renovar', todos.filter(l => l.renovar === true).length],
     ['vencidos', ico('clock'), 'Lotes con fecha vencida de corte', todos.filter(corteVencido).length]];
-  return `<section class="ejec" aria-labelledby="ejecTit">
-    <h2 id="ejecTit">Cómo vamos · zafra 26/27</h2>
+  const kpi = `<div class="cifras c4 kpi-pan">${cifra('Toneladas estimadas', conUnidad(nfT.format(g.toneladas || e.ton), ' t'))}${cifra('TCH estimado 26/27', fmtTch(g.tch_ponderado || e.tch), 'c-est', d !== null ? `<small class="kpi-d ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : ''}">${signo(d)} vs 25/26</small>` : '')}${cifra('Área molienda', conUnidad(nfHa.format(g.area_ha || e.area), ' ha'))}${cifra('Cosechado', nf0.format(pctCos) + ' %', '', `<small class="kpi-d">${nfHa.format(e.aCos)} ha</small>`)}</div>`;
+  return {
+    panorama: `<section class="ejec" aria-labelledby="ejecTit"><h2 id="ejecTit">Cómo vamos · zafra 26/27</h2>
     <p class="frase">Se estiman <b>${nfT.format(g.toneladas || e.ton)} t</b> en ${nfHa.format(g.area_ha || e.area)} ha de molienda, con <b>${fmtTch(g.tch_ponderado || e.tch)} t/ha</b>.${d !== null ? ` En los mismos lotes, el TCH estimado ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : 'se mantiene'} ${deltaHtml(d, e.prev)} frente a la zafra 25/26.` : ''}</p>
-    ${d !== null ? `<div class="comp" role="img" aria-label="TCH 25/26 ${nfTch.format(e.prev)} t/ha; TCH estimado 26/27 ${nfTch.format(e.est)} t/ha">
-      <div><span>Zafra 25/26</span><i style="width:${(e.prev / maxT * 100).toFixed(1)}%"></i><b>${nfTch.format(e.prev)}</b></div>
-      <div class="est"><span>Estimado 26/27</span><i style="width:${(e.est / maxT * 100).toFixed(1)}%"></i><b>${nfTch.format(e.est)}</b></div></div>
-    <p class="pie">t/ha ponderado por área. Comparado en ${nf0.format(e.comp.length)} lotes de molienda con dato en ambas zafras (${nfHa.format(e.aC)} ha, ${nf0.format(e.aC / e.area * 100)} % del área).</p>` : ''}
-    <h3>Avance de zafra</h3>
+    ${kpi}
+    <h3>Ver en el mapa</h3>
+    <div class="preguntas">${preg.map(p => `<button type="button" onclick="preguntaRapida('${p[0]}')">${p[1]}<span>${p[2]}</span><b class="cuenta${p[3] ? '' : ' cero'}">${nf0.format(p[3])}</b>${ico('chevRight')}</button>`).join('')}</div>
+  </section>`,
+    zafra: `<section class="ejec"><h2>Zafra 26/27</h2>
+    <h3>Avance de cosecha</h3>
     <div class="avance" role="img" aria-label="Cosechado ${nf0.format(pctCos)} %; programado a hoy ${nf0.format(pctProg)} %"><i class="prog" style="width:${Math.min(100, pctProg).toFixed(1)}%"></i><i class="cos" style="width:${Math.min(100, pctCos).toFixed(1)}%"></i></div>
     <p class="avance-txt"><b>${nf0.format(pctCos)} % cosechado</b> (${nfHa.format(e.aCos)} de ${nfHa.format(e.area)} ha)${e.aProgHoy > e.aCos ? ` · programado a hoy: ${nf0.format(pctProg)} %` : ''}${e.aCosReal ? ` · TCH real cosechado ${nfTch.format(e.tCosReal / e.aCosReal)} t/ha` : ''}</p>
     ${e.meses.length ? `<div class="meses">${e.meses.map(m => `<div class="${m.k === e.mesHoy ? 'hoy' : m.k < e.mesHoy ? 'pasado' : ''}" title="${nfHa.format(m.area)} ha · ${nfT.format(m.ton)} t"><em>${nf0.format(m.area)}</em><span><i style="height:${(m.area / maxMes * 100).toFixed(1)}%"></i>${m.cos ? `<i class="cos" style="height:${(m.cos / maxMes * 100).toFixed(1)}%"></i>` : ''}</span><b>${MES_CORTO[m.mes]}</b></div>`).join('')}</div>
     <p class="pie">Hectáreas programadas por mes de cosecha${e.aCos ? '; en verde, lo cosechado' : ''}.${e.sinFecha ? ` ${nfHa.format(e.sinFecha)} ha sin fecha programada.` : ''}</p>` : ''}
     ${SEMANAS_PROX.map((w, i) => { const ls = e.lProx.filter(l => l.semProg.clave === w.clave); return ls.length ? `<button type="button" class="btn sec ancho sem-btn" onclick="preguntaRapida('prox', ${i})">${ico('calendar')} <span>Sem. ${w.sem} · ${rangoSemana(w)}: <b>${nf0.format(ls.length)} lotes</b> · ${nfHa.format(ls.reduce((s, l) => s + l.areaAforo, 0))} ha · ${nfT.format(ls.reduce((s, l) => s + (l.tonEst || 0), 0))} t</span></button>` : ''; }).join('')}
+    <button type="button" class="btn sec ancho" onclick="abrirTablero(true)">${ico('board')} Tablero de hoy</button>
+  </section>`,
+    ranking: `<section class="ejec"><h2>Zonas y fincas</h2><h3>TCH estimado frente a 25/26</h3>
+    ${d !== null ? `<div class="comp" role="img" aria-label="TCH 25/26 ${nfTch.format(e.prev)} t/ha; TCH estimado 26/27 ${nfTch.format(e.est)} t/ha">
+      <div><span>Zafra 25/26</span><i style="width:${(e.prev / maxT * 100).toFixed(1)}%"></i><b>${nfTch.format(e.prev)}</b></div>
+      <div class="est"><span>Estimado 26/27</span><i style="width:${(e.est / maxT * 100).toFixed(1)}%"></i><b>${nfTch.format(e.est)}</b></div></div>
+    <p class="pie">t/ha ponderado por área. Comparado en ${nf0.format(e.comp.length)} lotes de molienda con dato en ambas zafras (${nfHa.format(e.aC)} ha, ${nf0.format(e.aC / e.area * 100)} % del área).</p>` : ''}
     <h3>TCH estimado por zona</h3>
     <div class="rank">${e.zonas.map(z => rankFila(z, maxZ, `verZonaMapa('${esc(z.k).replace(/'/g, '&#39;')}')`)).join('')}</div>
     <p class="pie">Barra: TCH estimado 26/27 · raya: zafra 25/26 · número pequeño: diferencia en t/ha. Toque una zona para verla en el mapa.</p>
@@ -1288,9 +1316,7 @@ function ejecutivoHtml() {
     <div class="rank">${fs.slice(0, 5).map(fincaFila).join('')}</div>
     <div class="rank menor">${fs.slice(-5).reverse().map(fincaFila).join('')}</div>
     <p class="pie">Fincas con 30 ha o más de molienda. «A validar»: lotes con TCH estimado posiblemente provisional, que bajan el promedio de la finca. Toque una finca para ver sus lotes.</p>
-    <h3>Ver en el mapa</h3>
-    <div class="preguntas">${preg.map(p => `<button type="button" onclick="preguntaRapida('${p[0]}')">${p[1]}<span>${p[2]}</span><b class="cuenta${p[3] ? '' : ' cero'}">${nf0.format(p[3])}</b>${ico('chevRight')}</button>`).join('')}</div>
-  </section>`;
+  </section>`};
 }
 /* Pregunta rápida: pone la capa, filtra la clase, encuadra esos lotes en el mapa y ofrece la lista. */
 function preguntaRapida(q, sem = 0) {
