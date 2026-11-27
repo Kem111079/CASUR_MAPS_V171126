@@ -477,12 +477,24 @@ function seleccionarTablon(i) { const f = DATA.features[i]; if (f) seleccionarLo
    no se vuelve a abrir mientras siga en ese lote; si la cierra la app (Medir, Ver a renovar…), el GPS la reabre. */
 function cerrarCard(porUsuario = false) {
   if (typeof GPS !== 'undefined') { if (porUsuario && selCod && selCod === GPS.autoSel) GPS.descartado = selCod; GPS.salio = ''; }
-  clearTimeout(_vacioT); selCod = ''; selFeat = null; selToque = false; pintarSeleccion(); $('card').className = 'card oculta'; ajustarCard(); }
+  clearTimeout(_vacioT); selCod = ''; selFeat = null; selToque = false; cardFull = false; pintarSeleccion(); $('card').className = 'card oculta'; ajustarCard(); }
 function ajustarCard() {
   const el = $('card'), vis = !el.classList.contains('oculta');
   document.body.classList.toggle('con-card', vis); document.body.classList.toggle('card-full', vis && cardFull); leyPorCard(vis);
   if (vis && !cardFull) document.body.style.setProperty('--card-h', Math.round(el.getBoundingClientRect().height) + 'px');
-  ubicarAvisos(); histPedir();
+  fabsConSitio(vis && !cardFull); ubicarAvisos(); histPedir();
+}
+/* Con la tarjeta compacta en una pantalla baja, «Ver alrededores» y la brújula subirían hasta el buscador:
+   se ocultan mientras la tarjeta esté abierta (se calcula con su posición final, no durante la transición). */
+function fabsConSitio(conCard) {
+  const ids = ['btnPanorama', 'btnBrujula'], cont = $('vistaMapa'), arr = $('arriba');
+  ids.forEach(id => { const b = $(id); if (b) b.classList.remove('sin-sitio'); });
+  if (!conCard || window.innerWidth >= 900 || !cont || !arr) return;
+  const r = cont.getBoundingClientRect(), tope = Math.max(arr.getBoundingClientRect().bottom, ($('chips') && [...$('chips').children].some(c => !c.hidden) ? $('chips').getBoundingClientRect().bottom : 0)) + 6;
+  const cardH = parseFloat(getComputedStyle(document.body).getPropertyValue('--card-h')) || 230;
+  ids.forEach(id => { const b = $(id); if (!b) return; const cs = getComputedStyle(b);
+    const base = id === 'btnPanorama' ? 144 : 84, top = r.bottom - (cardH + base) - b.offsetHeight;
+    if (cs.display !== 'none' && top < tope) b.classList.add('sin-sitio'); });
 }
 /* Relleno inferior para encuadrar un lote sobre la tarjeta compacta: su alto medido + 16 px, sin dejar
    menos de 120 px de mapa visible. En pantalla ancha la tarjeta va a un lado y se conserva el relleno fijo. */

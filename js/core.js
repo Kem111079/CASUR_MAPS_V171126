@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126J';
+const APP_VERSION = 'V271126A';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -581,7 +581,7 @@ function estadoLote(l) {
   const origen = l.tchAntHist ? ` (zafra ${l.zafra}, producción histórica)` : '';
   if (l.tchAnt !== null && l.tchAnt < 55) return {cls: 'mal', txt: 'Prioridad alta', det: 'TCH zafra anterior bajo: menos de 55 t/ha' + origen};
   if (edad !== null && edad >= 12) return {cls: 'medio', txt: 'Edad alta', det: 'Validar programación de corte'};
-  if (l.tchAnt !== null && l.tchAnt < 70) return {cls: 'medio', txt: 'Revisar', det: 'TCH zafra anterior bajo el rango esperado (55 a 70 t/ha)' + origen};
+  if (l.tchAnt !== null && l.tchAnt < 70) return {cls: 'medio', txt: 'Revisar', det: 'TCH zafra anterior entre 55 y 70 t/ha, por debajo de lo esperado (70 o más)' + origen};
   return {cls: 'bien', txt: 'Sin alertas', det: 'Sin alertas con los datos disponibles' + origen};
 }
 

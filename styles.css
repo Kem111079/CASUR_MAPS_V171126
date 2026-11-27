@@ -97,7 +97,7 @@ body.con-card.card-full .leyenda{display:none}
 .ley-pf small{font-size:calc(11.5px * var(--esc));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ley-pf b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .leyenda.con-filtro.plegada{border-color:var(--info)}
 /* Teléfono angosto con la tarjeta abierta: la píldora con filtro deja solo la clase (y la ✕) para que se lea. */
-@media (max-width:379px){body.con-card .leyenda.con-filtro.plegada .ley-pf-extra,body.con-card .leyenda.con-filtro.plegada .ley-cab>i{display:none}}
+@media (max-width:379px){.leyenda.con-filtro.plegada .ley-pf-extra,.leyenda.con-filtro.plegada .ley-cab>i{display:none}}
 .ley-quitar{flex:none;min-width:46px;min-height:44px;border:0;border-left:1px solid var(--linea);background:transparent;color:var(--texto);display:grid;place-items:center}
 .ley-cuerpo{padding:0 6px 8px;overflow-y:auto;overscroll-behavior:contain;min-height:0}
 .ley-cuerpo button{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:4px 8px;margin:1px 0;border:0;border-radius:8px;background-color:transparent;background-image:linear-gradient(90deg,var(--c,#9aa3ad) var(--p,0%),transparent var(--p,0%));background-size:calc(100% - 16px) 3px;background-position:8px calc(100% - 2px);background-repeat:no-repeat;text-align:left;font-size:calc(13px * var(--esc));transition:opacity .15s,background-color .15s}
@@ -154,6 +154,9 @@ body.con-card.card-full .leyenda{display:none}
 .card.full{top:calc(8px + var(--sat));overflow:auto;-webkit-overflow-scrolling:touch}
 .card.peek .solo-full{display:none}
 .card.peek{max-height:min(calc(100% - 70px - var(--sat)),max(65%,300px));overflow-y:auto;overscroll-behavior:contain}
+/* En pantallas bajas la compacta se desplaza por dentro: la acción principal queda fija abajo, siempre a la vista. */
+.card.peek .acciones{position:sticky;bottom:-14px;z-index:2;background:var(--sup);margin-bottom:-14px;padding-bottom:14px;box-shadow:0 -10px 10px -6px var(--sup)}
+.fab.sin-sitio{display:none}
 .card-asa{display:block;width:100%;height:22px;border:0;background:transparent;padding:0;position:relative}
 .card-asa::after{content:'';position:absolute;left:0;right:0;top:-18px;height:44px} /* zona táctil de 44 px sin cambiar el aspecto */
 .card-asa i{display:block;width:44px;height:5px;border-radius:3px;background:var(--linea);margin:8px auto 0}
@@ -263,8 +266,8 @@ svg.hist{width:100%;height:auto;display:block}
 .destino>span:first-child{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:5px;font-size:calc(15px * var(--esc))}.destino small{opacity:.85}
 .destino .dest-gps{display:flex;align-items:flex-start;gap:8px;font-weight:800;font-size:calc(14px * var(--esc))}
 .destino .semaforo{flex:none;width:12px;height:12px;border-radius:50%;background:currentColor;margin-top:.32em;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 25%,transparent)}
-.destino .dest-acc{flex:none;display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
-.destino button{min-height:44px;border:0;border-radius:10px;background:var(--sup);color:var(--texto);font-weight:800;padding:0 12px;flex:none;display:inline-flex;align-items:center;gap:6px}
+.destino .dest-acc{flex:0 1 auto;min-width:0;max-width:100%;display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.destino button{min-height:44px;max-width:100%;border:0;border-radius:10px;background:var(--sup);color:var(--texto);font-weight:800;padding:0 12px;flex:none;display:inline-flex;align-items:center;gap:6px}
 .destino button .ico{width:18px;height:18px}
 .destino+.pie{margin:0 0 6px}
 .rapidos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}

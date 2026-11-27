@@ -1,5 +1,18 @@
 # Cambios
 
+## V271126A · 27-nov-2026 · Fase 1 de la auditoría (uso gerencial)
+- **Capas:** la hoja se cierra sola al elegir una capa o un mapa base, con un aviso «Deshacer». Los interruptores no la cierran.
+- **Leyenda:** se pliega sola a los 30 s o al primer arrastre o zoom, y queda como una píldora con el nombre de la capa; un toque la abre. Con un filtro de clase no se pliega sola y la píldora lo muestra con una ✕ para quitarlo. Filas con número de lotes, hectáreas y %.
+- **Colores por categoría** (zona, riego, variedad, destino) con una paleta fija y legible; «Sin dato» siempre en gris. Nombres con tilde (Aspersión, Investigación…).
+- **Vista general:** los lotes se dibujan según el nivel de zoom; de lejos ya no se ve una mancha negra.
+- **Salidas naturales:** el botón Atrás de Android cierra la hoja, la tarjeta o la pestaña, y pide un segundo toque antes de salir. Tocar el mapa vacío cierra la tarjeta. El hallazgo a medio escribir queda como borrador.
+- **Letra grande** sin desbordes; indicadores del Resumen que caben y cifras con un formato único. Resumen muestra las 10 fincas principales, con «Ver las 100».
+- **Avisos** abajo, que se pueden cerrar y no tapan botones. La actualización no se aplica con un hallazgo a medio escribir.
+- **Visita:** exige GPS, descarta saltos y lecturas imprecisas, y pide confirmación para finalizar, con opción de deshacer.
+- **Bitácora:** sin registros duplicados por doble toque, lote de destino a la vista, «Deshacer» al borrar, y exportación CSV con hora local.
+- **Datos coherentes:** histórico completo, un solo promedio, TCH estimados dudosos marcados como «Dato a validar» y nombres de lotes únicos.
+- **Pantallas pequeñas (iPhone SE):** la acción «Registrar hallazgo» queda siempre a la vista, y los botones flotantes no se montan sobre el buscador.
+
 ## V181126J · 18-nov-2026
 - **Corrección:** la capa Propuesta de renovación (y Plantillas y socas) salía "Sin dato" en teléfonos que habían descargado los datos con una versión anterior de la app. Ahora la app completa los archivos que falten en su copia local.
 - Los datos nuevos se aplican solos al abrir; "Descargar datos de nuevo" vuelve a bajar todo lo publicado.

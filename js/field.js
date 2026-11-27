@@ -781,7 +781,7 @@ async function exportarZip() {
   toast(`ZIP generado: ${obs.length} registros y ${archivos.length - 1} foto(s).`, {tipo: 'bien'});
 }
 async function vaciarBitacora() {
-  if (!confirm('¿Borrar TODOS los registros y fotos de este teléfono? Exporte antes si los necesita.')) return;
+  if (!await preguntar('¿Borrar toda la bitácora?', 'Se borran TODOS los registros y fotos de este teléfono. Exporte antes si los necesita.', 'Borrar todo', 'Cancelar')) return;
   obsGuardar([]); _fotosPorBorrar.clear(); _rapUlt = null; try { await fotoTx('readwrite', s => s.clear()); } catch (_) {} renderBitacora(); toast('Bitácora vacía.');
 }
 
@@ -832,7 +832,7 @@ function planClick(e) {
   listaGuardar(); toast(`${nuevos.length} lote(s) agregados a la lista del día.`, {tipo: 'bien'});
 }
 const visitaPorId = id => VISITAS.find(x => x.id === id);
-async function borrarVisita(id) { if (!confirm('¿Borrar esta visita?')) return; VISITAS = VISITAS.filter(x => x.id !== id); await kvSet('visitas', VISITAS); renderVisita(); }
+async function borrarVisita(id) { if (!await preguntar('¿Borrar esta visita?', '', 'Borrar', 'Cancelar')) return; VISITAS = VISITAS.filter(x => x.id !== id); await kvSet('visitas', VISITAS); renderVisita(); }
 function csvVisita(v) { if (!v) return; descargarTexto(`visita_${v.id}.csv`, '﻿' + ['t,lat,lng,precision_m,codlote', ...v.pts.map(p => csvLinea([p.t, p.lat, p.lng, p.acc, p.cod]))].join('\n'), 'text/csv;charset=utf-8'); }
 
 /* Reporte imprimible (PDF desde el navegador) con mapa de la ruta, lotes y registros con fotos. */
@@ -1036,6 +1036,8 @@ window.addEventListener('appinstalled', () => { instalarEvt = null; toast('CASUR
 /* Al abrir sin estar instalada: invita a instalar. En iPhone no hay instalación directa y se indican los pasos. */
 function avisarInstalacion() {
   if (_avisoInst || appInstalada() || !$('loader').hidden) return;
+  /* No tapa una tarjeta, una hoja ni otro aviso (p. ej. «Capa: … Deshacer»): espera a que el usuario termine. */
+  if (document.body.classList.contains('con-card') || $('hoja').classList.contains('abierta') || document.querySelector('#toasts .toast')) { setTimeout(avisarInstalacion, 6000); return; }
   if (instalarEvt) { _avisoInst = true; toast('Instale CASUR Maps en este teléfono para abrirla sin señal.', {accion: 'Instalar', ms: 15000, alAccion: instalarApp}); }
   else if (/iphone|ipad|ipod/i.test(navigator.userAgent)) { _avisoInst = true; toast('Para instalar: toque Compartir y luego "Agregar a inicio".', {ms: 12000}); }
 }
