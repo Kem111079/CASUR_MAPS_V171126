@@ -1294,7 +1294,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 
 /* Novedades de la versión, en lenguaje sencillo (se muestran al actualizar y desde Ajustes). */
 const NOVEDADES = [
-  ['Análisis del aforo', 'Nueva pestaña en Resumen: TCH ponderado por variedad, riego o mes, global o por zona, con Excel listo para la junta.'],
+  ['Análisis del aforo', 'Nueva pestaña en Resumen: TCH ponderado por variedad, riego, mes, tenencia, n.º de corte o administración; global, administración directa o por zona; con Excel listo para la junta.'],
   ['Modo vuelo', 'Para helicóptero: altura, velocidad, rumbo y el lote debajo; mapa que se adelanta al rumbo. Active «Preparar vuelo» antes de despegar. Graba el recorrido, marca lotes desde el aire y al aterrizar da el resumen.'],
   ['Leyenda más clara', '«Sin dato» se separa en «Fuera de molienda» (Semilla, Sin caña…) y la falta real de dato; los % suman 100 % sobre molienda.'],
   ['Resumen por bloques', 'Panorama, Zafra, Fincas y Renovación en pestañas: cada vista cabe en pantalla, sin tanto desplazamiento.'],
@@ -1312,7 +1312,12 @@ function abrirNovedades() {
 }
 /* ── Análisis: aforo ponderado por variedad, riego o mes de cosecha, para cada zona y el global ──
    Misma regla del aforo: toneladas estimadas de molienda / hectáreas de molienda. Δ = mismos lotes frente a 25/26. */
-const ANA_DIMS = [['variedad', 'Variedad'], ['riego', 'Riego'], ['mes', 'Mes de cosecha']];
+const ANA_DIMS = [['variedad', 'Variedad'], ['riego', 'Riego'], ['mes', 'Mes de cosecha'], ['tenencia', 'Tenencia'], ['corte', 'N.º de corte'], ['admin', 'Administración']];
+/* Administración directa = todas las zonas menos Productores. Se puede elegir como «zona» o ver como agrupación. */
+const ZONA_PROD = '5-Productores', AD = '__AD';
+const esDirecta = l => l.zona !== ZONA_PROD;
+const zonaTxt = z => z === AD ? 'Administración directa' : z || 'Global';
+const enZona = (l, z) => !z || (z === AD ? esDirecta(l) : l.zona === z);
 let anaZona = (() => { try { return localStorage.getItem('casur_ana_zona') || ''; } catch (_) { return ''; } })();
 let anaDim = (() => { try { return localStorage.getItem('casur_ana_dim') || 'variedad'; } catch (_) { return 'variedad'; } })();
 const lotesAforo = () => Object.values(LOTES).filter(l => esMolienda(l) && l.conAforo && (l.areaAforo || 0) > 0); // como el aforo: toda el área de molienda (un lote sin estimado aporta 0 t)
@@ -1320,34 +1325,38 @@ const zonasAforo = () => [...new Set(lotesAforo().map(l => l.zona).filter(Boolea
 function claveAna(l, dim) {
   if (dim === 'variedad') return rotulo(l.variedad) || 'Sin dato';
   if (dim === 'riego') return rotulo(l.riego) || 'Sin dato';
+  if (dim === 'tenencia') return rotulo(l.tenencia) || 'Sin dato';
+  if (dim === 'admin') return esDirecta(l) ? 'Administración directa' : 'Productores';
+  if (dim === 'corte') { const n = /^planta/i.test(l.nc) ? 1 : Number(l.nc); return !n ? 'Sin dato' : n === 1 ? '01 Plantilla' : n >= 11 ? '11 Corte 11 o más' : String(n).padStart(2, '0') + ' Corte ' + n; }
   const d = parseISO(l.fProg); return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : 'Sin fecha';
 }
-const rotuloAna = (k, dim) => dim === 'mes' && /^\d{4}-\d{2}$/.test(k) ? `${MES_CORTO[Number(k.slice(5)) - 1]} ${k.slice(2, 4)}` : k;
+const rotuloAna = (k, dim) => dim === 'mes' && /^\d{4}-\d{2}$/.test(k) ? `${MES_CORTO[Number(k.slice(5)) - 1]} ${k.slice(2, 4)}` : dim === 'corte' && /^\d{2} /.test(k) ? k.slice(3) : k;
 function grupoAna(ls) {
   const area = ls.reduce((s, l) => s + l.areaAforo, 0), ton = ls.reduce((s, l) => s + (l.tonEst || (l.tchEst > 0 ? l.tchEst * l.areaAforo : 0)), 0), comp = ls.filter(l => l.tchPrev > 0 && l.tchEst > 0);
   const prev = pond(comp, l => l.tchPrev), estC = pond(comp, l => l.tchEst);
   return {n: ls.length, area, ton, tch: area ? ton / area : null, prev, delta: prev !== null && estC !== null ? estC - prev : null, cods: ls.map(l => l.cod)};
 }
 function datosAna(zona, dim) {
-  const ls = lotesAforo().filter(l => !zona || l.zona === zona), g = new Map();
+  const ls = lotesAforo().filter(l => enZona(l, zona)), g = new Map();
   ls.forEach(l => { const k = claveAna(l, dim); (g.get(k) || g.set(k, []).get(k)).push(l); });
   let filas = [...g].map(([k, arr]) => Object.assign({k}, grupoAna(arr)));
-  filas = dim === 'mes' ? filas.sort((a, b) => a.k.localeCompare(b.k)) : filas.sort((a, b) => b.area - a.area);
+  filas = dim === 'mes' || dim === 'corte' || dim === 'admin' ? filas.sort((a, b) => a.k.localeCompare(b.k)) : filas.sort((a, b) => b.area - a.area);
   const sin = filas.filter(f => /^Sin /.test(f.k)); filas = filas.filter(f => !/^Sin /.test(f.k)).concat(sin);
   return {filas, total: grupoAna(ls)};
 }
 function analisisHtml() {
-  const zs = zonasAforo(); if (anaZona && !zs.includes(anaZona)) anaZona = '';
+  const zs = zonasAforo(); if (anaZona && anaZona !== AD && !zs.includes(anaZona)) anaZona = '';
+  if (anaZona && anaDim === 'admin') anaDim = 'variedad'; // dentro de una zona, «Administración» no compara nada
   const {filas, total} = datosAna(anaZona, anaDim), max = Math.max(...filas.map(f => Math.max(f.tch || 0, f.prev || 0)), 1);
   const fila = (f, i) => `<button type="button" class="rank-fila" data-i="${i}"><span class="rank-nom">${esc(rotuloAna(f.k, anaDim))}<small>${nf0.format(f.n)} lotes · ${nfHa.format(f.area)} ha · ${nfT.format(f.ton)} t</small></span><span class="rank-barra"><i style="width:${((f.tch || 0) / max * 100).toFixed(1)}%"></i>${f.prev ? `<s style="left:${(f.prev / max * 100).toFixed(1)}%"></s>` : ''}</span><span class="rank-val">${fmtTch(f.tch)}${f.delta !== null ? `<small class="${f.delta > 0.05 ? 'sube' : f.delta < -0.05 ? 'baja' : ''}">${signo(f.delta)}</small>` : ''}</span></button>`;
   return `<section class="ejec ana">
     <h2>Análisis del aforo</h2>
-    <div class="ana-ctl"><select id="anaZona" aria-label="Zona"><option value="">Global</option>${zs.map(z => `<option ${z === anaZona ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select>
-      <div class="chips-fil" role="group" aria-label="Ver por">${ANA_DIMS.map(d => `<button type="button" data-dim="${d[0]}" class="${anaDim === d[0] ? 'activo' : ''}" aria-pressed="${anaDim === d[0]}">${d[1]}</button>`).join('')}</div></div>
+    <div class="ana-ctl"><select id="anaZona" aria-label="Zona"><option value="">Global</option><option value="${AD}" ${anaZona === AD ? 'selected' : ''}>Administración directa (sin Productores)</option>${zs.map(z => `<option ${z === anaZona ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select>
+      <div class="chips-fil" role="group" aria-label="Ver por">${ANA_DIMS.filter(d => !(anaZona && d[0] === 'admin')).map(d => `<button type="button" data-dim="${d[0]}" class="${anaDim === d[0] ? 'activo' : ''}" aria-pressed="${anaDim === d[0]}">${d[1]}</button>`).join('')}</div></div>
     <div class="cifras c4 ana-tot">${cifra('Lotes', nf0.format(total.n))}${cifra('Área', conUnidad(nfHa.format(total.area), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(total.ton), ' t'))}${cifra('TCH 26/27', fmtTch(total.tch), 'c-est', total.delta !== null ? `<small class="kpi-d ${total.delta > 0.05 ? 'sube' : total.delta < -0.05 ? 'baja' : ''}">${signo(total.delta)} vs 25/26</small>` : '')}</div>
     <h3 class="h-ley">${esc(ANA_DIMS.find(d => d[0] === anaDim)[1])} <span><i></i>26/27 <s></s>25/26</span></h3>
     <div class="rank" id="anaFilas">${filas.map(fila).join('')}</div>
-    <button type="button" class="btn sec ancho" onclick="excelAnalisis()">${ico('download')} Excel: variedad, riego y mes por zona</button>
+    <button type="button" class="btn sec ancho" onclick="excelAnalisis()">${ico('download')} Excel del análisis completo (6 hojas)</button>
   </section>`;
 }
 function enlazarAnalisis() {
@@ -1356,7 +1365,7 @@ function enlazarAnalisis() {
   const f = $('anaFilas'); if (f) f.addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (!b) return; const g = datosAna(anaZona, anaDim).filas[Number(b.dataset.i)]; if (g) abrirGrupoAna(g); });
 }
 function abrirGrupoAna(g) {
-  const tit = `${rotuloAna(g.k, anaDim)}${anaZona ? ' · ' + anaZona : ''}`, ls = g.cods.map(c => LOTES[c]).sort((a, b) => (a.tchEst || 0) - (b.tchEst || 0));
+  const tit = `${rotuloAna(g.k, anaDim)}${anaZona ? ' · ' + zonaTxt(anaZona) : ''}`, ls = g.cods.map(c => LOTES[c]).sort((a, b) => (a.tchEst || 0) - (b.tchEst || 0));
   abrirHoja(tit, `
     <div class="cifras c4">${cifra('Lotes', nf0.format(g.n))}${cifra('Área', conUnidad(nfHa.format(g.area), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(g.ton), ' t'))}${cifra('TCH 26/27', fmtTch(g.tch), 'c-est', g.delta !== null ? `<small class="kpi-d ${g.delta > 0.05 ? 'sube' : g.delta < -0.05 ? 'baja' : ''}">${signo(g.delta)} vs 25/26</small>` : '')}</div>
     <div class="acciones"><button type="button" class="btn sec" id="anaMapa">${ico('zoomIn')} Ver en el mapa</button><button type="button" class="btn ter" id="anaXl">${ico('download')} Excel</button></div>
@@ -1379,12 +1388,12 @@ function excelLotes(titulo, ls, base) {
 }
 /* Libro completo del análisis: una hoja por dimensión, con el global y cada zona en bloques (subtotal por bloque). */
 function excelAnalisis() {
-  const zonas = ['', ...zonasAforo()], cols = [{t: 'Zona', w: 15}, {t: '', w: 22}, {t: 'Lotes', w: 8, f: 'int'}, {t: 'Área (ha)', w: 11, f: 'd1'}, {t: 'Toneladas est.', w: 14, f: 'int'}, {t: 'TCH 26/27', w: 11, f: 'd1'}, {t: 'TCH 25/26', w: 11, f: 'd1'}, {t: 'Δ t/ha', w: 9, f: 'd1'}, {t: '% del área', w: 10, f: 'd1'}];
+  const zonas = ['', AD, ...zonasAforo()], cols = [{t: 'Zona', w: 15}, {t: '', w: 22}, {t: 'Lotes', w: 8, f: 'int'}, {t: 'Área (ha)', w: 11, f: 'd1'}, {t: 'Toneladas est.', w: 14, f: 'int'}, {t: 'TCH 26/27', w: 11, f: 'd1'}, {t: 'TCH 25/26', w: 11, f: 'd1'}, {t: 'Δ t/ha', w: 9, f: 'd1'}, {t: '% del área', w: 10, f: 'd1'}];
   const hojas = ANA_DIMS.map(([dim, nom]) => {
     const filas = [];
-    zonas.forEach(z => { const {filas: fs, total} = datosAna(z, dim);
-      fs.forEach(f => filas.push([z || 'Global', rotuloAna(f.k, dim), f.n, f.area, f.ton, f.tch, f.prev, f.delta, total.area ? f.area / total.area * 100 : null]));
-      filas.push({tot: true, v: [`Total ${z || 'global'}`, '', total.n, total.area, total.ton, total.tch, total.prev, total.delta, 100]}); });
+    (dim === 'admin' ? [''] : zonas).forEach(z => { const {filas: fs, total} = datosAna(z, dim);
+      fs.forEach(f => filas.push([zonaTxt(z), rotuloAna(f.k, dim), f.n, f.area, f.ton, f.tch, f.prev, f.delta, total.area ? f.area / total.area * 100 : null]));
+      filas.push({tot: true, v: [`Total ${z ? zonaTxt(z) : 'global'}`, '', total.n, total.area, total.ton, total.tch, total.prev, total.delta, 100]}); });
     return {nombre: nom, titulo: `Aforo 26/27 por ${nom.toLowerCase()}`, sub: subXlsx('TCH ponderado = toneladas de molienda / ha de molienda · Δ en los mismos lotes vs 25/26'), cols: cols.map((c, i) => i === 1 ? Object.assign({}, c, {t: nom}) : c), filas};
   });
   descargarBlob(`analisis_aforo_${fechaLocalTxt(new Date())}.xlsx`, crearXlsx(hojas));
