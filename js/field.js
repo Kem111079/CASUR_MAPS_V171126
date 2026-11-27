@@ -953,6 +953,41 @@ function pintarRenovBox() {
   box.innerHTML = renovacionHtml();
   box.querySelectorAll('.renov-filas').forEach(tb => tb.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); }));
 }
+/* ── Administración protegida con PIN (6 dígitos). Se guarda solo el hash; el desbloqueo dura 30 días en este equipo.
+   Es una barrera de uso: la actualización real de datos exige además la cuenta de GitHub con permiso. ── */
+const ADMIN_HASH = 'e51dfbf152aff24db7ef2869466d2df93515e2a0cad642d2786f436b0d150cf9', ADMIN_KEY = 'casur_admin_hasta', ADMIN_DIAS = 30;
+let _adminAbrir = false, _pinFallos = 0, _pinEspera = 0;
+function adminOk() { try { return Number(localStorage.getItem(ADMIN_KEY) || 0) > Date.now(); } catch (_) { return false; } }
+async function hashPin(pin) {
+  const txt = 'casur-maps-admin:' + pin;
+  if (window.crypto && crypto.subtle) { const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt)); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+  return '';
+}
+function pedirPinAdmin() {
+  abrirHoja('Administración de datos', `<form id="pinForm" class="pin-form" autocomplete="off">
+    <label class="campo">PIN de administrador<input id="pinAdm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" enterkeyhint="go" aria-describedby="pinErr"></label>
+    <p id="pinErr" class="campo-error" hidden></p>
+    <button type="submit" class="btn pri ancho">${ico('unlock')} Desbloquear</button></form>`);
+  const f = $('pinForm'), inp = $('pinAdm'), err = $('pinErr');
+  setTimeout(() => inp.focus(), 250);
+  const fallo = t => { err.hidden = false; err.textContent = t; inp.value = ''; inp.focus(); vibrar(120); };
+  inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g, '').slice(0, 6); err.hidden = true; if (inp.value.length === 6) f.requestSubmit(); });
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (Date.now() < _pinEspera) { fallo(`Demasiados intentos. Espere ${Math.ceil((_pinEspera - Date.now()) / 1000)} s.`); return; }
+    if (inp.value.length !== 6) { fallo('El PIN tiene 6 dígitos.'); return; }
+    const h = await hashPin(inp.value);
+    if (h && h === ADMIN_HASH) {
+      _pinFallos = 0; try { localStorage.setItem(ADMIN_KEY, String(Date.now() + ADMIN_DIAS * 86400000)); } catch (_) {}
+      _adminAbrir = true; cerrarHoja(); renderAjustes(); toast('Administración desbloqueada en este equipo por 30 días.', {tipo: 'bien'});
+      const d = document.querySelector('#tabAjustes .aj-admin'); if (d) d.scrollIntoView({block: 'start', behavior: 'smooth'});
+    } else {
+      _pinFallos++; if (_pinFallos >= 5) { _pinEspera = Date.now() + 5 * 60000; _pinFallos = 0; fallo('PIN incorrecto. Bloqueado 5 minutos.'); } else fallo(`PIN incorrecto (${_pinFallos} de 5).`);
+    }
+  });
+}
+function bloquearAdmin() { try { localStorage.removeItem(ADMIN_KEY); } catch (_) {} _adminAbrir = false; renderAjustes(); toast('Administración bloqueada.'); }
+
 /* ── Pestaña Ajustes: preferencias del teléfono, datos y actualización ── */
 function renderAjustes() {
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
@@ -992,7 +1027,7 @@ function renderAjustes() {
       <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Pantalla siempre encendida durante la visita</span></label>
       <label class="interruptor"><input type="checkbox" id="ajVib" ${S.vibrar ? 'checked' : ''}><span>Vibrar al entrar a un lote</span></label>
     </section>
-    <details class="aj-tarjeta aj-admin">
+    ${!adminOk() ? `<section class="aj-tarjeta aj-admin cerrada"><h3>${ico('lock')} Administración de datos</h3><p class="pie">Solo administrador.</p><button type="button" class="btn sec ancho" onclick="pedirPinAdmin()">${ico('unlock')} Desbloquear</button></section>` : `<details class="aj-tarjeta aj-admin"${_adminAbrir ? ' open' : ''}>
       <summary>${ico('lock')} Administración de datos <small>para quien actualiza la información</small></summary>
       <div class="nota est-neutro"><b>Para actualizar los datos:</b> descargue la plantilla de Excel, actualícela y súbala a la carpeta <b>fuentes</b> con el mismo nombre. En unos minutos todos los teléfonos reciben los datos nuevos.</div>
       <div class="acciones"><a class="btn sec" href="./fuentes/Plantilla_CASUR_Maps.xlsx" download>${ico('download')} Descargar plantilla</a><a class="btn ter" href="https://github.com/Kem111079/CASUR_MAPS_V171126/upload/main/fuentes" target="_blank" rel="noopener">${ico('share')} Subir plantilla</a></div>
@@ -1004,7 +1039,8 @@ function renderAjustes() {
       </div>
       ${meta.cortes_al ? '' : '<p class="pie">Mientras no se carguen cortes de la zafra en curso, la edad y el TCH de la zafra anterior vienen de la zafra 25/26.</p>'}
       <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Volver a descargar los datos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
-    </details>`;
+      <div class="acciones"><button type="button" class="btn ter" onclick="bloquearAdmin()">${ico('lock')} Bloquear administración</button></div>
+    </details>`}`;
   $('ajTec').addEventListener('change', e => { S.tecnico = e.target.value.trim(); guardarAjustes(); });
   $('ajGps').addEventListener('change', e => { S.gpsPerfil = e.target.value; guardarAjustes(); });
   $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); pintarSeleccion(); });

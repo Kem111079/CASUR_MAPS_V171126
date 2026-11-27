@@ -1,5 +1,9 @@
 # Cambios
 
+## V271126J · 27-nov-2026 · Administración de datos con PIN
+- «Administración de datos» (plantilla de Excel, subida, archivos y volver a descargar) queda oculta tras un PIN de 6 dígitos. En el código solo se guarda una huella del PIN, no el número.
+- Al acertar, queda desbloqueada 30 días en ese equipo; «Bloquear administración» la cierra antes. Tras 5 intentos fallidos se bloquea 5 minutos.
+
 ## V271126I · 27-nov-2026 · «Sin dato» separado en todas las capas
 - Los lotes sin valor se separan en **Fuera de molienda** (gris liso; con su desglose: Semilla, Sin caña, Baja rent., Invest.) y la falta de dato propia de cada capa (gris rayado): Sin aforo, Sin fecha de corte, Sin grupo de corte, Sin propuesta, Sin fecha programada.
 - Los % de la leyenda se calculan solo sobre las clases con color (en TCH, sobre el área de molienda): suman 100 %. Las filas grises muestran lotes y ha.

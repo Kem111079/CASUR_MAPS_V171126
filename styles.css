@@ -657,3 +657,4 @@ body[data-tab=mapa] .toast{max-width:none}
 .ley-det{display:block;font-size:calc(11.5px * var(--esc));color:var(--texto2);line-height:1.25;margin-top:1px}
 .ley-sep{border:0;border-top:1px dashed var(--linea);margin:4px 6px}
 .cifras.c2{grid-template-columns:repeat(2,minmax(0,1fr))}.cifras.c2>div{padding:10px 8px}
+.aj-admin.cerrada{border-style:dashed}.aj-admin.cerrada h3 .ico{color:var(--texto2)}.pin-form input{font-size:28px;letter-spacing:.5em;text-align:center}
