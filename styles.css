@@ -643,3 +643,12 @@ body[data-tab=mapa] .toast{max-width:none}
 .aforo-det summary .ico{width:20px;height:20px;color:var(--azul)}
 .aforo-det summary small{font-weight:500;color:var(--texto2);font-size:calc(12.5px * var(--esc))}
 .aforo-det summary::after{content:'▾';margin-left:auto;color:var(--texto2)}.aforo-det[open] summary::after{content:'▴'}
+/* Textos mínimos del Resumen */
+.h-ley{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.h-ley span{display:inline-flex;align-items:center;gap:5px;font-size:calc(12px * var(--esc));font-weight:600;color:var(--texto2)}
+.h-ley span i{display:inline-block;width:18px;height:8px;border-radius:4px;background:var(--azul)}
+.h-ley span s{display:inline-block;width:3px;height:14px;border-radius:2px;background:var(--texto);margin-left:6px}
+.ejec h3 small{font-weight:600;color:var(--texto2);font-size:calc(12px * var(--esc))}
+.aviso-val{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
+.aviso-val>span{flex:1;min-width:0}
+.aviso-val .enlace{margin-left:auto;border:0;background:var(--sup);color:var(--medio);font-weight:900;border-radius:999px;padding:6px 14px;min-height:36px}
