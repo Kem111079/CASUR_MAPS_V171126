@@ -1266,6 +1266,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 
 /* Novedades de la versión, en lenguaje sencillo (se muestran al actualizar y desde Ajustes). */
 const NOVEDADES = [
+  ['Modo vuelo', 'Para helicóptero: altura, velocidad, rumbo y el lote debajo; mapa que se adelanta al rumbo. Active «Preparar vuelo» antes de despegar.'],
   ['Leyenda más clara', '«Sin dato» se separa en «Fuera de molienda» (Semilla, Sin caña…) y la falta real de dato; los % suman 100 % sobre molienda.'],
   ['Resumen por bloques', 'Panorama, Zafra, Fincas y Renovación en pestañas: cada vista cabe en pantalla, sin tanto desplazamiento.'],
   ['Resumen ejecutivo', '«Cómo vamos»: toneladas, TCH frente a 25/26, avance de zafra por mes y ranking por zona y finca.'],

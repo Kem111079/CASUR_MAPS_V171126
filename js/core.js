@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V271126J';
+const APP_VERSION = 'V271126K';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -52,7 +52,7 @@ function haversineM(lon1, lat1, lon2, lat2) {
 /* ── Iconos de línea propios (mismo trazo en todos los teléfonos; reemplazan a los emojis) ── */
 const ICONOS = {
   plus: '<path d="M12 5v14M5 12h14"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>',
-  chevUp: '<path d="M6 15l6-6 6 6"/>', chevDown: '<path d="M6 9l6 6 6-6"/>', chevLeft: '<path d="M15 6l-6 6 6 6"/>', chevRight: '<path d="M9 6l6 6-6 6"/>',
+  chevUp: '<path d="M6 15l6-6 6 6"/>', heli: '<path d="M3 5h18M12 5v3"/><path d="M6 10h9a4 4 0 0 1 0 8H9a3 3 0 0 1-3-3v-5z"/><path d="M19 14h2M8 18v2M14 18v2M6 20h10"/>', chevDown: '<path d="M6 9l6 6 6-6"/>', chevLeft: '<path d="M15 6l-6 6 6 6"/>', chevRight: '<path d="M9 6l6 6-6 6"/>',
   nav: '<path d="M20.5 3.5 3.5 10.6l7 2.9 2.9 7z"/>', pin: '<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
   calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>', alert: '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.2v.3"/>',
   star: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>', starFill: '<path fill="currentColor" d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>',
@@ -157,7 +157,7 @@ function ubicarAvisos() {
   const h = ult ? Math.round(ult.getBoundingClientRect().height) + 'px' : '0px';
   if (b.style.getPropertyValue('--aviso-h') !== h) { b.style.setProperty('--aviso-h', h); if (typeof etiquetasDebounce === 'function') setTimeout(etiquetasDebounce, 260); } // la leyenda se mueve: recolocar etiquetas
 }
-function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} } }
+function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate && !(typeof VUELO !== 'undefined' && VUELO.on)) { try { navigator.vibrate(ms); } catch (_) {} } }
 
 /* ── Ajustes persistentes ── */
 const AJUSTES_KEY = 'casur_maps_ajustes_v2';
