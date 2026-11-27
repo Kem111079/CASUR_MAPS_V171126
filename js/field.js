@@ -760,7 +760,7 @@ function renderBitacora() {
       ${cats.length > 1 ? `<select id="bitCat" aria-label="Categoría"><option value="">Todas las categorías</option>${cats.map(c => `<option ${c === bitCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : ''}
     </div>` : ''}
     <div id="bitLista"></div>
-    ${todas.length ? `<h3>Respaldo</h3><p class="pie">Los registros viven solo en este teléfono. Exporte para respaldarlos.</p><div class="acciones"><button type="button" class="btn sec" onclick="exportarZip()">${ico('download')} ZIP con fotos</button><button type="button" class="btn ter" onclick="exportarCsv()">CSV</button></div>
+    ${todas.length ? `<h3>Respaldo</h3><p class="pie">Los registros viven solo en este teléfono. Exporte para respaldarlos.</p><div class="acciones"><button type="button" class="btn sec" onclick="exportarZip()">${ico('download')} ZIP con fotos</button><button type="button" class="btn ter" onclick="exportarExcel()">${ico('download')} Excel</button></div>
       <button type="button" class="btn peligro ancho" onclick="vaciarBitacora()">Borrar toda la bitácora y sus fotos</button>` : ''}
     <div class="barra-accion"><button type="button" class="btn pri grande" onclick="nuevoRegistro()">${ico('plus')} Nuevo hallazgo</button></div>`;
   $('rapidosBox').addEventListener('click', e => { const b = e.target.closest('#rapSev button'); if (!b) return; rapSev = b.dataset.v; $('rapidosBox').innerHTML = rapidosHtml(); pintarDestino(); });
@@ -798,10 +798,27 @@ function nombreExport(ext) {
   const tec = String(S.tecnico || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);
   return `bitacora_casur_${tec ? tec + '_' : ''}${fechaLocalTxt(new Date())}.${ext}`;
 }
-function exportarCsv() { if (!obsTodas().length) { toast('No hay registros para exportar.'); return; } descargarTexto(nombreExport('csv'), csvBitacora(), 'text/csv;charset=utf-8'); }
+function excelBitacora() {
+  const obs = obsTodas().slice().reverse(), filas = obs.map(o => { const f = filaCsv(o), d = fechaValida(o.fecha_hora), r = fechaValida(o.resuelto);
+    return [d || '', f.codlote, f.finca, f.zona, f.tablon, f.categoria, f.severidad, f.estado, f.dias_abierto === '' ? null : f.dias_abierto, r || '', f.nota, f.tecnico,
+      f.lat === '' ? null : Number(f.lat), f.lng === '' ? null : Number(f.lng), f.precision_m === '' ? null : Number(f.precision_m), f.pos_fuente === 'vuelo' ? 'Desde el aire' : f.pos_fuente === 'gps' ? 'En sitio' : '', f.url_mapa ? [f.url_mapa, 'Ver mapa'] : '', [f.foto1, f.foto2].filter(Boolean).join(', '), f.id]; });
+  const reg = {nombre: 'Registros', titulo: 'Bitácora de campo', sub: subXlsx(`${nf0.format(obs.length)} registros`),
+    cols: [{t: 'Fecha y hora', w: 16, f: 'fh'}, {t: 'Lote', w: 9}, {t: 'Finca', w: 26}, {t: 'Zona', w: 12}, {t: 'Tablón', w: 8}, {t: 'Categoría', w: 14}, {t: 'Severidad', w: 10}, {t: 'Estado', w: 12}, {t: 'Días abierto', w: 9, f: 'int'},
+      {t: 'Resuelto', w: 16, f: 'fh'}, {t: 'Nota', w: 40}, {t: 'Técnico', w: 16}, {t: 'Latitud', w: 11, f: 'd6'}, {t: 'Longitud', w: 12, f: 'd6'}, {t: 'Precisión (m)', w: 10, f: 'int'}, {t: 'Posición', w: 12}, {t: 'Mapa', w: 10, f: 'link'}, {t: 'Fotos', w: 26}, {t: 'Id', w: 18}],
+    filas};
+  const g = new Map(); obs.forEach(o => { const f = filaCsv(o), k = f.finca || 'Sin finca', x = g.get(k) || {finca: k, zona: f.zona, tot: 0, pend: 0, alta: 0, media: 0, info: 0, res: 0, dias: []};
+    x.tot++; if (f.estado === 'Pendiente') { x.pend++; if (f.severidad === 'Alta') x.alta++; else x.media++; if (f.dias_abierto !== '') x.dias.push(f.dias_abierto); } else if (f.estado === 'Resuelto') x.res++; else x.info++; g.set(k, x); });
+  const fin = {nombre: 'Por finca', titulo: 'Bitácora por finca', sub: subXlsx('pendientes = severidad media o alta sin resolver'),
+    cols: [{t: 'Finca', w: 30}, {t: 'Zona', w: 12}, {t: 'Registros', w: 10, f: 'int'}, {t: 'Pendientes', w: 11, f: 'int'}, {t: 'Alta', w: 8, f: 'int'}, {t: 'Media', w: 8, f: 'int'}, {t: 'Informativos', w: 12, f: 'int'}, {t: 'Resueltos', w: 10, f: 'int'}, {t: 'Días abierto (prom.)', w: 12, f: 'd1'}],
+    filas: [...g.values()].sort((a, b) => b.pend - a.pend || b.tot - a.tot).map(x => [x.finca, x.zona, x.tot, x.pend, x.alta, x.media, x.info, x.res, x.dias.length ? x.dias.reduce((s, d) => s + d, 0) / x.dias.length : null]),
+    total: ['Total', '', 'sum', 'sum', 'sum', 'sum', 'sum', 'sum', '']};
+  return crearXlsx([reg, fin]);
+}
+function exportarCsv() { exportarExcel(); } // compatibilidad
+function exportarExcel() { if (!obsTodas().length) { toast('No hay registros para exportar.'); return; } descargarBlob(nombreExport('xlsx'), excelBitacora()); toast('Excel de la bitácora generado.', {tipo: 'bien'}); }
 async function exportarZip() {
   const obs = obsTodas(); if (!obs.length) { toast('No hay registros para exportar.'); return; }
-  const ahora = new Date(), archivos = [{nombre: 'bitacora.csv', datos: new TextEncoder().encode(csvBitacora()), fecha: ahora}];
+  const ahora = new Date(), archivos = [{nombre: 'bitacora.xlsx', datos: new Uint8Array(await excelBitacora().arrayBuffer()), fecha: ahora}];
   // Solo las fotos de los registros que existen, con el nombre que aparece en el CSV.
   const nombre = new Map(); obs.forEach(o => { const n = nombresFotos(o); if (o.photo_id) nombre.set(o.photo_id, n[0]); if (o.photo_id2) nombre.set(o.photo_id2, n[1]); });
   (await fotoAll().catch(() => [])).forEach(r => { const n = nombre.get(r.id); if (n && r.data_url) archivos.push({nombre: 'fotos/' + n, datos: dataUrlBytes(r.data_url), fecha: fechaValida(r.created_at) || ahora}); });
@@ -823,7 +840,7 @@ function renderVisita() {
   const vieja = listaVieja() ? `<div class="nota est-info lista-vieja"><b>Lista ${esc(listaFechaTxt())}: ${lh} de ${LISTA.length} lote${LISTA.length === 1 ? '' : 's'} hecho${LISTA.length === 1 ? '' : 's'}.</b><span>¿Qué hacer con ella hoy?${v ? '' : ' Si inicia una visita sin elegir, toda la lista vuelve a quedar por visitar.'}</span><div class="acciones">${lh && lp ? `<button type="button" class="btn sec" onclick="listaUsarHoy('pendientes')">Pasar ${lp} pendiente${lp === 1 ? '' : 's'} a hoy</button>` : ''}<button type="button" class="btn sec" onclick="listaUsarHoy('toda')">${lh ? 'Reutilizar toda' : 'Usarla hoy'}</button><button type="button" class="btn ter" onclick="listaVaciar()">Vaciar</button></div></div>` : '';
   const sinGps = v && gpsVisitaMal(estadoGpsVisita()) ? `<div class="nota est-mal aviso-sin-gps"><b>${ico('alert')} Visita en curso sin GPS</b><span>No se está grabando la ruta, la distancia ni los lotes.</span><button type="button" class="btn pri" onclick="reactivarGpsVisita()">${ico('pin')} Reactivar GPS</button></div>` : '';
   const previas = VISITAS.slice(-10).reverse().map(x => `<div class="bloque"><b>${esc(new Date(x.inicio).toLocaleString('es-NI', {dateStyle: 'medium', timeStyle: 'short'}))}</b><p>${fmtDur(new Date(x.fin || x.inicio) - new Date(x.inicio))} · ${fmtDist(x.dist || 0)} · ${lotesVisitados(x).length} lote(s)</p>
-      <div class="obs-acc"><button type="button" onclick="reporteVisita(visitaPorId('${x.id}'))">${ico('file')} Reporte</button><button type="button" onclick="verRuta(visitaPorId('${x.id}'))">${ico('map')} Ruta</button><button type="button" onclick="csvVisita(visitaPorId('${x.id}'))">CSV</button><button type="button" onclick="borrarVisita('${x.id}')">${ico('trash')}</button></div></div>`).join('');
+      <div class="obs-acc"><button type="button" onclick="reporteVisita(visitaPorId('${x.id}'))">${ico('file')} Reporte</button><button type="button" onclick="verRuta(visitaPorId('${x.id}'))">${ico('map')} Ruta</button><button type="button" onclick="excelVisita(visitaPorId('${x.id}'))">Excel</button><button type="button" onclick="borrarVisita('${x.id}')">${ico('trash')}</button></div></div>`).join('');
   el.innerHTML = `<header><h2>Visita de campo</h2><p>Registra ruta, distancia y los lotes en los que realmente estuvo.</p></header>
     ${sinGps}${v ? `<div class="cifras c4 grande">${cifra('Tiempo', `<em id="visTiempo">${fmtDur(Date.now() - new Date(v.inicio))}</em>`)}${cifra('Distancia', fmtDist(v.dist))}${cifra('Lotes', lotesVisitados(v).length)}${cifra('GPS', GPS.fix && !sinGps ? '±' + GPS.fix.acc + ' m' : '—')}</div>
       ${lotesVisitados(v).length ? `<p class="pie">Visitados: ${lotesVisitados(v).map(esc).join(' · ')}</p>` : ''}
@@ -863,7 +880,14 @@ function planClick(e) {
 }
 const visitaPorId = id => VISITAS.find(x => x.id === id);
 async function borrarVisita(id) { if (!await preguntar('¿Borrar esta visita?', '', 'Borrar', 'Cancelar')) return; VISITAS = VISITAS.filter(x => x.id !== id); await kvSet('visitas', VISITAS); renderVisita(); }
-function csvVisita(v) { if (!v) return; descargarTexto(`visita_${v.id}.csv`, '﻿' + ['t,lat,lng,precision_m,codlote', ...v.pts.map(p => csvLinea([p.t, p.lat, p.lng, p.acc, p.cod]))].join('\n'), 'text/csv;charset=utf-8'); }
+function csvVisita(v) { excelVisita(v); } // compatibilidad
+function excelVisita(v) {
+  if (!v) return;
+  const hoja = {nombre: 'Ruta', titulo: `Visita del ${new Date(v.inicio).toLocaleDateString('es-NI', {day: 'numeric', month: 'long', year: 'numeric'})}`, sub: subXlsx(`${fmtDur(new Date(v.fin || v.inicio) - new Date(v.inicio))} · ${fmtDist(v.dist || 0)} · ${v.pts.length} puntos`),
+    cols: [{t: 'Hora', w: 16, f: 'fh'}, {t: 'Lote', w: 9}, {t: 'Finca', w: 26}, {t: 'Latitud', w: 11, f: 'd6'}, {t: 'Longitud', w: 12, f: 'd6'}, {t: 'Precisión (m)', w: 11, f: 'int'}],
+    filas: v.pts.map(p => [new Date(p.t), p.cod || '', p.cod && LOTES[p.cod] ? LOTES[p.cod].hac : '', p.lat, p.lng, p.acc])};
+  descargarBlob(`visita_${v.id}.xlsx`, crearXlsx([hoja]));
+}
 
 /* Reporte imprimible (PDF desde el navegador) con mapa de la ruta, lotes y registros con fotos. */
 function svgRuta(v) {
@@ -909,7 +933,7 @@ const AFORO_TOP = 10; // filas del resumen a la vista (las de más toneladas); e
 const AFORO_GRUPOS = [['hacienda', 'Finca'], ['zona', 'Zona'], ['finca', 'Finca y tenencia']];
 /* Resumen por bloques (pestañas internas): Panorama · Zafra · Fincas · Renovación. Recuerda la última.
    En tableta horizontal, Panorama queda fijo a la izquierda y la pestaña elegida a la derecha. */
-const MAS_VISTAS = [['panorama', 'Panorama'], ['zafra', 'Zafra'], ['fincas', 'Fincas'], ['renov', 'Renovación']];
+const MAS_VISTAS = [['panorama', 'Panorama'], ['zafra', 'Zafra'], ['fincas', 'Fincas'], ['analisis', 'Análisis'], ['renov', 'Renovación']];
 let masVista = (() => { try { return localStorage.getItem('casur_mas_vista') || 'panorama'; } catch (_) { return 'panorama'; } })();
 let aforoAbierta = false;
 const masAncho = () => window.matchMedia('(min-width:1000px)').matches;
@@ -931,12 +955,13 @@ function renderMas() {
   let v = MAS_VISTAS.some(x => x[0] === masVista) ? masVista : 'panorama';
   if (ancho && v === 'panorama') v = 'zafra'; // en tableta Panorama ya está fijo a la izquierda
   const tabs = MAS_VISTAS.filter(x => !(ancho && x[0] === 'panorama'));
-  const cuerpo = v === 'panorama' ? P.panorama : v === 'zafra' ? P.zafra : v === 'fincas' ? P.ranking + aforoHtml() : '<div id="renovBox"></div>';
+  const cuerpo = v === 'panorama' ? P.panorama : v === 'zafra' ? P.zafra : v === 'fincas' ? P.ranking + aforoHtml() : v === 'analisis' ? analisisHtml() : '<div id="renovBox"></div>';
   $('tabMas').innerHTML = `<div class="marca"><img src="./assets/logo_casur.png" alt="CASUR"><div><b>CASUR Maps</b><span>Departamento de Negocios de Caña</span></div></div>
     <div class="mas-grid">${ancho ? `<div class="mas-c1">${P.panorama}</div>` : ''}<div class="mas-c2">
     <div class="mas-tabs" role="tablist" aria-label="Bloques del resumen">${tabs.map(x => `<button type="button" role="tab" aria-selected="${x[0] === v}" class="${x[0] === v ? 'activo' : ''}" onclick="verMas('${x[0]}')">${x[1]}</button>`).join('')}</div>
     <div class="mas-cuerpo" role="tabpanel">${cuerpo}</div></div></div>`;
   if (v === 'renov') pintarRenovBox();
+  if (v === 'analisis') enlazarAnalisis();
   if (v === 'fincas') {
     const mas = $('aforoMas');
     if (mas) mas.addEventListener('click', () => { aforoTodas = !aforoTodas; const y = $('tabMas').scrollTop; renderMas(); $('tabMas').scrollTop = y; if (!aforoTodas) $('aforoMas').scrollIntoView({block: 'nearest'}); });
@@ -1269,11 +1294,13 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 
 /* Novedades de la versión, en lenguaje sencillo (se muestran al actualizar y desde Ajustes). */
 const NOVEDADES = [
+  ['Análisis del aforo', 'Nueva pestaña en Resumen: TCH ponderado por variedad, riego o mes, global o por zona, con Excel listo para la junta.'],
   ['Modo vuelo', 'Para helicóptero: altura, velocidad, rumbo y el lote debajo; mapa que se adelanta al rumbo. Active «Preparar vuelo» antes de despegar. Graba el recorrido, marca lotes desde el aire y al aterrizar da el resumen.'],
   ['Leyenda más clara', '«Sin dato» se separa en «Fuera de molienda» (Semilla, Sin caña…) y la falta real de dato; los % suman 100 % sobre molienda.'],
   ['Resumen por bloques', 'Panorama, Zafra, Fincas y Renovación en pestañas: cada vista cabe en pantalla, sin tanto desplazamiento.'],
   ['Resumen ejecutivo', '«Cómo vamos»: toneladas, TCH frente a 25/26, avance de zafra por mes y ranking por zona y finca.'],
-  ['Ver en el mapa', 'Lotes TCH < 40, corte de la próxima semana, lotes a renovar y fechas vencidas, con lista y CSV.'],
+  ['Ver en el mapa', 'Lotes TCH < 40, corte de la próxima semana, lotes a renovar y fechas vencidas, con lista y Excel.'],
+  ['Exportaciones en Excel', 'Bitácora, listas de lotes y rutas se descargan en Excel con formato, filtros y totales.'],
   ['Tarjeta del lote', 'Semáforo Bien / Atención / Crítico y franja con toneladas, cambio frente a 25/26 y días al corte.'],
   ['Capas más rápidas', 'Cambie de capa desde la leyenda; el botón ⇄ vuelve a la anterior.'],
   ['Finca en el mapa', 'Al ver una finca, sus lotes quedan resaltados con su resumen; la ✕ del aviso lo quita.'],
@@ -1283,13 +1310,93 @@ function abrirNovedades() {
   abrirHoja(`Novedades · ${APP_VERSION}`, `<div class="novedades">${NOVEDADES.map(n => `<div><b>${esc(n[0])}</b><span>${esc(n[1])}</span></div>`).join('')}</div>
     <button type="button" class="btn pri ancho" onclick="cerrarHoja()">Entendido</button>`);
 }
+/* ── Análisis: aforo ponderado por variedad, riego o mes de cosecha, para cada zona y el global ──
+   Misma regla del aforo: toneladas estimadas de molienda / hectáreas de molienda. Δ = mismos lotes frente a 25/26. */
+const ANA_DIMS = [['variedad', 'Variedad'], ['riego', 'Riego'], ['mes', 'Mes de cosecha']];
+let anaZona = (() => { try { return localStorage.getItem('casur_ana_zona') || ''; } catch (_) { return ''; } })();
+let anaDim = (() => { try { return localStorage.getItem('casur_ana_dim') || 'variedad'; } catch (_) { return 'variedad'; } })();
+const lotesAforo = () => Object.values(LOTES).filter(l => esMolienda(l) && l.conAforo && (l.areaAforo || 0) > 0); // como el aforo: toda el área de molienda (un lote sin estimado aporta 0 t)
+const zonasAforo = () => [...new Set(lotesAforo().map(l => l.zona).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es', {numeric: true}));
+function claveAna(l, dim) {
+  if (dim === 'variedad') return rotulo(l.variedad) || 'Sin dato';
+  if (dim === 'riego') return rotulo(l.riego) || 'Sin dato';
+  const d = parseISO(l.fProg); return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : 'Sin fecha';
+}
+const rotuloAna = (k, dim) => dim === 'mes' && /^\d{4}-\d{2}$/.test(k) ? `${MES_CORTO[Number(k.slice(5)) - 1]} ${k.slice(2, 4)}` : k;
+function grupoAna(ls) {
+  const area = ls.reduce((s, l) => s + l.areaAforo, 0), ton = ls.reduce((s, l) => s + (l.tonEst || (l.tchEst > 0 ? l.tchEst * l.areaAforo : 0)), 0), comp = ls.filter(l => l.tchPrev > 0 && l.tchEst > 0);
+  const prev = pond(comp, l => l.tchPrev), estC = pond(comp, l => l.tchEst);
+  return {n: ls.length, area, ton, tch: area ? ton / area : null, prev, delta: prev !== null && estC !== null ? estC - prev : null, cods: ls.map(l => l.cod)};
+}
+function datosAna(zona, dim) {
+  const ls = lotesAforo().filter(l => !zona || l.zona === zona), g = new Map();
+  ls.forEach(l => { const k = claveAna(l, dim); (g.get(k) || g.set(k, []).get(k)).push(l); });
+  let filas = [...g].map(([k, arr]) => Object.assign({k}, grupoAna(arr)));
+  filas = dim === 'mes' ? filas.sort((a, b) => a.k.localeCompare(b.k)) : filas.sort((a, b) => b.area - a.area);
+  const sin = filas.filter(f => /^Sin /.test(f.k)); filas = filas.filter(f => !/^Sin /.test(f.k)).concat(sin);
+  return {filas, total: grupoAna(ls)};
+}
+function analisisHtml() {
+  const zs = zonasAforo(); if (anaZona && !zs.includes(anaZona)) anaZona = '';
+  const {filas, total} = datosAna(anaZona, anaDim), max = Math.max(...filas.map(f => Math.max(f.tch || 0, f.prev || 0)), 1);
+  const fila = (f, i) => `<button type="button" class="rank-fila" data-i="${i}"><span class="rank-nom">${esc(rotuloAna(f.k, anaDim))}<small>${nf0.format(f.n)} lotes · ${nfHa.format(f.area)} ha · ${nfT.format(f.ton)} t</small></span><span class="rank-barra"><i style="width:${((f.tch || 0) / max * 100).toFixed(1)}%"></i>${f.prev ? `<s style="left:${(f.prev / max * 100).toFixed(1)}%"></s>` : ''}</span><span class="rank-val">${fmtTch(f.tch)}${f.delta !== null ? `<small class="${f.delta > 0.05 ? 'sube' : f.delta < -0.05 ? 'baja' : ''}">${signo(f.delta)}</small>` : ''}</span></button>`;
+  return `<section class="ejec ana">
+    <h2>Análisis del aforo</h2>
+    <div class="ana-ctl"><select id="anaZona" aria-label="Zona"><option value="">Global</option>${zs.map(z => `<option ${z === anaZona ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select>
+      <div class="chips-fil" role="group" aria-label="Ver por">${ANA_DIMS.map(d => `<button type="button" data-dim="${d[0]}" class="${anaDim === d[0] ? 'activo' : ''}" aria-pressed="${anaDim === d[0]}">${d[1]}</button>`).join('')}</div></div>
+    <div class="cifras c4 ana-tot">${cifra('Lotes', nf0.format(total.n))}${cifra('Área', conUnidad(nfHa.format(total.area), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(total.ton), ' t'))}${cifra('TCH 26/27', fmtTch(total.tch), 'c-est', total.delta !== null ? `<small class="kpi-d ${total.delta > 0.05 ? 'sube' : total.delta < -0.05 ? 'baja' : ''}">${signo(total.delta)} vs 25/26</small>` : '')}</div>
+    <h3 class="h-ley">${esc(ANA_DIMS.find(d => d[0] === anaDim)[1])} <span><i></i>26/27 <s></s>25/26</span></h3>
+    <div class="rank" id="anaFilas">${filas.map(fila).join('')}</div>
+    <button type="button" class="btn sec ancho" onclick="excelAnalisis()">${ico('download')} Excel: variedad, riego y mes por zona</button>
+  </section>`;
+}
+function enlazarAnalisis() {
+  const z = $('anaZona'); if (z) z.addEventListener('change', e => { anaZona = e.target.value; try { localStorage.setItem('casur_ana_zona', anaZona); } catch (_) {} renderMas(); });
+  document.querySelectorAll('#tabMas .ana .chips-fil button').forEach(b => b.addEventListener('click', () => { anaDim = b.dataset.dim; try { localStorage.setItem('casur_ana_dim', anaDim); } catch (_) {} renderMas(); }));
+  const f = $('anaFilas'); if (f) f.addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (!b) return; const g = datosAna(anaZona, anaDim).filas[Number(b.dataset.i)]; if (g) abrirGrupoAna(g); });
+}
+function abrirGrupoAna(g) {
+  const tit = `${rotuloAna(g.k, anaDim)}${anaZona ? ' · ' + anaZona : ''}`, ls = g.cods.map(c => LOTES[c]).sort((a, b) => (a.tchEst || 0) - (b.tchEst || 0));
+  abrirHoja(tit, `
+    <div class="cifras c4">${cifra('Lotes', nf0.format(g.n))}${cifra('Área', conUnidad(nfHa.format(g.area), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(g.ton), ' t'))}${cifra('TCH 26/27', fmtTch(g.tch), 'c-est', g.delta !== null ? `<small class="kpi-d ${g.delta > 0.05 ? 'sube' : g.delta < -0.05 ? 'baja' : ''}">${signo(g.delta)} vs 25/26</small>` : '')}</div>
+    <div class="acciones"><button type="button" class="btn sec" id="anaMapa">${ico('zoomIn')} Ver en el mapa</button><button type="button" class="btn ter" id="anaXl">${ico('download')} Excel</button></div>
+    <div class="lista-lotes">${ls.map(l => `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${resumenTchLote(l)}</span></button>${llegarHtml(l.cod)}</div>`).join('')}</div>`);
+  $('anaMapa').onclick = () => { cerrarHoja(); mostrarTab('mapa'); soltarSeguimiento(); if (selCod) cerrarCard(); resaltarLotes(tit, g.cods, ico('chart'), () => abrirGrupoAna(g));
+    const bb = ls.filter(l => l.bbox).reduce((b, l) => b ? [Math.min(b[0], l.bbox[0]), Math.min(b[1], l.bbox[1]), Math.max(b[2], l.bbox[2]), Math.max(b[3], l.bbox[3])] : l.bbox.slice(), null); if (bb) map.fitBounds(boundsDe(bb), margenes(90, 40)); };
+  $('anaXl').onclick = () => excelLotes(tit, ls, `lotes_${tit}`);
+}
+/* Lista de lotes en Excel (la usan la lista de la leyenda y el Análisis). */
+function excelLotes(titulo, ls, base) {
+  const hoja = {nombre: 'Lotes', titulo, sub: subXlsx(`${nf0.format(ls.length)} lotes`),
+    cols: [{t: 'Lote', w: 9}, {t: 'Finca', w: 30}, {t: 'Zona', w: 13}, {t: 'Variedad', w: 13}, {t: 'Riego', w: 12}, {t: 'Clasificación', w: 15}, {t: 'Corte', w: 8},
+      {t: 'Área (ha)', w: 10, f: 'd2'}, {t: 'TCH 25/26', w: 10, f: 'd1'}, {t: 'TCH est. 26/27', w: 11, f: 'd1'}, {t: 'Δ t/ha', w: 9, f: 'd1'}, {t: 'Toneladas est.', w: 13, f: 'int'}, {t: 'Cosecha programada', w: 13, f: 'fecha'}, {t: 'Semáforo', w: 11}],
+    filas: ls.map(l => { const est = l.tchEst > 0 ? l.tchEst : null, prev = l.tchPrev > 0 ? l.tchPrev : null;
+      return [l.cod, l.hac, l.zona, rotulo(l.variedad), rotulo(l.riego), rotulo(l.clas), ncCorto(l), l.area || 0, prev, est, est !== null && prev !== null ? Math.round((est - prev) * 10) / 10 : null, l.tonEst || null, parseISO(l.fProg) || '', semaforoLote(l).txt]; }),
+    total: ['Total', `${ls.length} lotes`, '', '', '', '', '', 'sum', '', {f: 'IFERROR(L{r}/SUMIFS(H5:H{fin},J5:J{fin},">0"),"")'}, '', 'sum', '', '']};
+  const nom = `${String(base).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '_')}_${fechaLocalTxt(new Date())}.xlsx`.replace(/_+/g, '_');
+  descargarBlob(nom, crearXlsx([hoja]));
+  toast(`Excel con ${nf0.format(ls.length)} lotes.`, {tipo: 'bien'});
+}
+/* Libro completo del análisis: una hoja por dimensión, con el global y cada zona en bloques (subtotal por bloque). */
+function excelAnalisis() {
+  const zonas = ['', ...zonasAforo()], cols = [{t: 'Zona', w: 15}, {t: '', w: 22}, {t: 'Lotes', w: 8, f: 'int'}, {t: 'Área (ha)', w: 11, f: 'd1'}, {t: 'Toneladas est.', w: 14, f: 'int'}, {t: 'TCH 26/27', w: 11, f: 'd1'}, {t: 'TCH 25/26', w: 11, f: 'd1'}, {t: 'Δ t/ha', w: 9, f: 'd1'}, {t: '% del área', w: 10, f: 'd1'}];
+  const hojas = ANA_DIMS.map(([dim, nom]) => {
+    const filas = [];
+    zonas.forEach(z => { const {filas: fs, total} = datosAna(z, dim);
+      fs.forEach(f => filas.push([z || 'Global', rotuloAna(f.k, dim), f.n, f.area, f.ton, f.tch, f.prev, f.delta, total.area ? f.area / total.area * 100 : null]));
+      filas.push({tot: true, v: [`Total ${z || 'global'}`, '', total.n, total.area, total.ton, total.tch, total.prev, total.delta, 100]}); });
+    return {nombre: nom, titulo: `Aforo 26/27 por ${nom.toLowerCase()}`, sub: subXlsx('TCH ponderado = toneladas de molienda / ha de molienda · Δ en los mismos lotes vs 25/26'), cols: cols.map((c, i) => i === 1 ? Object.assign({}, c, {t: nom}) : c), filas};
+  });
+  descargarBlob(`analisis_aforo_${fechaLocalTxt(new Date())}.xlsx`, crearXlsx(hojas));
+  toast('Excel del análisis generado.', {tipo: 'bien'});
+}
 /* ── Resumen ejecutivo: cómo vamos frente a 25/26, avance de zafra, ranking y preguntas rápidas ── */
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const pond = (ls, f) => { let a = 0, s = 0; ls.forEach(l => { const v = f(l), ar = l.areaAforo || 0; if (v > 0 && ar > 0) { a += ar; s += v * ar; } }); return a ? s / a : null; };
 function datosEjecutivo() {
-  const mol = Object.values(LOTES).filter(l => esMolienda(l) && l.conAforo && l.tchEst > 0 && (l.areaAforo || 0) > 0);
-  const area = mol.reduce((s, l) => s + l.areaAforo, 0), ton = mol.reduce((s, l) => s + (l.tonEst || l.tchEst * l.areaAforo), 0);
-  const comp = mol.filter(l => l.tchPrev > 0), aC = comp.reduce((s, l) => s + l.areaAforo, 0);
+  const mol = lotesAforo(); // toda el área de molienda, como el aforo
+  const area = mol.reduce((s, l) => s + l.areaAforo, 0), ton = mol.reduce((s, l) => s + (l.tonEst || (l.tchEst > 0 ? l.tchEst * l.areaAforo : 0)), 0);
+  const comp = mol.filter(l => l.tchPrev > 0 && l.tchEst > 0), aC = comp.reduce((s, l) => s + l.areaAforo, 0);
   const est = pond(comp, l => l.tchEst), prev = pond(comp, l => l.tchPrev);
   // Avance: por mes de cosecha programada; cosechado = corte de la zafra en curso ya cargado.
   const hoy = hoyLocal(), meses = new Map(); let aCos = 0, tCosReal = 0, aCosReal = 0, aProgHoy = 0, sinFecha = 0;
@@ -1302,7 +1409,7 @@ function datosEjecutivo() {
   });
   const prox = new Set(SEMANAS_PROX.map(w => w.clave)), lProx = mol.filter(l => !l.cosechado && l.semProg && prox.has(l.semProg.clave));
   const grupo = key => { const g = new Map(); mol.forEach(l => { const k = l[key] || 'Sin dato'; (g.get(k) || g.set(k, []).get(k)).push(l); });
-    return [...g].map(([k, ls]) => ({k, n: ls.length, area: ls.reduce((s, l) => s + l.areaAforo, 0), ton: ls.reduce((s, l) => s + (l.tonEst || 0), 0), est: pond(ls, l => l.tchEst), prev: pond(ls.filter(l => l.tchPrev > 0), l => l.tchPrev), val: ls.filter(estValidar).length})); };
+    return [...g].map(([k, ls]) => ({k, n: ls.length, area: ls.reduce((s, l) => s + l.areaAforo, 0), ton: ls.reduce((s, l) => s + (l.tonEst || 0), 0), est: (a => a ? ls.reduce((s, l) => s + (l.tonEst || 0), 0) / a : null)(ls.reduce((s, l) => s + l.areaAforo, 0)), prev: pond(ls.filter(l => l.tchPrev > 0), l => l.tchPrev), val: ls.filter(estValidar).length})); };
   return {mol, area, ton, tch: area ? ton / area : null, comp, aC, est, prev, aCos, aCosReal, tCosReal, aProgHoy, sinFecha,
     meses: [...meses.values()].sort((a, b) => a.k.localeCompare(b.k)), mesHoy: hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0'),
     lProx, aProx: lProx.reduce((s, l) => s + l.areaAforo, 0), tProx: lProx.reduce((s, l) => s + (l.tonEst || 0), 0),
@@ -1392,13 +1499,11 @@ function verListaFiltro() {
   abrirHoja(`${rotulo(temaFiltro)}${T.u && T.cortes && !gris ? ' ' + T.u : ''} · ${T.t}`, `
     ${gris ? `<div class="cifras c2">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área', conUnidad(nfHa.format(area), ' ha'))}</div>${fila.det ? `<p class="pie">${esc(fila.det)}</p>` : ''}`
       : `<div class="cifras c4">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área', conUnidad(nfHa.format(area), ' ha'))}${cifra('Toneladas est.', conUnidad(nfT.format(ton), ' t'))}${tch ? cifra('TCH estimado 26/27', nfTch.format(tch), 'c-est') : cifraNd('TCH estimado 26/27', 'Sin dato', '', 'c-est')}</div>`}
-    <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();encuadrarFiltro()">${ico('zoomIn')} Ver en el mapa</button><button type="button" class="btn ter" onclick="csvFiltro()">${ico('download')} Exportar CSV</button></div>
+    <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();encuadrarFiltro()">${ico('zoomIn')} Ver en el mapa</button><button type="button" class="btn ter" onclick="excelFiltro()">${ico('download')} Exportar Excel</button></div>
     <div class="lista-lotes">${ls.map(l => `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${resumenTchLote(l)}${l.fProg && !l.cosechado ? ' · corte ' + fechaCorta(l.fProg) : ''}</span></button>${llegarHtml(l.cod)}</div>`).join('')}</div>`);
 }
-function csvFiltro() {
+function csvFiltro() { excelFiltro(); } // compatibilidad
+function excelFiltro() {
   const ls = ordenFiltro(lotesFiltro()), T = TEMAS[S.colorear] || {};
-  const filas = ls.map(l => csvLinea([l.cod, l.hac, l.zona, l.variedad, rotulo(l.clas), nfTch.format(l.area || 0), l.tchPrev ?? '', l.tchEst ?? '', l.tonEst ?? '', l.fProg, rotulo(temaFiltro)]));
-  const nom = `lotes_${(T.t || 'capa').replace(/[^\wáéíóúñ]+/gi, '_')}_${String(temaFiltro).replace(/[^\w]+/g, '_')}_${(d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'))(hoyLocal())}.csv`.replace(/_+/g, '_');
-  descargarTexto(nom, '﻿' + [csvLinea(['lote', 'finca', 'zona', 'variedad', 'clasificacion', 'area_ha', 'tch_25_26', 'tch_estimado_26_27', 'toneladas_estimadas', 'fecha_cosecha_prog', 'clase']), ...filas].join('\n'), 'text/csv;charset=utf-8');
-  toast(`CSV con ${nf0.format(ls.length)} lotes.`, {tipo: 'bien'});
+  excelLotes(`${T.t}: ${rotulo(temaFiltro)}`, ls, `lotes_${T.t || 'capa'}_${temaFiltro}`);
 }

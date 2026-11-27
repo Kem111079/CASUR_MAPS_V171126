@@ -681,3 +681,12 @@ body.vuelo #arriba,body.vuelo #chips,body.vuelo .fab.panorama{display:none}
 .vh-marcar{flex:none;margin-left:auto;min-height:44px;padding:0 14px;border:0;border-radius:12px;background:#d4a017;color:#1a1200;font-weight:900;display:inline-flex;align-items:center;gap:5px;font-size:15px}
 .vh-marcar .ico{width:18px;height:18px}
 @media (max-width:379px){.vh-rec{display:none}}
+
+/* ── Análisis del aforo ── */
+.ana-ctl{display:flex;flex-direction:column;gap:8px;margin:6px 0 10px}
+.ana-ctl select{min-height:46px;border:1px solid var(--linea);border-radius:12px;padding:0 12px;background:var(--sup);color:var(--texto);font-size:calc(15px * var(--esc));font-weight:700}
+.ana-tot{margin-bottom:6px}
+.ana .btn.ancho{margin-top:14px}
+.mas-tabs{display:flex;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.mas-tabs::-webkit-scrollbar{display:none}
+.mas-tabs button{flex:1 0 auto;padding:0 10px}
