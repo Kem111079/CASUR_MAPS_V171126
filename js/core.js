@@ -98,9 +98,11 @@ function toast(msg, opts = {}) {
   el.className = 'toast ' + (opts.tipo || '') + (opts.fijo ? ' fijo' : '') + (opts.accion && opts.accion2 ? ' dos-acc' : '');
   el.setAttribute('role', opts.tipo === 'mal' ? 'alert' : 'status');
   if (opts.clave) el.dataset.clave = opts.clave;
-  el.innerHTML = `<span>${esc(msg)}</span>` + (opts.accion ? `<button type="button" class="t-acc">${esc(opts.accion)}</button>` : '') +
+  // Los botones van juntos (t-btns): si no caben junto al texto, bajan los dos a una segunda fila, a la derecha.
+  const btns = (opts.accion ? `<button type="button" class="t-acc">${esc(opts.accion)}</button>` : '') +
     (opts.accion && opts.accion2 ? `<button type="button" class="t-acc2">${esc(opts.accion2)}</button>` : '') +
     (opts.fijo ? `<button type="button" class="t-x" aria-label="Cerrar aviso">${ico('x')}</button>` : '');
+  el.innerHTML = `<span>${esc(msg)}</span>` + (btns ? `<span class="t-btns">${btns}</span>` : '');
   box.appendChild(el);
   const cerrar = () => el.remove();
   if (opts.accion) el.querySelector('.t-acc').addEventListener('click', () => { cerrar(); opts.alAccion && opts.alAccion(); });
@@ -135,9 +137,24 @@ function colaAvisos(box) {
       else if (c) c.remove();
     }
     document.body.classList.toggle('con-aviso', !!ult);
-    document.body.style.setProperty('--aviso-h', ult ? Math.round(ult.getBoundingClientRect().height) + 'px' : '0px');
+    ubicarAvisos();
   };
   _colaObs = new MutationObserver(pintar); _colaObs.observe(box, {childList: true});
+  window.addEventListener('resize', ubicarAvisos);
+}
+/* Con la tarjeta del lote abierta el aviso va sobre ella; si ahí ya no cabe bajo el buscador y los chips (teléfono
+   pequeño, letra grande o aviso largo), baja junto a la barra de navegación, como con la tarjeta completa. */
+function ubicarAvisos() {
+  const box = $('toasts'); if (!box) return;
+  const ult = [...box.children].filter(t => t.classList.contains('toast') && !t.hidden).pop(), b = document.body;
+  let bajo = false;
+  if (ult && b.dataset.tab === 'mapa' && b.classList.contains('con-card') && !b.classList.contains('card-full')) {
+    b.classList.remove('aviso-bajo');
+    const tope = Math.max($('arriba').getBoundingClientRect().bottom, $('chips').getBoundingClientRect().bottom);
+    bajo = ult.getBoundingClientRect().top < tope + 20; // 20 px: margen y la animación de entrada
+  }
+  b.classList.toggle('aviso-bajo', bajo);
+  b.style.setProperty('--aviso-h', ult ? Math.round(ult.getBoundingClientRect().height) + 'px' : '0px');
 }
 function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} } }
 
@@ -313,11 +330,31 @@ function datosListos() { // al abrir, los datos nuevos se aplican solos; si el u
   avisoActualizacion();
 }
 /* Un solo aviso para app nueva y datos nuevos: si llegan los dos, no se repite. */
-function avisoActualizacion() { toast('Actualización lista', {accion: 'Aplicar', fijo: true, tipo: 'bien', clave: 'actualizacion', alAccion: recargarApp}); }
+/* Con una hoja abierta (el formulario de un hallazgo, por ejemplo) el aviso espera a que se cierre: abajo, su botón
+   «Aplicar» quedaría sobre los botones de la hoja y un toque equivocado recargaría la app. */
+let _actPendiente = false;
+function avisoActualizacion() {
+  if ($('hoja') && $('hoja').classList.contains('abierta')) { _actPendiente = true; return; }
+  _actPendiente = false;
+  toast('Actualización lista', {accion: 'Aplicar', fijo: true, tipo: 'bien', clave: 'actualizacion', alAccion: recargarApp});
+}
+function apartarAvisoActualizacion() { const t = document.querySelector('#toasts .toast[data-clave="actualizacion"]'); if (t) { t.remove(); _actPendiente = true; } }
+/* Al cerrar la hoja: si hay un aviso pasajero a la vista (p. ej. «Lo escrito quedó como borrador · Retomar»), se espera a
+   que termine para no reemplazarlo. */
+let _actT = 0;
+function avisoActualizacionPendiente() {
+  if (!_actPendiente) return;
+  clearTimeout(_actT);
+  const intento = () => { if (!_actPendiente) return; if (document.querySelector('#toasts .toast:not(.fijo)')) { _actT = setTimeout(intento, 1000); return; } avisoActualizacion(); };
+  _actT = setTimeout(intento, 400);
+}
 /* Toda recarga por actualización pasa por aquí: guarda la pestaña, el lote abierto y la versión y fecha de datos de antes,
    para volver al mismo sitio y confirmar el resultado al arrancar (avisoTrasActualizar). */
 const TRAS_ACT_KEY = 'casur_tras_actualizar';
-function recargarApp() {
+async function recargarApp() {
+  // Nunca se pierde en silencio un hallazgo a medio escribir.
+  if (typeof registroSucio === 'function' && registroSucio() &&
+    !await preguntar('¿Aplicar la actualización?', 'Se perderá el hallazgo que está escribiendo. Guárdelo primero y aplique la actualización después.', 'Aplicar', 'Seguir escribiendo')) return;
   try {
     const tab = document.body.dataset.tab || 'mapa', cod = typeof selCod !== 'undefined' && $('card') && !$('card').classList.contains('oculta') ? selCod : '';
     sessionStorage.setItem(TRAS_ACT_KEY, JSON.stringify({tab, cod, ver: APP_VERSION, datos: (typeof META !== 'undefined' && META && META.generated_at) || '', t: Date.now()}));

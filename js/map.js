@@ -8,14 +8,21 @@ let selVista = 'lote', selToque = false;
 const VISTA_KEY = 'casur_maps_vista_v2', FAV_KEY = 'casur_maps_favoritos_v2', REC_KEY = 'casur_maps_recientes_v2';
 
 /* ── Hoja modal genérica ── */
+/* Cada hoja abre desde arriba (no hereda el desplazamiento de la anterior). Mientras está abierta, el aviso
+   «Actualización lista» espera: su botón «Aplicar» quedaría sobre los botones de la hoja (Guardar, por ejemplo). */
+let _hojaT = 0;
 function abrirHoja(titulo, html, clase = '') {
-  $('hojaTitulo').textContent = titulo; $('hojaBody').innerHTML = html;
-  $('hoja').className = 'hoja abierta ' + clase; $('hojaFondo').classList.add('abierta'); histPedir();
+  $('hojaTitulo').textContent = titulo; $('hojaBody').innerHTML = html; $('hojaBody').scrollTop = 0;
+  $('hoja').className = 'hoja abierta ' + clase; $('hojaFondo').classList.add('abierta'); _hojaT = Date.now(); histPedir();
+  apartarAvisoActualizacion();
 }
+/* Toque que llega a una hoja recién abierta (< 700 ms): es el segundo toque de un doble toque sobre el botón que la abrió.
+   Se ignora para que no elija una categoría ni cierre la hoja sin querer. El teclado (detail 0) no se filtra. */
+const hojaRecien = e => !!e && e.detail > 0 && Date.now() - _hojaT < 700;
 function cerrarHoja() {
   $('hoja').classList.remove('abierta'); $('hojaFondo').classList.remove('abierta');
   if (typeof soltarRegistro === 'function') soltarRegistro(); else if (typeof detenerDictado === 'function') detenerDictado();
-  histPedir();
+  histPedir(); avisoActualizacionPendiente();
 }
 
 /* ── Mapa ── */
@@ -50,7 +57,7 @@ L.Map.include({
 function initMap() {
   ajustarLienzo();
   map = L.map('map', {zoomControl: false, preferCanvas: true, attributionControl: false, maxZoom: 20});
-  window.addEventListener('resize', ajustarLienzo);
+  window.addEventListener('resize', () => { ajustarLienzo(); leyAncho(); });
   map.dragging._draggable.on('predrag', function () { // arrastre: convierte el movimiento del dedo al sistema girado
     const ps = this._parentScale || {x: 1, y: 1}, o = this._newPos.subtract(this._startPos), x = o.x * ps.x, y = o.y * ps.y, t = mapRot * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
     this._newPos = this._startPos.add(L.point(c * x + s * y, -s * x + c * y));
@@ -109,7 +116,7 @@ function toqueVacio() {
   const cod = selCod;
   _vacioT = setTimeout(() => {
     if (selCod !== cod || medir.modo || document.body.dataset.tab !== 'mapa' || $('hoja').classList.contains('abierta')) return;
-    if (cardFull) { cardFull = false; renderCard(); } else cerrarCard();
+    if (cardFull) { cardFull = false; renderCard(); } else cerrarCard(true);
   }, 300);
 }
 function guardarVista() { clearTimeout(_vistaT); _vistaT = setTimeout(() => { const c = map.getCenter(); escribirLS(VISTA_KEY, {lat: c.lat, lng: c.lng, z: map.getZoom()}); }, 600); }
@@ -149,8 +156,8 @@ const TEMAS = {
   variedad: {t: 'Variedad', cat: l => l.variedad || 'Sin dato'},
   destino: {t: 'Destino / clasificación', cat: l => l.conAforo ? (l.clas || 'Sin dato') : 'Sin aforo'},
   socas: {t: 'Plantillas y socas', clave: l => { const i = GR_CORTE.indexOf(l.grCorte); return i < 0 ? null : i; }, clases: () => [
-    {txt: 'Plantilla', color: '#1a9850'}, {txt: 'Soca · corte 2', color: '#a6d96a'}, {txt: 'Soca · corte 3', color: '#fee08b'},
-    {txt: 'Soca · corte 4', color: '#fdae61'}, {txt: 'Soca · corte 5', color: '#f46d43'}, {txt: 'Soca · más de 5', color: '#a50026'}]},
+    {txt: 'Plantilla', color: '#1a9850'}, {txt: 'Soca, corte 2', color: '#a6d96a'}, {txt: 'Soca, corte 3', color: '#fee08b'},
+    {txt: 'Soca, corte 4', color: '#fdae61'}, {txt: 'Soca, corte 5', color: '#f46d43'}, {txt: 'Soca, más de 5 cortes', color: '#a50026'}]},
   renovacion: {t: 'Propuesta de renovación', clave: l => l.renovar === true ? 0 : l.renovar === false ? 1 : null, clases: () => [
     {txt: 'Renovar', color: '#d7191c'}, {txt: 'No renovar', color: '#74add1'}]},
   semana: {t: 'Semana de corte', sin: 'Sin fecha', clave: claseCorte, clases: () => [
@@ -209,6 +216,13 @@ function estiloFeat(f) {
   }
   const c = temaColor.get(f._cod);
   if (!c) {
+    // Clase neutra («Sin dato», «Sin aforo»…) elegida en la leyenda: gris oscuro (claro sobre satélite u oscuro) bien
+    // marcado sobre el resto atenuado, en todos los niveles de zoom; sin filtro, el gris rayado de siempre.
+    if (temaFiltro !== null) {
+      const g = sat || oscuro ? '#e6edf3' : '#4b5563';
+      if (n === 0) return estiloPlano(g, .9);
+      return {stroke: true, color: sat ? '#ffffff' : g, weight: n === 1 ? .6 : 1, opacity: .9, fillColor: g, fillOpacity: n === 1 ? .7 : .6};
+    }
     if (n === 0) return estiloPlano('#9aa3ad', .45);
     return {stroke: true, color: sat ? '#ffffff' : '#7b8794', weight: n === 1 ? .4 : .8, opacity: n === 1 ? .5 : .7, fillColor: '#9aa3ad', fillOpacity: n === 1 ? .2 : .12};
   }
@@ -256,8 +270,17 @@ function leyPorCard(vis) {
   if (vis && selCod !== _leyCardCod) { _leyCardCod = selCod; leyPlegada = true; clearTimeout(_leyT); _leyT = null; pintarLeyenda(); }
   else if (!vis && _leyCardCod) { _leyCardCod = ''; pintarLeyenda(); }
 }
+/* Leyenda angosta (teléfono pequeño con la tarjeta abierta o letra muy grande): si el texto de alguna fila no cabe junto
+   al %, el % pasa a la línea de detalle («132 lotes · 1,119 ha · 11 %») y el texto usa todo el ancho de la fila. */
+function leyAncho() {
+  const el = $('leyenda'); if (!el || el.classList.contains('plegada') || el.classList.contains('oculta')) return;
+  el.classList.remove('angosta');
+  el.classList.toggle('angosta', [...el.querySelectorAll('.ley-txt b, .ley-txt small')].some(s => s.scrollWidth > s.clientWidth + 1));
+}
 const pctTxt = p => p > 0 && p < 1 ? '< 1 %' : nf0.format(p) + ' %';
 const lotesTxt = n => n === 1 ? '1 lote' : nf0.format(n) + ' lotes';
+/* Detalle de una fila: número y unidad nunca se separan («132 lotes · 1,119 ha»); si no cabe, baja de línea en el « · ». */
+const leyDetalle = x => (x.n ? nbsp(lotesTxt(x.n)) + ' · ' : '') + nbsp(nf0.format(x.ha) + ' ha');
 function pintarLeyenda() {
   const el = $('leyenda'); if (!el) return;
   if (!leyVisible()) { el.classList.add('oculta'); clearTimeout(_leyT); _leyT = null; return; }
@@ -270,16 +293,17 @@ function pintarLeyenda() {
   const muestra = c => `<span class="ley-color" style="${c ? 'background:' + c : ''}"></span>`;
   const franja = `<span class="ley-franja" aria-hidden="true">${temaLeyenda.filter(x => x.color).slice(0, 8).map(x => `<span style="background:${x.color}"></span>`).join('')}</span>`;
   const cab = leyPlegada && filtro
-    ? `${muestra(filtro.color)}<span class="ley-pf"><small>${esc(T.t)}</small><b>Solo ${esc(rotulo(filtro.txt))} · ${nf0.format(filtro.ha)} ha</b></span>`
+    ? `${muestra(filtro.color)}<span class="ley-pf"><small>${esc(T.t)}</small><b><span class="ley-pf-extra">Solo </span>${esc(rotulo(filtro.txt))}<span class="ley-pf-extra"> · ${nbsp(nf0.format(filtro.ha) + ' ha')}</span></b></span>`
     : leyPlegada ? `${franja}<b>${esc(T.t)}</b>` : `<b>${esc(T.t)}</b>${T.u ? ` <small>${esc(T.u)}</small>` : ''}`;
   el.innerHTML = `<button type="button" class="ley-cab" aria-expanded="${!leyPlegada}" aria-controls="leyCuerpo" aria-label="${esc(T.t)}: ${leyPlegada ? 'mostrar' : 'ocultar'} leyenda${filtro ? ' (filtro: ' + esc(rotulo(filtro.txt)) + ')' : ''}">${cab}<i>${ico('chevDown')}</i></button>` +
     (leyPlegada && filtro ? `<button type="button" class="ley-quitar" aria-label="Quitar filtro y ver todos los lotes">${ico('x')}</button>` : '') +
     `<div class="ley-cuerpo" id="leyCuerpo">` +
-    temaLeyenda.map(x => { const p = x.ha / total * 100, on = temaFiltro === x.txt; return `<button type="button" class="${on ? 'activo' : temaFiltro !== null ? 'apagado' : ''}${x.color ? '' : ' neutro'}" data-clase="${esc(x.txt)}" aria-pressed="${on}" style="--p:${Math.min(100, p).toFixed(1)}%${x.color ? ';--c:' + x.color : ''}">${muestra(x.color)}<span class="ley-txt"><b>${esc(rotulo(x.txt))}</b><small>${x.n ? lotesTxt(x.n) + ' · ' : ''}${nf0.format(x.ha)} ha${claseSel === x.txt ? ' · <strong>este lote</strong>' : ''}</small></span><em>${pctTxt(p)}</em></button>`; }).join('') +
+    temaLeyenda.map(x => { const p = x.ha / total * 100, on = temaFiltro === x.txt; return `<button type="button" class="${on ? 'activo' : temaFiltro !== null ? 'apagado' : ''}${x.color ? '' : ' neutro'}" data-clase="${esc(x.txt)}" aria-pressed="${on}" style="--p:${Math.min(100, p).toFixed(1)}%${x.color ? ';--c:' + x.color : ''}">${muestra(x.color)}<span class="ley-txt"><b>${esc(rotulo(x.txt))}</b><small>${leyDetalle(x)}<span class="ley-pct"> · ${nbsp(pctTxt(p))}</span></small>${claseSel === x.txt ? '<small class="ley-este"><strong>este lote</strong></small>' : ''}</span><em>${pctTxt(p)}</em></button>`; }).join('') +
     `<small class="ley-pista">${temaFiltro !== null ? 'Toque de nuevo para ver todo' : 'Toque una clase para resaltarla'}</small></div>`;
   el.querySelector('.ley-cab').onclick = leyAlternar;
   const q = el.querySelector('.ley-quitar'); if (q) q.onclick = () => filtrarClase(null);
   el.querySelector('.ley-cuerpo').onclick = e => { const b = e.target.closest('button[data-clase]'); if (!b) return; filtrarClase(temaFiltro === b.dataset.clase ? null : b.dataset.clase); };
+  leyAncho();
   if (!estabaOculta && antes !== leyPlegada && el.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches)
     el.animate([{opacity: .3, transform: 'scale(.96)'}, {opacity: 1, transform: 'none'}], {duration: 250, easing: 'cubic-bezier(.2,.8,.2,1)'});
 }
@@ -333,7 +357,8 @@ function corteInfo(l) {
   if (!l.fProg) return {txt: '', alerta: ''};
   const d = diasPara(l.fProg), w = l.semProg;
   if (d < 0) return {txt: '', alerta: `<div class="corte est-mal">${ico('alert')} Fecha de corte vencida: ${fechaCorta(l.fProg)} (hace ${-d} día${d === -1 ? '' : 's'}). Actualice el programa o cargue el corte.</div>`};
-  return {txt: `<span class="${d <= 14 ? 'pronto' : ''}">${ico('calendar')} Corte ${fechaCorta(l.fProg)} · ${d === 0 ? '<b>hoy</b>' : `faltan <b>${d}</b> d`}${w ? ' · sem. ' + w.sem : ''}</span>`, alerta: ''};
+  // Espacios no separables: «faltan 20 d» y «sem. 51» nunca quedan partidos entre número y unidad.
+  return {txt: `<span class="${d <= 14 ? 'pronto' : ''}">${ico('calendar')} Corte ${nbsp(fechaCorta(l.fProg))} · ${d === 0 ? '<b>hoy</b>' : `faltan&nbsp;<b>${d}</b>&nbsp;d`}${w ? ' · sem.&nbsp;' + w.sem : ''}</span>`, alerta: ''};
 }
 /* Mini gráfico del TCH de todas las zafras del histórico (la misma ventana que el gráfico y el promedio de la ficha),
    dentro de la casilla «TCH zafra anterior». */
@@ -448,15 +473,16 @@ function menuLote(f) {
 function setSelModo(modo) { S.selModo = modo; guardarAjustes(); if (selCod) verComo(modo); } // preferencia de Capas: rige los próximos toques en el mapa
 function verComo(modo) { selVista = modo; pintarSeleccion(); renderCard(); } // botones Lote/Tablón de la tarjeta: solo esta selección
 function seleccionarTablon(i) { const f = DATA.features[i]; if (f) seleccionarLote(f._cod, {feat: f, modo: 'tablon', zoom: true}); }
-function cerrarCard() {
-  // Si el usuario cierra la tarjeta que abrió el GPS, no se vuelve a abrir mientras siga en ese lote.
-  if (typeof GPS !== 'undefined') { if (selCod && selCod === GPS.autoSel) GPS.descartado = selCod; GPS.salio = ''; }
+/* porUsuario: la cerró el usuario (X, toque en el mapa vacío, Atrás o Escape). Solo entonces la tarjeta que abrió el GPS
+   no se vuelve a abrir mientras siga en ese lote; si la cierra la app (Medir, Ver a renovar…), el GPS la reabre. */
+function cerrarCard(porUsuario = false) {
+  if (typeof GPS !== 'undefined') { if (porUsuario && selCod && selCod === GPS.autoSel) GPS.descartado = selCod; GPS.salio = ''; }
   clearTimeout(_vacioT); selCod = ''; selFeat = null; selToque = false; pintarSeleccion(); $('card').className = 'card oculta'; ajustarCard(); }
 function ajustarCard() {
   const el = $('card'), vis = !el.classList.contains('oculta');
   document.body.classList.toggle('con-card', vis); document.body.classList.toggle('card-full', vis && cardFull); leyPorCard(vis);
   if (vis && !cardFull) document.body.style.setProperty('--card-h', Math.round(el.getBoundingClientRect().height) + 'px');
-  histPedir();
+  ubicarAvisos(); histPedir();
 }
 /* Relleno inferior para encuadrar un lote sobre la tarjeta compacta: su alto medido + 16 px, sin dejar
    menos de 120 px de mapa visible. En pantalla ancha la tarjeta va a un lado y se conserva el relleno fijo. */
@@ -466,12 +492,15 @@ function margenCard() {
   return Math.max(40, Math.min(Math.round(el.getBoundingClientRect().height) + 16, h - 90 - 120));
 }
 const nbsp = t => String(t).replace(/ /g, '&nbsp;'); // «15.8 ha» y «corte 11» no se parten al bajar de línea
+/* Ciclo en forma corta para el título de la tarjeta (la fila «Ciclo» de la ficha usa la forma larga). */
+const ncTitulo = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'plantilla' : l.nc === '>5' ? 'más de 5 cortes' : 'corte ' + l.nc;
 function cifra(rot, val, cls = '', extra = '') { return `<div class="${cls}"><span>${rot}</span><b>${val}</b>${extra}</div>`; }
 /* Casilla sin cifra: en lugar de un «—» suelto, dice por qué (p. ej. «No aplica · Semilla», «Sin fecha · de corte»). */
 function cifraNd(rot, txt, det = '', cls = '', extra = '') { return `<div class="${cls}"><span>${rot}</span><b class="nd">${esc(txt)}${det ? `<small>${esc(det)}</small>` : ''}</b>${extra}</div>`; }
 /* Las cuatro cifras de la tarjeta, con los nombres únicos de la app y el motivo cuando falta el dato. */
 function cifrasLote(l, edad) {
-  const sinCana = esSinCana(l), sinEst = motivoSinEstimado(l), validar = estValidar(l);
+  const sinCana = esSinCana(l), m = motivoSinEstimado(l), validar = estValidar(l);
+  const sinEst = m.txt === 'Sin aforo' ? {txt: m.txt, det: 'lote no aforado'} : m; // el rótulo de la casilla ya dice 26/27
   const ant = l.tchAnt > 0
     ? cifra('TCH zafra anterior', nfTch.format(l.tchAnt), '', chispa(l.cod) + (l.tchAntHist ? `<small class="cifra-origen">zafra ${esc(l.zafra)}</small>` : ''))
     : l.ultHist ? cifraNd('TCH zafra anterior', 'Sin dato reciente', 'último: ' + l.ultHist.zafra, '', chispa(l.cod))
@@ -504,11 +533,11 @@ function renderCard() {
     <button type="button" class="card-asa" onclick="cardAlternar()" aria-label="Ampliar o reducir tarjeta"><i></i></button>
     <div class="card-top">
       <div class="card-id">
-        <div class="card-cod">${tab ? 'Tablón ' + esc(pt.Tablon || '—') : 'Lote ' + esc(l.cod)} <small>${nbsp(tab ? fmtHaLote(pt.Area_Ha) : fmtHaLote(l.area))}${l.nc ? ' · ' + nbsp(esc(ncLargo(l))) : ''}</small></div>
+        <div class="card-cod">${tab ? 'Tablón ' + esc(pt.Tablon || '—') : 'Lote ' + esc(l.cod)} <small>${nbsp(tab ? fmtHaLote(pt.Area_Ha) : fmtHaLote(l.area))}${l.nc ? ' · ' + nbsp(esc(ncTitulo(l))) : ''}</small></div>
         <div class="card-sub"><button type="button" class="card-finca" onclick="abrirFinca(LOTES[selCod].hac)">${tab ? 'Lote ' + esc(l.cod) + ' · ' : ''}${esc(l.hac)} ›</button></div>
       </div>
       ${selFeat && l.nPoly > 1 ? `<div class="mini-seg" role="group" aria-label="Ver lote o tablón"><button type="button" class="${tab ? '' : 'activo'}" aria-pressed="${!tab}" onclick="verComo('lote')">Lote</button><button type="button" class="${tab ? 'activo' : ''}" aria-pressed="${tab}" onclick="verComo('tablon')">Tablón</button></div>` : ''}
-      <button type="button" class="card-x" onclick="cerrarCard()" aria-label="Cerrar">${ico('x')}</button>
+      <button type="button" class="card-x" onclick="cerrarCard(true)" aria-label="Cerrar">${ico('x')}</button>
     </div>
     <div class="fila-estado">${st.cls === 'bien' && l.renovar ? '' : `<span class="chip est-${st.cls}">${esc(st.txt)}</span>`}${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${validar ? '<span class="chip est-medio" title="TCH estimado 26/27 posiblemente provisional: confírmelo con el aforo">Dato a validar</span>' : ''}${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
     ${corte.alerta}
@@ -521,7 +550,7 @@ function renderCard() {
       <button type="button" class="btn ter" onclick="cardAlternar()">${cardFull ? 'Menos ' + ico('chevDown') : 'Más ' + ico('chevUp')}</button>
     </div>
     <div class="solo-full">
-      ${st.det ? `<div class="nota est-${st.cls}">${esc(st.det)}</div>` : ''}
+      ${st.det && !(st.cls === 'bien' && (l.renovar || validar)) ? `<div class="nota est-${st.cls}">${esc(st.det)}</div>` : ''}
       ${validar ? `<div class="nota est-medio">${ico('alert')} Dato a validar: el TCH estimado 26/27 es ${nfTch.format(l.tchEst)} t/ha y su ${l.histProm !== null ? 'promedio histórico' : 'TCH de la zafra anterior'} es ${nfTch.format(refHistorica(l))} t/ha. Parece un valor provisional: confírmelo con el aforo antes de usarlo. Se mantiene en todos los totales.</div>` : ''}
       <div class="kvs">
         ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nfHaLote.format(aT)} ha · ${nfHaLote.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nfHaLote.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : selToque ? kv('Tablón tocado', pt.Tablon) : ''}
@@ -586,12 +615,12 @@ function histSvg(cod) {
   const v = rows.map(r => Number(r.tch)), avg = v.reduce((a, b) => a + b, 0) / v.length, iMax = v.indexOf(Math.max(...v)), W = 640, H = 280, ml = 16, mr = 16, mt = 62, mb = 38;
   const max = Math.ceil((Math.max(...v, avg) + 10) / 10) * 10, pw = W - ml - mr, ph = H - mt - mb, bw = Math.min(46, pw / rows.length * .62);
   const x = i => ml + (i + .5) * pw / rows.length, y = t => mt + (max - t) * ph / max;
-  const bars = rows.map((r, i) => `<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${y(r.tch).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - mb - y(r.tch)).toFixed(1)}" rx="5" class="${r.tch >= avg ? 'hb-ok' : (r.tch < 55 ? 'hb-mal' : 'hb-med')}"/><text x="${x(i).toFixed(1)}" y="${(y(r.tch) - 7).toFixed(1)}" class="hv">${nf0.format(r.tch)}</text>${i === iMax && v.length > 1 ? `<text x="${x(i).toFixed(1)}" y="${(y(r.tch) - 29).toFixed(1)}" class="hmx">máx.</text>` : ''}<text x="${x(i).toFixed(1)}" y="${H - 14}" class="hz">${esc(r.zafra || '')}</text>`).join('');
+  const bars = rows.map((r, i) => `<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${y(r.tch).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - mb - y(r.tch)).toFixed(1)}" rx="5" class="${r.tch >= 70 ? 'hb-ok' : r.tch < 55 ? 'hb-mal' : 'hb-med'}"/><text x="${x(i).toFixed(1)}" y="${(y(r.tch) - 7).toFixed(1)}" class="hv">${nf0.format(r.tch)}</text>${i === iMax && v.length > 1 ? `<text x="${x(i).toFixed(1)}" y="${(y(r.tch) - 29).toFixed(1)}" class="hmx">máx.</text>` : ''}<text x="${x(i).toFixed(1)}" y="${H - 14}" class="hz">${esc(r.zafra || '')}</text>`).join('');
   const n = rows.length, nz = n === 1 ? '1 zafra' : n + ' zafras';
   return `<svg class="hist" viewBox="0 0 ${W} ${H}" role="img" aria-label="TCH por zafra, ${nz}; promedio ${nfTch.format(avg)} t/ha; máximo ${nfTch.format(v[iMax])} t/ha en ${esc(rows[iMax].zafra)}">` +
     `<line x1="${ml}" x2="${ml + 30}" y1="18" y2="18" class="hprom"/><text x="${ml + 38}" y="23" class="hpt">Prom. ${nz}: ${nfTch.format(avg)} t/ha</text>${bars}` +
     `<line x1="${ml}" x2="${W - mr}" y1="${y(avg).toFixed(1)}" y2="${y(avg).toFixed(1)}" class="hprom"/></svg>` +
-    `<p class="pie">TCH (t/ha) de todas las zafras del histórico, de ${esc(rows[0].zafra)} a ${esc(rows[n - 1].zafra)}. La línea es el promedio de esas ${nz}, el mismo de la ficha.</p>`;
+    `<p class="pie">TCH (t/ha) de todas las zafras del histórico, de ${esc(rows[0].zafra)} a ${esc(rows[n - 1].zafra)}. La línea es el promedio de esas ${nz}, el mismo de la ficha. Barras: verde 70 t/ha o más, ámbar de 55 a 70, rojo menos de 55.</p>`;
 }
 
 /* ── Resumen de finca / productor ── */
@@ -619,10 +648,16 @@ function resumenTchLote(l) {
 function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) { soltarSeguimiento(); map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); } }
 
 /* ── Hoja de capas y herramientas ──
-   Elegir capa o mapa base aplica el cambio, cierra la hoja para ver el resultado y ofrece Deshacer durante 4 s.
+   Elegir capa o mapa base aplica el cambio, cierra la hoja (si se eligió con un toque) y ofrece Deshacer durante 4 s.
    Los interruptores y «Al tocar el mapa» no la cierran: se suelen cambiar varios seguidos. */
 const BASES_TXT = {claro: 'Calles', satelite: 'Satélite', ninguno: 'Sin mapa'};
 function cerrarCapasPronto() { setTimeout(() => { if ($('opColor') && $('hoja').classList.contains('abierta')) cerrarHoja(); }, 200); }
+/* La hoja solo se cierra al elegir con un toque o clic: con las flechas del teclado (o un lector de pantalla) se aplica
+   cada opción, con su Deshacer, sin cerrar la hoja, para poder recorrerlas. */
+let _capaToque = false;
+function capaPorToque(id) { const el = $(id); el.addEventListener('pointerup', () => { _capaToque = true; }); el.addEventListener('keydown', () => { _capaToque = false; }); }
+function cerrarSiToque() { const t = _capaToque; _capaToque = false; if (t) cerrarCapasPronto(); }
+function marcarOpcion(grupo, val) { const r = document.querySelector(`#hoja.abierta input[name="${grupo}"][value="${val}"]`); if (r) r.checked = true; } // Deshacer con la hoja aún abierta
 function avisoCambio(txt, deshacer) { toast(txt, {accion: 'Deshacer', ms: 4000, alAccion: deshacer}); }
 function abrirCapas() {
   const op = (grupo, val, txt, act) => `<label class="opcion"><input type="radio" name="${grupo}" value="${val}" ${act ? 'checked' : ''}><span>${txt}</span></label>`;
@@ -636,10 +671,14 @@ function abrirCapas() {
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">${ico('ruler')} Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">${ico('hexagon')} Medir área</button></div>
     <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();soltarSeguimiento();map.fitBounds(capaLotes.getBounds(),margenes(20,20,10))">${ico('map')} Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">${ico('download')} Guardar esta zona sin señal</button></div>`);
-  $('opBase').addEventListener('change', e => { const prev = S.base, val = e.target.value; setBase(val); cerrarCapasPronto(); avisoCambio('Mapa base: ' + BASES_TXT[val], () => setBase(prev)); });
+  capaPorToque('opBase'); capaPorToque('opColor');
+  $('opBase').addEventListener('change', e => { const prev = S.base, val = e.target.value; setBase(val); cerrarSiToque(); avisoCambio('Mapa base: ' + BASES_TXT[val], () => { setBase(prev); marcarOpcion('base', prev); }); });
   $('opSel').addEventListener('change', e => setSelModo(e.target.value));
   $('opReg').addEventListener('change', e => { S.verRegistros = e.target.checked; guardarAjustes(); pintarRegistros(); });
-  $('opColor').addEventListener('change', e => { const prev = S.colorear, val = e.target.value; setColorear(val); cerrarCapasPronto(); avisoCambio('Capa: ' + TEMAS[val].t, () => setColorear(prev)); });
+  $('opColor').addEventListener('change', e => {
+    const prev = S.colorear, prevF = temaFiltro, val = e.target.value; setColorear(val); cerrarSiToque();
+    avisoCambio('Capa: ' + TEMAS[val].t, () => { setColorear(prev); marcarOpcion('color', prev); if (prevF !== null && temaLeyenda.some(x => x.txt === prevF)) filtrarClase(prevF); }); // vuelve también el filtro de clase
+  });
   $('opEtq').addEventListener('change', e => { S.etiquetas = e.target.checked; guardarAjustes(); actualizarEtiquetas(); });
   $('opNc').addEventListener('change', e => { S.etqNc = e.target.checked; guardarAjustes(); actualizarEtiquetas(); });
 }

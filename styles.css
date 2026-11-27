@@ -81,21 +81,23 @@ body.con-card .fab.panorama{bottom:calc(var(--card-h,230px) + 144px)}
 .leyenda.oculta{display:none!important}
 /* Con tarjeta: píldora junto al botón de capas; desplegada crece hacia arriba. */
 body.con-card .leyenda{left:76px;bottom:calc(var(--card-h,230px) + 18px);max-width:calc(100% - 156px);max-height:min(max(120px,min(40vh,100% - var(--card-h,230px) - 170px)),100% - var(--card-h,230px) - 26px)}
-body.con-card .leyenda:not(.plegada){z-index:895}
+body.con-card .leyenda{z-index:895} /* también la píldora: sobre los avisos de #chips (z 890), que en pantallas bajas la alcanzan */
 body.con-card.card-full .leyenda{display:none}
 .ley-cab{display:flex;gap:8px;align-items:center;width:100%;min-height:44px;padding:6px 12px;border:0;background:transparent;text-align:left;flex:none}
 .ley-cab small{color:var(--texto2)}.ley-cab i{margin-left:auto;padding-left:4px;font-style:normal;display:grid}
 .ley-cab .ico{transition:transform .2s}
 .leyenda.plegada{flex-direction:row;align-items:stretch;border-radius:22px}
 .leyenda.plegada .ley-cuerpo{display:none}
-.leyenda.plegada .ley-cab{width:auto;padding:4px 12px 4px 14px;min-width:0}
+.leyenda.plegada .ley-cab{width:auto;padding:4px 12px 4px 14px;min-width:0;flex:0 1 auto} /* se encoge (nombre con «…») para que la flecha y la ✕ siempre se vean */
 .leyenda.plegada .ley-cab>b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .leyenda.plegada .ley-cab .ico{transform:rotate(180deg)}
 .ley-franja{display:inline-flex;flex:none;border-radius:4px;overflow:hidden;border:1px solid rgba(0,0,0,.3)}
 .ley-franja span{width:7px;height:16px}
 .ley-pf{display:flex;flex-direction:column;line-height:1.15;min-width:0}
-.ley-pf small{font-size:calc(11.5px * var(--esc));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ley-pf b{white-space:nowrap}
+.ley-pf small{font-size:calc(11.5px * var(--esc));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ley-pf b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .leyenda.con-filtro.plegada{border-color:var(--info)}
+/* Teléfono angosto con la tarjeta abierta: la píldora con filtro deja solo la clase (y la ✕) para que se lea. */
+@media (max-width:379px){body.con-card .leyenda.con-filtro.plegada .ley-pf-extra,body.con-card .leyenda.con-filtro.plegada .ley-cab>i{display:none}}
 .ley-quitar{flex:none;min-width:46px;min-height:44px;border:0;border-left:1px solid var(--linea);background:transparent;color:var(--texto);display:grid;place-items:center}
 .ley-cuerpo{padding:0 6px 8px;overflow-y:auto;overscroll-behavior:contain;min-height:0}
 .ley-cuerpo button{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:4px 8px;margin:1px 0;border:0;border-radius:8px;background-color:transparent;background-image:linear-gradient(90deg,var(--c,#9aa3ad) var(--p,0%),transparent var(--p,0%));background-size:calc(100% - 16px) 3px;background-position:8px calc(100% - 2px);background-repeat:no-repeat;text-align:left;font-size:calc(13px * var(--esc));transition:opacity .15s,background-color .15s}
@@ -103,10 +105,11 @@ body.con-card.card-full .leyenda{display:none}
 .ley-cuerpo button.apagado{opacity:.45}
 .ley-txt{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.2}
 .ley-txt b{font-weight:700;font-size:calc(13.5px * var(--esc))}
-.ley-txt small{color:var(--texto2);font-size:calc(12px * var(--esc));white-space:nowrap}
+.ley-txt small{color:var(--texto2);font-size:calc(12px * var(--esc))} /* baja de línea en el « · » (número y unidad van unidos) */
 .ley-txt strong{color:var(--texto);font-weight:800}
 .ley-pista{display:block;color:var(--texto2);font-size:calc(12.5px * var(--esc));margin:4px 8px 0}
-.ley-cuerpo em{margin-left:auto;padding-left:6px;font-style:normal;font-weight:800;color:var(--texto);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ley-pct{display:none}.leyenda.angosta .ley-pct{display:inline}.leyenda.angosta .ley-cuerpo em{display:none}.leyenda.angosta .ley-txt b{hyphens:auto;overflow-wrap:anywhere}
+.ley-cuerpo em{flex:none;margin-left:auto;padding-left:6px;font-style:normal;font-weight:800;color:var(--texto);font-variant-numeric:tabular-nums;white-space:nowrap}
 .ley-color{width:18px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.35);background:repeating-linear-gradient(45deg,#cfd6dc 0 3px,#fff 3px 6px);flex:none}
 
 /* Etiquetas del mapa */
@@ -151,8 +154,8 @@ body.con-card.card-full .leyenda{display:none}
 .card.full{top:calc(8px + var(--sat));overflow:auto;-webkit-overflow-scrolling:touch}
 .card.peek .solo-full{display:none}
 .card.peek{max-height:min(calc(100% - 70px - var(--sat)),max(65%,300px));overflow-y:auto;overscroll-behavior:contain}
-.card-asa{display:block;width:100%;height:30px;border:0;background:transparent;padding:0;position:relative}
-.card-asa::after{content:'';position:absolute;left:0;right:0;top:-14px;height:44px} /* zona táctil de 44 px sin cambiar el aspecto */
+.card-asa{display:block;width:100%;height:22px;border:0;background:transparent;padding:0;position:relative}
+.card-asa::after{content:'';position:absolute;left:0;right:0;top:-18px;height:44px} /* zona táctil de 44 px sin cambiar el aspecto */
 .card-asa i{display:block;width:44px;height:5px;border-radius:3px;background:var(--linea);margin:8px auto 0}
 .card-top{display:flex;align-items:flex-start;gap:8px}
 .card-id{flex:1;min-width:0}
@@ -163,7 +166,7 @@ body.con-card.card-full .leyenda{display:none}
 .mini-seg{flex:none;display:flex;border:2px solid var(--linea);border-radius:12px;overflow:hidden;margin-top:2px}
 .mini-seg button{min-height:44px;min-width:58px;padding:0 10px;border:0;background:var(--sup);font-size:calc(13.5px * var(--esc));font-weight:800;color:var(--texto2)}
 .mini-seg button.activo{background:var(--pri);color:var(--pri-t)}
-.fila-estado{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 6px}
+.fila-estado{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;margin:0 0 6px} /* filas juntas: la tarjeta compacta cabe con letra Muy grande */
 .card-sub{display:flex;align-items:center;min-width:0}
 .card-finca{min-height:44px!important;padding:4px 0!important;line-height:1.2}
 .linea-estado{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:calc(14.5px * var(--esc));font-weight:600;color:var(--texto2)}
@@ -186,6 +189,7 @@ body.con-card.card-full .leyenda{display:none}
 .cifras .c-est b.nd{color:var(--texto2)}
 .cifras b.nd small{display:block;font-size:calc(12px * var(--esc));font-weight:600;margin:2px 0 0}
 .cifra-origen{display:block;font-size:calc(11.5px * var(--esc));font-weight:700;color:var(--texto2);line-height:1.15;margin-top:2px}
+.card.peek .cifra-origen{display:none} /* compacta: el chip «Dato a validar» ya lo dice y la ficha da la zafra */
 .cifras .c-validar{box-shadow:inset 0 0 0 2px var(--medio)}.cifras .c-validar .cifra-origen{color:var(--medio)}
 .cifras.grande b{font-size:calc(24px * var(--esc));font-size:clamp(16px,20cqi,calc(24px * var(--esc)))}.cifras em{font-style:normal}
 /* Indicadores del Resumen, finca, renovación, GPS y visita: 2×2 en teléfono y 4 en fila desde 600 px. */
@@ -271,6 +275,7 @@ svg.hist{width:100%;height:auto;display:block}
 .rapidos small.sev-baja{background:var(--bien-f);color:var(--bien)}.rapidos small.sev-media{background:var(--medio-f);color:var(--medio)}.rapidos small.sev-alta{background:var(--mal-f);color:var(--mal)}
 .rapidos.atenuado button{opacity:.6;border-style:dashed}
 .rap-sev{margin:0 0 10px}.segmento.c4{grid-template-columns:repeat(4,minmax(0,1fr))}.segmento.c4 button{min-width:0;padding:0 4px}
+@media (max-width:379px){[data-letra=grande] .segmento.c4,[data-letra=muygrande] .segmento.c4{grid-template-columns:repeat(2,minmax(0,1fr))}} /* «Sugerida» completa */
 /* Categoría del formulario: misma cuadrícula de íconos, sin ninguna elegida en un registro nuevo. */
 .rapidos.cats{margin-top:6px}.rapidos.cats button{min-height:64px;color:var(--texto)}
 .rapidos.cats button.activo{background:var(--pri);color:var(--pri-t);border-color:var(--pri)}.rapidos.cats button.activo .ico{color:inherit}
@@ -278,7 +283,8 @@ svg.hist{width:100%;height:auto;display:block}
 .campo .req{font-weight:600;color:var(--texto2);font-size:calc(13px * var(--esc))}
 .cifras.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .cifras .c-alerta{background:var(--mal-f)}.cifras .c-alerta b{color:var(--mal)}
-.segmento.filtro{margin:10px 0}
+.segmento.filtro{margin:10px 0;display:flex;flex-wrap:wrap} /* si «Resueltos» no cabe, baja a otra fila */
+.segmento.filtro button{flex:1 1 auto;padding:0 12px}
 .desliza{touch-action:pan-y;transition:transform .18s ease,opacity .18s ease;position:relative}
 /* Detrás de la fila que se desliza: qué va a pasar (Resolver, Reabrir o Borrar); al pasar el umbral se resalta. */
 .desliza-caja{position:relative;margin:10px 0;border-radius:14px}.desliza-caja>.bloque{margin:0}
@@ -359,7 +365,7 @@ ol.pasos{margin:4px 0 8px;padding-left:22px;font-size:calc(15px * var(--esc));li
 .campo select,.campo input,.campo textarea{display:block;width:100%;margin-top:4px;min-height:50px;padding:10px 12px;border:2px solid var(--linea);border-radius:12px;background:var(--sup);color:var(--texto);font-size:calc(17px * var(--esc));font-weight:600}
 .campo .ayuda{display:block;margin-top:4px;font-size:calc(13.5px * var(--esc));font-weight:600;color:var(--texto2)}
 .campo textarea{min-height:92px;resize:vertical;font-weight:500}
-.segmento{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px}
+.segmento{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:4px}
 .segmento button{min-height:50px;border:2px solid var(--linea);border-radius:12px;background:var(--sup);font-weight:800;color:var(--texto)}
 .segmento button.activo{background:var(--pri);color:var(--pri-t);border-color:var(--pri)}
 .fotos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
@@ -405,6 +411,7 @@ ol.pasos{margin:4px 0 8px;padding-left:22px;font-size:calc(15px * var(--esc));li
 .tabla.compacta{overflow-x:auto;background:linear-gradient(90deg,var(--sup) 30%,transparent) left/24px 100% no-repeat local,linear-gradient(270deg,var(--sup) 30%,transparent) right/24px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.22),transparent) left/10px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.22),transparent) right/10px 100% no-repeat scroll}
 .tabla.compacta th{position:static}.tabla.compacta td:first-child{white-space:nowrap}
 .tabla.compacta table{font-size:calc(14px * var(--esc-t))}.tabla.compacta th,.tabla.compacta td{padding:10px 5px}.tabla.compacta td:first-child,.tabla.compacta th:first-child{padding-left:10px}.tabla.compacta td:last-child,.tabla.compacta th:last-child{padding-right:10px}
+@media (max-width:419px){.tabla.compacta .col-plant,.tabla.compacta .col-n{display:none}} /* las dos tablas de renovación caben sin deslizar */
 .tabla tr[data-zona],.tabla tr[data-finca]{cursor:pointer}
 .tabla tr[data-zona] td,.tabla tr[data-finca] td{padding-top:14px;padding-bottom:14px} /* filas que se tocan: 48 px */
 .tabla tr[data-zona]:focus-visible,.tabla tr[data-finca]:focus-visible{outline:3px solid var(--acento);outline-offset:-3px}
@@ -422,19 +429,22 @@ ol.pasos{margin:4px 0 8px;padding-left:22px;font-size:calc(15px * var(--esc));li
 body[data-tab=bitacora]:has(#tabBitacora .barra-accion) #toasts,body[data-tab=visita]:has(#tabVisita .barra-accion) #toasts{bottom:calc(var(--nav) + var(--sab) + 84px)}
 body[data-tab=mapa] #toasts{right:80px;bottom:calc(var(--nav) + var(--sab) + 82px);align-items:stretch}
 body[data-tab=mapa].con-card #toasts{bottom:calc(var(--nav) + var(--sab) + var(--card-h,230px) + 78px)}
-body[data-tab=mapa].con-card.card-full #toasts{right:12px;bottom:calc(var(--nav) + var(--sab) + 12px);align-items:center}
-body[data-tab=mapa]:has(#medirBar:not([hidden])) #toasts{right:12px;bottom:calc(var(--nav) + var(--sab) + var(--medir-h,64px) + 26px);align-items:center}
+body[data-tab=mapa].con-card.card-full #toasts,body[data-tab=mapa].con-card.aviso-bajo #toasts{right:12px;bottom:calc(var(--nav) + var(--sab) + 12px);align-items:center}
+/* Midiendo: encima de la barra de medición, sin cambiar de ancho (no tapa la columna de botones de la derecha). */
+body[data-tab=mapa]:has(#medirBar:not([hidden])) #toasts{bottom:calc(var(--nav) + var(--sab) + var(--medir-h,64px) + 26px)}
 body:has(#hoja.abierta) #toasts{left:12px;right:12px;bottom:calc(var(--sab) + 12px);align-items:center}
 /* Sin tarjeta, la leyenda sube mientras se ve un aviso, para no quedar debajo. */
 body.con-aviso[data-tab=mapa]:not(.con-card) .leyenda{bottom:calc(84px + var(--aviso-h,0px) + 8px);max-height:min(40vh,100% - 248px - var(--aviso-h,0px))}
-.toast{pointer-events:auto;display:flex;align-items:center;gap:8px;width:100%;max-width:480px;min-height:52px;background:#16202a;color:#fff;border-radius:14px;padding:6px 6px 6px 16px;font-weight:600;font-size:calc(15px * var(--esc));line-height:1.3;box-shadow:0 6px 24px rgba(0,0,0,.32);touch-action:pan-y;user-select:none;-webkit-user-select:none;transition:transform .16s,opacity .16s}
+.toast{pointer-events:auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:100%;max-width:480px;min-height:52px;background:#16202a;color:#fff;border-radius:14px;padding:6px 6px 6px 16px;font-weight:600;font-size:calc(15px * var(--esc));line-height:1.3;box-shadow:0 6px 24px rgba(0,0,0,.32);touch-action:pan-y;user-select:none;-webkit-user-select:none;transition:transform .16s,opacity .16s}
 body[data-tab=mapa] .toast{max-width:none}
-.toast>span{flex:1 1 auto;min-width:0;padding:6px 0}
+/* Si el texto no cabe junto a los botones, los botones bajan a una segunda fila, a la derecha, y el texto usa todo el ancho. */
+.toast>span{flex:1 1 auto;min-width:0;padding:6px 0;max-height:30vh;overflow-y:auto;overflow-wrap:break-word}
+.toast>.t-btns{display:flex;gap:8px;flex:none;margin-left:auto;padding:0;max-height:none;overflow:visible}
 .toast{animation:aviso .22s cubic-bezier(.2,.8,.2,1)}
 @keyframes aviso{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
 .toast.bien{background:#0a6b31}.toast.mal{background:#a3140f}
 .toast button{border:0;background:#fff;color:#16202a;border-radius:10px;min-height:44px;padding:0 14px;font-weight:800;flex:none}
-.toast.dos-acc{flex-wrap:wrap;padding-bottom:8px}.toast.dos-acc>span{flex-basis:100%}.toast.dos-acc .t-acc{margin-left:auto}
+.toast.dos-acc{padding-bottom:8px}.toast.dos-acc>span:first-child{flex-basis:100%}
 .toast .t-acc2{background:transparent;color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.75)}
 .toast .t-x{background:transparent;color:#fff;width:44px;padding:0;display:grid;place-items:center;opacity:.85}
 .toast .t-x .ico{width:22px;height:22px}
@@ -454,7 +464,7 @@ body[data-tab=mapa] .toast{max-width:none}
 @media (min-width:900px){
   .card{left:16px;right:auto;bottom:16px;width:420px;border-radius:22px;border-bottom:1px solid var(--linea);max-height:calc(100% - 100px);overflow:auto}
   .card.full{top:auto}
-  body.con-card .fab{bottom:18px}body.con-card .fab.brujula{bottom:88px}body.con-card .fab.panorama{bottom:148px}body.con-card .fab.capas{left:452px}body.con-card.card-full .fab{display:grid}body.con-card .leyenda,body.con-card.card-full .leyenda{display:flex;left:452px;bottom:84px;max-width:min(calc(300px * var(--esc)),100% - 540px);max-height:min(40vh,100% - 240px)}
+  body.con-card .fab{bottom:18px}body.con-card .fab.brujula{bottom:88px}body.con-card .fab.panorama{bottom:148px}body.con-card .fab.capas{left:452px;bottom:18px}body.con-card.card-full .fab{display:grid}body.con-card .leyenda,body.con-card.card-full .leyenda{display:flex;left:452px;bottom:84px;max-width:min(calc(300px * var(--esc)),100% - 540px);max-height:min(40vh,100% - 240px)}
   .hoja{bottom:auto;top:50%;transform:translateY(-46%);opacity:0;border-radius:22px;transition:transform .2s,opacity .2s,visibility 0s .2s}
   .hoja.abierta{transform:translateY(-50%);opacity:1;transition:transform .2s,opacity .2s}
 }

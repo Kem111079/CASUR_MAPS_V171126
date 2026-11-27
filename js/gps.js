@@ -272,6 +272,9 @@ async function iniciarVisita() {
   const reinicio = listaNuevoDia();
   VISITA = {id: 'VIS-' + Date.now(), inicio: new Date().toISOString(), fin: null, pts: [], lotes: {}, dist: 0, tecnico: S.tecnico || ''};
   _visitaNueva = VISITA.id; _salto = null; _guardadoT = Date.now();
+  // Con el GPS ya encendido y una lectura reciente y precisa, esa lectura es el primer punto de la visita
+  // (quieto, algunos equipos no vuelven a enviar lecturas) y la cuenta de 30 s sin señal empieza ahora.
+  if (GPS.watch !== null) { GPS.inicioT = Date.now(); const f = GPS.fix; if (f && Date.now() - (f.reloj || 0) < 10000 && f.acc <= ACC_MAX) { GPS.utilT = Date.now(); visitaPunto(GPS.cands); } }
   kvSet('visita_activa', VISITA); iniciarGps(); pedirPantalla(); dibujarRuta(VISITA); renderVisita(); pintarProgreso(); confirmar('Visita iniciada');
   if (reinicio) toast(`Lista del día reiniciada: ${LISTA.length} lote${LISTA.length === 1 ? '' : 's'} por visitar.`);
 }
@@ -370,14 +373,29 @@ function chipVisitaToque() { if (gpsVisitaMal(estadoGpsVisita())) reactivarGpsVi
 /* ── Visita sin GPS ──
    'apagado': el GPS se detuvo o el permiso se negó · 'senal': 30 s sin lecturas útiles (±40 m) ·
    'buscando': recién (re)activado, aún sin lectura útil · '': graba bien.
-   Con 'apagado' o 'senal' el chip de la visita queda en rojo y un aviso fijo ofrece «Reactivar GPS». */
-let _sinGps = '', _avisoRojo = false;
+   Con 'apagado' o 'senal' el chip de la visita queda en rojo y un aviso fijo ofrece «Reactivar».
+   Antes de declarar 'senal' se pide una lectura (sondeo): un equipo quieto, sobre todo una tableta o un portátil con
+   ubicación por Wi-Fi, no envía lecturas si la posición no cambia. Si la lectura llega con ±40 m o mejor, no se avisa. */
+let _sinGps = '', _avisoRojo = false, _sondeo = null; // _sondeo: {ref: inicio del silencio sondeado, fallo}
 function estadoGpsVisita() {
   if (!VISITA) return '';
   if (GPS.watch === null) return 'apagado';
-  const util = GPS.utilT || 0;
-  if (Date.now() - Math.max(util, GPS.inicioT || 0) > 30000) return 'senal';
-  return util < (GPS.inicioT || 0) ? 'buscando' : '';
+  const util = GPS.utilT || 0, ref = Math.max(util, GPS.inicioT || 0), buscando = util < (GPS.inicioT || 0) ? 'buscando' : '';
+  if (Date.now() - ref > 30000) {
+    if (!_sondeo || _sondeo.ref !== ref) sondearGps(ref);
+    return _sondeo.fallo ? 'senal' : buscando;
+  }
+  return buscando;
+}
+function sondearGps(ref) {
+  const s = _sondeo = {ref, fallo: false}, falla = () => { if (_sondeo === s) { s.fallo = true; revisarGpsVisita(); } };
+  try {
+    navigator.geolocation.getCurrentPosition(pos => {
+      if (_sondeo !== s || GPS.watch === null) return;
+      alPosicion(pos); // lectura válida: se procesa como cualquier otra (punto de la visita incluido)
+      if (Math.round(pos.coords.accuracy || 0) > ACC_MAX) falla();
+    }, falla, {enableHighAccuracy: true, maximumAge: 0, timeout: 10000});
+  } catch (_) { falla(); }
 }
 const gpsVisitaMal = e => e === 'apagado' || e === 'senal';
 function revisarGpsVisita() {
@@ -386,7 +404,7 @@ function revisarGpsVisita() {
   if (gpsVisitaMal(e) !== gpsVisitaMal(antes) && document.body.dataset.tab === 'visita') renderVisita();
   if (gpsVisitaMal(e)) {
     _avisoRojo = true; vibrar(250);
-    toast(e === 'apagado' ? 'Visita en curso sin GPS: no se está grabando la ruta.' : 'Visita en curso sin señal GPS: no se está grabando la ruta.', {tipo: 'mal', fijo: true, clave: 'visitaGps', accion: 'Reactivar GPS', alAccion: reactivarGpsVisita});
+    toast(e === 'apagado' ? 'Visita sin GPS: no se graba la ruta.' : 'Visita sin señal GPS: no se graba la ruta.', {tipo: 'mal', fijo: true, clave: 'visitaGps', accion: 'Reactivar', alAccion: reactivarGpsVisita});
     return;
   }
   if (gpsVisitaMal(antes) || !VISITA) quitarAviso('visitaGps');

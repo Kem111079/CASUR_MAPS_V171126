@@ -88,29 +88,32 @@ const sevDe = cat => SEV_CAT[cat] || 'Media';
 const RAPIDOS = ['Maleza', 'Plaga', 'Riego', 'Sequía', 'Despoblación', 'Acceso', 'Cosecha', 'Seguimiento'];
 let rapSev = ''; // severidad elegida para el registro rápido ('' = la sugerida por la categoría); vuelve a la sugerida al salir de la Bitácora
 /* Registro rápido: un toque guarda categoría, lote, hora y posición. Nota y foto quedan para después.
-   Un segundo toque en menos de 1.5 s, o la misma categoría en el mismo lote en menos de 10 s, no duplica. */
+   Un segundo toque en el mismo botón en menos de 1.5 s, o la misma categoría en el mismo lote en menos de 10 s, no duplica.
+   Un botón distinto sí se registra: son dos problemas distintos. */
 const RAP_DOBLE_MS = 1500, RAP_IGUAL_MS = 10000;
 let _rapUlt = null; // {t, cod, cat, id} del último registro rápido
 function registroRapido(cat, opc = {}) {
   const ahoraMs = Date.now(), u = _rapUlt;
-  if (!opc.forzar && u && ahoraMs - u.t < RAP_DOBLE_MS) return; // doble toque
+  if (!opc.forzar && u && u.cat === cat && ahoraMs - u.t < RAP_DOBLE_MS) return; // doble toque en el mismo botón
   const d = loteDestino();
   if (!d) { elegirLote('¿En qué lote? · ' + cat, cod => { elegirDestino(cod); pintarDestino(); registroRapido(cat, opc); }); return; }
-  if (!opc.forzar && u && u.cod === d.cod && u.cat === cat && ahoraMs - u.t < RAP_IGUAL_MS) {
+  if (!opc.forzar && u && u.id && u.cod === d.cod && u.cat === cat && ahoraMs - u.t < RAP_IGUAL_MS) {
     toast(`${cat} ya se registró en el lote ${d.cod} hace ${Math.max(1, Math.round((ahoraMs - u.t) / 1000))} s: no se duplicó.`, {clave: 'rapido', accion: 'Registrar otro', ms: 6000, alAccion: () => registroRapido(cat, {...opc, forzar: true})});
     return;
   }
   const g = gpsParaRegistro(d.cod);
   if (!g.ok) {
+    if (g.activar && GPS.bloqueado) { iniciarGps(false); pintarDestino(); return; } // se abre «Activar la ubicación», que lo explica
     if (g.activar) { iniciarGps(false); toast('Activando el GPS. Cuando el indicador se ponga verde, toque de nuevo.', {clave: 'rapido', ms: 6000}); }
     else toast(g.txt, {tipo: g.nivel === 'mal' ? 'mal' : '', clave: 'rapido', ms: 6000});
     pintarDestino(); return;
   }
   const otro = conflictoDestino(d.cod);
-  if (otro && !(destinoManual && destinoManual.acepta === otro)) { elegirEntreLotes(cat, otro, d.cod, g.d, () => registroRapido(cat, opc)); return; }
+  // Antes de abrir una hoja se anota el toque: un segundo toque del mismo doble toque no repite nada.
+  if (otro && !(destinoManual && destinoManual.acepta === otro)) { _rapUlt = {t: ahoraMs, cod: d.cod, cat, id: ''}; elegirEntreLotes(cat, otro, d.cod, g.d, () => registroRapido(cat, {...opc, forzar: true})); return; }
   const sev = opc.sev || rapSev || sevDe(cat);
   if (destinoManual) destinoManual.t = ahoraMs;
-  if (sev === 'Alta') { abrirRegistro(d.cod, '', {cat, sev}); return; } // severidad alta exige foto: se completa en el formulario
+  if (sev === 'Alta') { _rapUlt = {t: ahoraMs, cod: d.cod, cat, id: ''}; abrirRegistro(d.cod, '', {cat, sev}); return; } // severidad alta exige foto: se completa en el formulario
   const l = LOTES[d.cod], pos = g.pos, arr = obsTodas(), ahora = new Date().toISOString();
   const o = {id: 'OBS-' + ahoraMs, fecha_hora: ahora, codlote: d.cod, hacienda_productor: l.hac, tablon: selFeat && selFeat._cod === d.cod ? selFeat.properties.Tablon || '' : '',
     categoria: cat, severidad: sev, nota: '', lat: pos.lat, lng: pos.lng, precision_m: pos.acc, pos_fuente: pos.fuente, usuario: S.tecnico || 'CASUR Maps', photo_id: '', photo_name: '', photo_id2: ''};
@@ -333,15 +336,25 @@ async function guardarRegistro(compartir) {
   if (compartir) compartirRegistro(id);
 }
 /* Borrar un registro borra también sus fotos, pero solo cuando vence el Deshacer (o al cerrar la app):
-   mientras tanto Deshacer lo devuelve completo, con sus fotos. */
+   mientras tanto Deshacer lo devuelve completo, con sus fotos.
+   Las fotos por borrar también se anotan en el teléfono: si la app se cierra o se recarga durante el Deshacer
+   (el borrado en IndexedDB no alcanza a terminar), se borran la próxima vez que abra. */
 const BORRAR_MS = 10000, _fotosPorBorrar = new Map(); // id del registro → ids de sus fotos
+const FOTOS_BORRAR_KEY = 'casur_maps_fotos_por_borrar_v1';
 const fotosDeObs = o => [o.photo_id, o.photo_id2].filter(Boolean);
+function anotarPorBorrar(id, fotos) { const m = leerLS(FOTOS_BORRAR_KEY, {}); if (fotos) m[id] = fotos; else delete m[id]; escribirLS(FOTOS_BORRAR_KEY, m); }
 async function borrarFotosSueltas(ids) {
   const usadas = new Set(obsTodas().flatMap(fotosDeObs)); // nunca se borra una foto que otro registro use
   for (const id of ids) if (!usadas.has(id)) await fotoDel(id).catch(() => {});
   if (selCod) pintarFotosLote(selCod);
 }
-window.addEventListener('pagehide', () => { _fotosPorBorrar.forEach(ids => borrarFotosSueltas(ids)); _fotosPorBorrar.clear(); });
+async function borrarFotosDe(id, fotos) { _fotosPorBorrar.delete(id); await borrarFotosSueltas(fotos); anotarPorBorrar(id, null); }
+/* Al abrir: termina los borrados que quedaron pendientes (salvo que el registro haya vuelto). */
+function borrarFotosPendientes() {
+  const m = leerLS(FOTOS_BORRAR_KEY, {}), vivos = new Set(obsTodas().map(o => o.id));
+  Object.entries(m).forEach(([id, fotos]) => { if (vivos.has(id) || !Array.isArray(fotos)) anotarPorBorrar(id, null); else borrarFotosDe(id, fotos); });
+}
+window.addEventListener('pagehide', () => { [..._fotosPorBorrar].forEach(([id, ids]) => borrarFotosDe(id, ids)); });
 function obsBorrar(id) {
   const arr = obsTodas(), i = arr.findIndex(x => x.id === id); if (i < 0) return;
   const [o] = arr.splice(i, 1); if (!obsGuardar(arr)) return;
@@ -349,18 +362,20 @@ function obsBorrar(id) {
   refrescarVistas();
   const fotos = fotosDeObs(o);
   if (fotos.length) {
-    _fotosPorBorrar.set(o.id, fotos);
-    setTimeout(() => { if (_fotosPorBorrar.has(o.id)) { _fotosPorBorrar.delete(o.id); borrarFotosSueltas(fotos); } }, BORRAR_MS + 500);
+    _fotosPorBorrar.set(o.id, fotos); anotarPorBorrar(o.id, fotos);
+    setTimeout(() => { if (_fotosPorBorrar.has(o.id)) borrarFotosDe(o.id, fotos); }, BORRAR_MS + 500);
   }
   toast(fotos.length ? `Registro y ${fotos.length === 1 ? 'su foto borrados' : 'sus 2 fotos borrados'}.` : 'Registro borrado.', {accion: 'Deshacer', ms: BORRAR_MS, alAccion: () => {
-    _fotosPorBorrar.delete(o.id);
+    _fotosPorBorrar.delete(o.id); anotarPorBorrar(o.id, null);
     const a = obsTodas(); if (!a.some(x => x.id === o.id)) { a.splice(Math.min(i, a.length), 0, o); if (!obsGuardar(a)) return; }
     refrescarVistas(); toast(fotos.length ? 'Registro restaurado con sus fotos.' : 'Registro restaurado.', {tipo: 'bien'});
   }});
 }
+/* Tras cargar el histórico solo se repinta lo que depende de él: en el Resumen, la renovación y los resultados de la
+   búsqueda (sin tocar el campo, lo escrito ni el foco). */
 function refrescarTrasHistorico() {
   if (selCod && !$('card').classList.contains('oculta')) renderCard();
-  if (document.body.dataset.tab === 'mas' && !$('hoja').classList.contains('abierta')) { const y = $('tabMas').scrollTop; renderMas(); $('tabMas').scrollTop = y; }
+  if (document.body.dataset.tab === 'mas') { const q = $('aforoQ'); pintarRenovBox(); if (q && q.value.trim()) buscarAforo(q.value); }
 }
 function refrescarVistas() { pintarInsignia(); pintarRegistros(); if (selCod) renderCard(); const t = document.body.dataset.tab; if (t === 'bitacora') renderBitacora(); if (t === 'visita') renderVisita(); }
 
@@ -390,8 +405,10 @@ async function imagenRegistro(o) {
   [['CATEGORÍA', o.categoria, '#0f172a'], ['SEVERIDAD', o.severidad, sev], ['TÉCNICO', (o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : 'No indicado').slice(0, 20), '#0f172a']].forEach((b, i) => {
     const x = 80 + i * 352; rr(ctx, x, 420, 336, 92, 18, '#f8fafc', '#e2e8f0'); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 20, 452); ctx.fillStyle = b[2]; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 20, 492);
   });
-  [['TCH ZAFRA ANTERIOR', l.tchAnt > 0 ? nfTch.format(l.tchAnt) + ' t/ha' : 'Sin dato'], ['TCH ESTIMADO 26/27', l.tchEst > 0 ? nfTch.format(l.tchEst) + ' t/ha' + (estValidar(l) ? ' *' : '') : l.cod && LOTES[l.cod] ? (m => m.txt === 'No aplica' ? 'No aplica' : m.txt)(motivoSinEstimado(l)) : 'Sin dato'], ['EDAD', edad === null ? 'Sin fecha de corte' : nfTch.format(edad) + ' meses']].forEach((b, i) => {
+  [['TCH ZAFRA ANTERIOR', l.tchAnt > 0 ? nfTch.format(l.tchAnt) + ' t/ha' : 'Sin dato'], ['TCH ESTIMADO 26/27', l.tchEst > 0 ? nfTch.format(l.tchEst) + ' t/ha' : l.cod && LOTES[l.cod] ? (m => m.txt === 'No aplica' ? 'No aplica' : m.txt)(motivoSinEstimado(l)) : 'Sin dato'], ['EDAD', edad === null ? 'Sin fecha de corte' : nfTch.format(edad) + ' meses']].forEach((b, i) => {
     const x = 80 + i * 352; rr(ctx, x, 528, 336, 92, 18, ['#fff6d8', '#e8f6ee', '#e9f0fb'][i], '#e2e8f0'); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 20, 560); ctx.fillStyle = '#0f172a'; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 20, 600);
+    // TCH estimado posiblemente provisional: se dice en palabras junto a la cifra (la imagen se comparte sola, sin texto).
+    if (i === 1 && l.tchEst > 0 && estValidar(l)) { const w = ctx.measureText(b[1]).width; ctx.fillStyle = '#b45309'; ctx.font = '800 22px Arial'; ctx.fillText('a validar', x + 32 + w, 600); }
   });
   let y = 640; rr(ctx, 80, y, W - 160, hNota - 16, 20, '#f8fafc', '#dbe5dd');
   ctx.fillStyle = '#0b7f3a'; ctx.font = '900 28px Arial'; ctx.fillText('Hallazgo', 104, y + 44);
@@ -449,7 +466,11 @@ function historialHtml(cod) {
 
 /* ── Fotos del lote por fecha y comparación entre dos fechas ── */
 let cmp = null;
-async function fotosDeLote(cod) { return (await fotoAll().catch(() => [])).filter(r => codKey(r.codlote) === cod && r.data_url).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))); }
+/* Solo fotos de registros que existen (igual que el ZIP): una foto suelta de un registro borrado no aparece. */
+async function fotosDeLote(cod) {
+  const usadas = new Set(obsTodas().flatMap(fotosDeObs));
+  return (await fotoAll().catch(() => [])).filter(r => usadas.has(r.id) && codKey(r.codlote) === cod && r.data_url).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+}
 async function pintarFotosLote(cod) {
   const fotos = await fotosDeLote(cod), box = $('fotosLote'); if (!box || selCod !== cod) return;
   if (!fotos.length) { box.innerHTML = ''; return; }
@@ -534,7 +555,7 @@ function mostrarTab(t) {
   if (t !== 'bitacora') rapSev = ''; // la severidad elegida para el registro rápido no se queda puesta al salir
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('activo', b.dataset.tab === t));
   if (t === 'visita') renderVisita(); else if (t === 'bitacora') renderBitacora(); else if (t === 'mas') renderMas(); else if (t === 'ajustes') renderAjustes(); else setTimeout(() => map && map.invalidateSize(), 50);
-  histPedir();
+  ubicarAvisos(); histPedir();
 }
 
 /* ── Botón Atrás (Android y navegador) ──
@@ -542,8 +563,10 @@ function mostrarTab(t) {
    hoja → pestaña distinta de Mapa → medición → tarjeta completa → tarjeta compacta → aviso «Toque Atrás otra vez para salir».
    En vez de apilar una entrada por cada apertura, se compara cuántas capas hay abiertas con cuántas entradas hay (history.state.casur)
    y se ajusta al final de la tarea: así las hojas encadenadas (cerrarHoja → abrirHoja) y las hojas sobre hojas no dejan entradas de más.
-   Solo se agregan entradas tras un toque del usuario: Chrome salta en el botón Atrás las que una página agrega sola. */
-let _histListo = false, _histN = 0, _histMeta = null, _histT = 0, _histSeguro = 0, _guardia = true, _salirT = 0;
+   Solo se agregan entradas tras un toque del usuario: Chrome salta en el botón Atrás las que una página agrega sola.
+   Sin un toque reciente (por ejemplo, Atrás cerró un diálogo que no ocupaba entrada) se vuelve hacia adelante a las
+   entradas propias que siguen en el historial (_histTope): Atrás no las borra mientras no se agregue otra. */
+let _histTope = 0, _histListo = false, _histN = 0, _histMeta = null, _histT = 0, _histSeguro = 0, _guardia = true, _salirT = 0;
 const histEstado = () => { const e = history.state; return e && Number.isInteger(e.casur) ? e.casur : 0; };
 function capasAbiertas() {
   let n = 0;
@@ -564,8 +587,13 @@ function histAjustar() {
     return;
   }
   if (quiere > _histN) {
-    const ua = navigator.userActivation; if (ua && !ua.isActive) return; // se completa en el próximo toque
+    const ua = navigator.userActivation;
+    if (ua && !ua.isActive) {
+      const a = Math.min(quiere, _histTope); if (a > _histN) { _histMeta = a; history.go(a - _histN); clearTimeout(_histSeguro); _histSeguro = setTimeout(() => { if (_histMeta !== null) { _histMeta = null; _histN = histEstado(); } }, 1500); }
+      return; // lo que falte se completa en el próximo toque
+    }
     while (_histN < quiere) { _histN++; history.pushState({casur: _histN}, ''); }
+    _histTope = _histN;
   }
 }
 function alPopstate() {
@@ -580,13 +608,13 @@ function atrasUnaCapa() {
   if (cerrarPregunta(false)) return;
   if (document.body.dataset.tab !== 'mapa') { mostrarTab('mapa'); return; }
   if (medir.modo) { medirCerrar(); return; }
-  if (selCod && !$('card').classList.contains('oculta')) { if (cardFull) { cardFull = false; renderCard(); } else cerrarCard(); return; }
+  if (selCod && !$('card').classList.contains('oculta')) { if (cardFull) { cardFull = false; renderCard(); } else cerrarCard(true); return; }
   // Mapa limpio: se avisa; si vuelve a tocar Atrás en 2 s, el navegador sale (ya no queda guardia).
   _guardia = false; toast('Toque Atrás otra vez para salir.', {ms: 2000});
-  clearTimeout(_salirT); _salirT = setTimeout(() => { const ua = navigator.userActivation; if (!ua || ua.isActive) { _guardia = true; histPedir(); } }, 2000);
+  clearTimeout(_salirT); _salirT = setTimeout(() => { _guardia = true; histPedir(); }, 2000); // vuelve la guardia (hacia adelante, sin necesitar un toque)
 }
 function iniciarHistorial() {
-  _histListo = true; _histN = histEstado(); // tras recargar, el historial puede conservar entradas de la sesión anterior: se retroceden
+  _histListo = true; _histN = histEstado(); _histTope = _histN; // tras recargar, el historial puede conservar entradas de la sesión anterior: se retroceden
   window.addEventListener('popstate', alPopstate);
   const toque = () => { if (!_guardia) { _guardia = true; clearTimeout(_salirT); } histPedir(); };
   document.addEventListener('pointerup', toque, true); document.addEventListener('keydown', toque, true);
@@ -670,7 +698,9 @@ function destinoHtml() {
   const e = estadoDestino(), d = e.d, man = !!destinoManual, ok = !!(e.g && e.g.ok);
   const resta = man ? Math.max(1, Math.ceil((DESTINO_MAX_MS - (Date.now() - destinoManual.t)) / 60000)) : 0;
   const titulo = d ? `${ok && !e.otro ? 'Se guardará en' : 'Destino:'} <b>lote ${esc(d.cod)}</b> · ${esc(LOTES[d.cod].hac)} <small>(${man ? `elegido a mano · vence en ${resta} min` : esc(d.por)})</small>` : '<b>Sin lote</b>';
-  const ayuda = ok ? (e.otro ? `Toque un botón y la app le preguntará en cuál de los dos lotes guardar.` : man ? 'El lote elegido a mano se libera solo a los 15 min o al entrar a otro lote.' : `Todo hallazgo se guarda con la posición GPS de este momento.`)
+  const acepta = !!(e.otro && destinoManual && destinoManual.acepta === e.otro);
+  const ayuda = ok ? (acepta ? `Usted eligió guardar en el lote ${esc(d.cod)} aunque el GPS lo ubica en el ${esc(e.otro)}. Toque ✕ para volver al lote del GPS.`
+    : e.otro ? `Toque un botón y la app le preguntará en cuál de los dos lotes guardar.` : man ? 'El lote elegido a mano se libera solo a los 15 min o al entrar a otro lote.' : `Todo hallazgo se guarda con la posición GPS de este momento.`)
     : e.nivel === 'mal' ? `Para registrar hay que estar en el lote (dentro o a menos de ${REG_DIST_MAX} m) con GPS de ±${REG_ACC_MAX} m o mejor.` : `Los botones funcionan en cuanto el indicador se ponga verde.`;
   return `<div class="destino ${NIVEL_CLS[e.nivel]}" data-nivel="${e.nivel}"><span><span class="dest-lote">${titulo}</span><span class="dest-gps"><i class="semaforo"></i>${esc(e.txt)}</span></span>
     <span class="dest-acc">${e.activar && !GPS.bloqueado ? `<button type="button" onclick="iniciarGps(false);pintarDestino()">${ico('pin')} Activar GPS</button>` : ''}<button type="button" onclick="elegirLote('Elegir lote', c => { elegirDestino(c); pintarDestino(); })">${d ? 'Cambiar' : 'Elegir lote'}</button>${man ? `<button type="button" onclick="soltarDestino()" aria-label="Quitar el lote elegido y volver al del GPS">${ico('x')}</button>` : ''}</span></div>
@@ -844,7 +874,8 @@ async function reporteVisita(v) {
 }
 
 /* ── Pestaña Más: resumen de aforo, ajustes, datos e instalación ── */
-let aforoGrupo = 'hacienda', instalarEvt = null;
+let aforoGrupo = 'hacienda', aforoTodas = false, instalarEvt = null;
+const AFORO_TOP = 10; // filas del resumen a la vista (las de más toneladas); el resto con «Ver las N»
 const AFORO_GRUPOS = [['hacienda', 'Finca'], ['zona', 'Zona'], ['finca', 'Finca y tenencia']];
 function renderMas() {
   const g = (RESUMEN.resumen || {}).global || {}, filas = ((RESUMEN.resumen || {})[aforoGrupo] || []);
@@ -856,23 +887,32 @@ function renderMas() {
     <label class="campo">Buscar finca o lote<input id="aforoQ" type="search" placeholder="Nombre de la finca o código del lote" autocomplete="off" autocapitalize="characters" enterkeyhint="search"></label>
     <div id="aforoRes" class="lista-lotes"></div>
     <label class="campo">Agrupar por${sel('aforoGrupo', AFORO_GRUPOS, aforoGrupo)}</label>
-    <div class="tabla"><table><thead><tr><th>${(AFORO_GRUPOS.find(o => o[0] === aforoGrupo) || AFORO_GRUPOS[0])[1]}</th><th title="Área de molienda (ha)">Área (ha)</th><th title="Toneladas estimadas 26/27">Ton.</th><th title="TCH estimado 26/27 (t/ha)">TCH est.</th><th title="TCH optimista (t/ha)">TCH opt.</th></tr></thead><tbody id="aforoFilas">${filasAforo(filas)}</tbody></table></div>
-    <p class="pie">Área de molienda en ha. TCH est. = TCH estimado 26/27 · TCH opt. = TCH optimista (t/ha, ponderados por área).</p>
-    ${renovacionHtml()}`;
-  $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; renderMas(); });
-  $('tabMas').querySelectorAll('.renov-filas').forEach(tb => tb.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); }));
+    <div class="tabla"><table><thead><tr><th>${(AFORO_GRUPOS.find(o => o[0] === aforoGrupo) || AFORO_GRUPOS[0])[1]}</th><th title="Área de molienda (ha)">Área (ha)</th><th title="Toneladas estimadas 26/27">Ton.</th><th title="TCH estimado 26/27 (t/ha)">TCH est.</th><th title="TCH optimista (t/ha)">TCH opt.</th></tr></thead><tbody id="aforoFilas">${filasAforo(aforoTodas ? filas : filas.slice(0, AFORO_TOP))}</tbody></table></div>
+    ${filas.length > AFORO_TOP ? `<button type="button" class="btn ter ancho" id="aforoMas" aria-expanded="${aforoTodas}">${aforoTodas ? `${ico('chevUp')} Ver solo las ${AFORO_TOP} primeras` : `${ico('chevDown')} Ver las ${nf0.format(filas.length)} ${aforoGrupo === 'hacienda' ? 'fincas' : 'filas'}`}</button>` : ''}
+    <p class="pie">${filas.length > AFORO_TOP && !aforoTodas ? `Las ${AFORO_TOP} de más toneladas. ` : ''}Área de molienda en ha. TCH est. = TCH estimado 26/27 · TCH opt. = TCH optimista (t/ha, ponderados por área).</p>
+    <div id="renovBox"></div>`;
+  pintarRenovBox();
+  const mas = $('aforoMas');
+  if (mas) mas.addEventListener('click', () => { aforoTodas = !aforoTodas; const y = $('tabMas').scrollTop; renderMas(); $('tabMas').scrollTop = y; if (!aforoTodas) $('aforoMas').scrollIntoView({block: 'nearest'}); });
+  $('aforoGrupo').addEventListener('change', e => { aforoGrupo = e.target.value; aforoTodas = false; renderMas(); });
   $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
   $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
   $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
-  // Filas que se tocan: también con teclado (Enter o espacio), como un botón.
-  $('tabMas').addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[role=button]'); if (!tr || (e.key !== 'Enter' && e.key !== ' ')) return; e.preventDefault(); tr.click(); });
+  // Filas que se tocan: también con teclado (Enter o espacio), como un botón. Se enlaza una sola vez (la pestaña se repinta).
+  if (!$('tabMas').dataset.teclado) { $('tabMas').dataset.teclado = '1'; $('tabMas').addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[role=button]'); if (!tr || (e.key !== 'Enter' && e.key !== ' ')) return; e.preventDefault(); tr.click(); }); }
+}
+/* Renovación del Resumen en su propio contenedor: se repinta sola cuando llega el histórico. */
+function pintarRenovBox() {
+  const box = $('renovBox'); if (!box) return;
+  box.innerHTML = renovacionHtml();
+  box.querySelectorAll('.renov-filas').forEach(tb => tb.addEventListener('click', e => { const f = e.target.closest('tr[data-zona]'); if (f) abrirRenovZona(f.dataset.zona); }));
 }
 /* ── Pestaña Ajustes: preferencias del teléfono, datos y actualización ── */
 function renderAjustes() {
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
   // Opciones cortas para que quepan con cualquier tamaño de letra; la explicación de la elegida va debajo.
   const AYUDAS = {
-    ajGps: [['vehiculo', 'En vehículo (recomendado)', 'Para recorrer las fincas en vehículo.'], ['campo', 'Caminando', 'Para recorrer el lote a pie.'], ['preciso', 'Punto fijo', 'Máxima precisión, sin moverse del punto.']],
+    ajGps: [['vehiculo', 'En vehículo', 'Recomendado. Para recorrer las fincas en vehículo.'], ['campo', 'Caminando', 'Para recorrer el lote a pie.'], ['preciso', 'Punto fijo', 'Máxima precisión, sin moverse del punto.']],
     ajTema: [['campo', 'Campo', 'Alto contraste, para leer a pleno sol.'], ['auto', 'Automático', 'Oscuro de 7 p. m. a 5:30 a. m.; Campo el resto del día.'], ['claro', 'Claro suave', 'Fondo claro con menos contraste.'], ['oscuro', 'Oscuro', 'Para la madrugada.']],
     ajGiro: [['suave', 'Suave (recomendado)', 'Gira poco, solo al avanzar.'], ['normal', 'Normal', 'Sigue cada cambio de rumbo.'], ['sin', 'Sin giro', 'El norte siempre arriba.']]
   };
@@ -919,19 +959,20 @@ function avisoValidar(v, enZona = false) {
 function renovacionHtml() {
   const r = resumenRenovacion(); if (!r.n) return '';
   const d = v => v === null ? '—' : signo(v), t = v => v === null ? '—' : nfTch.format(v);
-  // Dos tablas que caben en la pantalla, sin deslizar hacia los lados: qué se espera ganar y qué dice el histórico.
+  // Dos tablas: qué se espera ganar y qué dice el histórico. Para que quepan sin deslizar de lado en teléfonos de
+  // hasta 419 px, ahí se ocultan «Plantillas» (está en la hoja de cada zona) y «Lotes» (col-plant y col-n, ver styles.css).
   return `<h3>Renovación propuesta</h3>
     <div class="cifras c4">${cifra('Lotes', nf0.format(r.n))}${cifra('Hectáreas', nfHa.format(r.area))}${cifra('TCH estimado 26/27', nfTch.format(r.est))}${cifra('Ganancia esperada', conUnidad(signo(r.dEsp), ' t/ha'), 'c-est')}</div>
     ${avisoValidar(r.validar)}
     <h4>Qué se espera al renovar</h4>
-    <div class="tabla compacta"><table><thead><tr><th>Zona</th><th>ha</th><th title="TCH estimado 26/27 (t/ha)">TCH est.</th><th title="TCH estimado de las plantillas de la zona (t/ha)">Plantillas</th><th title="Ganancia en t/ha">Δ t/ha</th><th title="Ganancia en toneladas">Δ ton.</th></tr></thead>
-      <tbody class="renov-filas">${r.filas.map(f => { const nv = f.lotes.filter(estValidar).length; return `<tr data-zona="${esc(f.zona)}" tabindex="0" role="button"><td>${esc(f.zona)}${nv ? ` <small class="marca-validar" title="${nv} lote(s) con TCH estimado a validar">${nv} a validar</small>` : ''}</td><td>${nfHa.format(f.area)}</td><td>${nfTch.format(f.est)}</td><td>${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nfT)}</td></tr>`; }).join('')}
-      <tr class="total"><td>Total</td><td>${nfHa.format(r.area)}</td><td>${nfTch.format(r.est)}</td><td></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nfT)}</td></tr></tbody></table></div>
-    <p class="pie">TCH est. = TCH estimado 26/27 del lote. Plantillas = TCH estimado de las plantillas de la misma zona. Δ = ganancia: plantillas menos el estimado (— = la zona no tiene plantillas de referencia).</p>
+    <div class="tabla compacta"><table><thead><tr><th>Zona</th><th>ha</th><th title="TCH estimado 26/27 (t/ha)">TCH est.</th><th class="col-plant" title="TCH estimado de las plantillas de la zona (t/ha)">Plantillas</th><th title="Ganancia en t/ha">Δ t/ha</th><th title="Ganancia en toneladas">Δ ton.</th></tr></thead>
+      <tbody class="renov-filas">${r.filas.map(f => { const nv = f.lotes.filter(estValidar).length; return `<tr data-zona="${esc(f.zona)}" tabindex="0" role="button"><td>${esc(f.zona)}${nv ? ` <small class="marca-validar" title="${nv} lote(s) con TCH estimado a validar">${nv} a validar</small>` : ''}</td><td>${nfHa.format(f.area)}</td><td>${nfTch.format(f.est)}</td><td class="col-plant">${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nfT)}</td></tr>`; }).join('')}
+      <tr class="total"><td>Total</td><td>${nfHa.format(r.area)}</td><td>${nfTch.format(r.est)}</td><td class="col-plant"></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nfT)}</td></tr></tbody></table></div>
+    <p class="pie">TCH est. = TCH estimado 26/27 del lote. Plantillas = TCH estimado de las plantillas de la misma zona (si la columna no se ve, toque la zona). Δ = ganancia: plantillas menos el estimado (— = la zona no tiene plantillas de referencia).</p>
     <h4>Histórico de esos lotes (máximo alcanzado)</h4>
-    <div class="tabla compacta"><table><thead><tr><th>Zona</th><th>Lotes</th><th title="Promedio histórico (t/ha)">Prom.</th><th title="Máximo histórico (t/ha)">Máximo</th><th title="Ganancia en t/ha">Δ t/ha</th><th title="Ganancia en toneladas">Δ ton.</th></tr></thead>
-      <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}" tabindex="0" role="button"><td>${esc(f.zona)}</td><td>${f.n}</td><td>${t(f.prom)}</td><td>${t(f.max)}</td><td><b>${d(f.dTecho)}</b></td><td>${f.max === null ? '—' : signo(f.tonTecho, nfT)}</td></tr>`).join('')}
-      <tr class="total"><td>Total</td><td>${r.n}</td><td></td><td></td><td><b>${signo(r.dTecho)}</b></td><td>${signo(r.tonTecho, nfT)}</td></tr></tbody></table></div>
+    <div class="tabla compacta"><table><thead><tr><th>Zona</th><th class="col-n">Lotes</th><th title="Promedio histórico (t/ha)">Prom.</th><th title="Máximo histórico (t/ha)">Máximo</th><th title="Ganancia en t/ha">Δ t/ha</th><th title="Ganancia en toneladas">Δ ton.</th></tr></thead>
+      <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}" tabindex="0" role="button"><td>${esc(f.zona)}</td><td class="col-n">${f.n}</td><td>${t(f.prom)}</td><td>${t(f.max)}</td><td><b>${d(f.dTecho)}</b></td><td>${f.max === null ? '—' : signo(f.tonTecho, nfT)}</td></tr>`).join('')}
+      <tr class="total"><td>Total</td><td class="col-n">${r.n}</td><td></td><td></td><td><b>${signo(r.dTecho)}</b></td><td>${signo(r.tonTecho, nfT)}</td></tr></tbody></table></div>
     <p class="pie">Prom. y Máximo = TCH histórico de cada lote (todas sus zafras). Δ = máximo histórico menos el TCH estimado 26/27. Todo en t/ha, ponderado por área. Toque una zona para ver sus lotes.</p>
     <button type="button" class="btn sec ancho" onclick="verRenovacionMapa()">${ico('map')} Ver lotes a renovar en el mapa</button>`;
 }
@@ -939,8 +980,11 @@ function renovacionHtml() {
 const grCorteTxt = g => !g ? 'sin grupo de corte' : g === 'Planta' ? 'plantilla' : g === 'Mayor a 5' ? 'soca, más de 5 cortes' : 'soca, ' + g.toLowerCase();
 /* Fila de un lote a renovar (hoja de zona y lista de lotes a validar). */
 function filaRenovHtml(l) {
-  const de = deltaEsperado(l), val = estValidar(l);
-  return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtHaLote(l.areaAforo)} · ${esc(grCorteTxt(l.grCorte))}<br>TCH estimado ${fmtTch(l.tchEst)}${val ? ' <em class="marca-validar">a validar</em>' : ''} · promedio ${fmtTch(l.histProm)} · máximo ${fmtTch(l.histMax)}</span><i class="chip ${de > 0 ? 'est-bien' : 'est-neutro'}">${de === null ? 'sin referencia' : signo(de) + ' t/ha'}</i></button>${llegarHtml(l.cod)}</div>`;
+  const de = deltaEsperado(l), val = estValidar(l), m = motivoSinEstimado(l);
+  // Sin guiones sueltos: cuando falta una cifra se dice por qué.
+  const est = l.tchEst > 0 ? `TCH estimado ${nfTch.format(l.tchEst)}` : m.txt === 'No aplica' ? `TCH estimado: no aplica (${esc(m.det)})` : m.txt === 'Sin aforo' ? 'sin aforo 26/27' : 'sin TCH estimado en el aforo';
+  const hist = l.histProm !== null ? `promedio ${nfTch.format(l.histProm)}${l.histMax !== null ? ' · máximo ' + nfTch.format(l.histMax) : ''}` : 'sin histórico de TCH';
+  return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtHaLote(l.areaAforo)} · ${esc(grCorteTxt(l.grCorte))}<br>${est}${val ? ' <em class="marca-validar">a validar</em>' : ''} · ${hist}</span><i class="chip ${de > 0 ? 'est-bien' : 'est-neutro'}">${de === null ? 'sin referencia' : signo(de) + ' t/ha'}</i></button>${llegarHtml(l.cod)}</div>`;
 }
 function verLotesValidar() {
   const v = resumenRenovacion().validar; if (!v.n) return;
@@ -973,7 +1017,8 @@ function filasAforo(filas) {
 /* Búsqueda dentro del resumen: fincas/productores con sus totales y lotes con su aforo. También filtra la tabla. */
 function buscarAforo(q) {
   const t = sinTildes(q).trim(), res = $('aforoRes'), todas = (RESUMEN.resumen || {})[aforoGrupo] || [];
-  $('aforoFilas').innerHTML = filasAforo(t ? todas.filter(x => sinTildes(x.key).includes(t)) : todas);
+  $('aforoFilas').innerHTML = filasAforo(t ? todas.filter(x => sinTildes(x.key).includes(t)) : aforoTodas ? todas : todas.slice(0, AFORO_TOP));
+  const mas = $('aforoMas'); if (mas) mas.hidden = !!t; // buscando, la tabla muestra todas las coincidencias
   if (!t) { res.innerHTML = ''; return; }
   const fincas = ((RESUMEN.resumen || {}).hacienda || []).filter(x => sinTildes(x.key).includes(t)).slice(0, 6);
   const lotes = Object.values(LOTES).filter(l => l.cod.startsWith(t)).sort((a, b) => a.cod.length - b.cod.length || a.cod.localeCompare(b.cod, 'es', {numeric: true})).slice(0, 8);
@@ -1027,7 +1072,8 @@ async function iniciar() {
     construirLotes(d.geo, d.metricas, d.cortes, d.renov); construirIndice();
     initMap(); bindBusqueda();
     $('btnGps').addEventListener('click', gpsBoton); $('btnBrujula').addEventListener('click', alternarOrientacion); aplicarGiroCss(); pintarBrujula(); $('btnCapas').addEventListener('click', abrirCapas); $('chipGps').addEventListener('click', abrirGps);
-    $('hojaX').addEventListener('click', () => pedirCerrarHoja()); $('hojaFondo').addEventListener('click', () => pedirCerrarHoja());
+    $('hojaX').addEventListener('click', () => pedirCerrarHoja()); $('hojaFondo').addEventListener('click', e => { if (!hojaRecien(e)) pedirCerrarHoja(); });
+    $('hojaBody').addEventListener('click', e => { if (hojaRecien(e)) { e.stopPropagation(); e.preventDefault(); } }, true); // segundo toque de un doble toque
     $('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) mostrarTab(b.dataset.tab); });
     $('medirDeshacer').addEventListener('click', medirDeshacer); $('medirFin').addEventListener('click', medirCerrar);
     document.addEventListener('keydown', e => { // Escape (tableta o escritorio): diálogo, sugerencias, hoja y luego la tarjeta
@@ -1035,7 +1081,7 @@ async function iniciar() {
       if (cerrarPregunta(false)) return;
       if ($('sugerencias').classList.contains('abierta')) { cerrarSugerencias(); return; }
       if ($('hoja').classList.contains('abierta')) { pedirCerrarHoja(); return; }
-      if (document.body.dataset.tab === 'mapa' && selCod && !$('card').classList.contains('oculta')) { if (cardFull) { cardFull = false; renderCard(); } else cerrarCard(); }
+      if (document.body.dataset.tab === 'mapa' && selCod && !$('card').classList.contains('oculta')) { if (cardFull) { cardFull = false; renderCard(); } else cerrarCard(true); }
     });
     pintarGpsBtn(); pintarLista(); actualizarRed(); pintarInsignia(); pintarRegistros();
     $('btnPanorama').addEventListener('click', alternarPanorama);
@@ -1057,6 +1103,7 @@ async function iniciar() {
     // Histórico: desde la copia local (o la red la primera vez) completa los lotes a los que les falta el TCH de la
     // zafra anterior o el promedio histórico, y vuelve a pintar lo que esté a la vista con los estados ya corregidos.
     setTimeout(() => cargarHistorico().then(refrescarTrasHistorico).catch(() => {}), 1500);
+    setTimeout(borrarFotosPendientes, 2500); // fotos de registros borrados justo antes de cerrar la app
   } catch (e) {
     console.error(e);
     setLoader('No se pudieron abrir los datos: ' + (e.message || e) + '. Conéctese una vez a internet y vuelva a abrir.');
