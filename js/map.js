@@ -242,7 +242,16 @@ function estiloSel(f) {
   const e = estiloFeat(f);
   return {color: '#ffd400', weight: 5, opacity: 1, fillColor: e.fillColor, fillOpacity: e.fillOpacity};
 }
+/* Cambio rápido de capa desde la leyenda: nombres cortos, orden por uso y la capa anterior primero (botón A/B). */
+const CAPA_CORTA = {tchEst: 'TCH 26/27', semana: 'Semana de corte', renovacion: 'Renovación', socas: 'Plantillas y socas', zona: 'Zona', riego: 'Riego', variedad: 'Variedad', destino: 'Destino', edad: 'Edad', ninguno: 'Sin color'};
+let capaAnterior = '';
+function cambiarCapaRapida(k) {
+  if (!TEMAS[k] || k === S.colorear) return;
+  const prev = S.colorear, prevF = temaFiltro; setColorear(k);
+  avisoCambio('Capa: ' + TEMAS[k].t, () => { setColorear(prev); if (prevF !== null && temaLeyenda.some(x => x.txt === prevF)) filtrarClase(prevF); });
+}
 function setColorear(modo) {
+  if (modo !== S.colorear && S.colorear !== 'ninguno' && TEMAS[S.colorear]) capaAnterior = S.colorear;
   S.colorear = modo; temaFiltro = null; guardarAjustes(); prepararTema(); restilar();
   leyPlegada = false; pintarLeyenda(); leyArmar(); actualizarEtiquetas();
 }
@@ -281,6 +290,11 @@ const pctTxt = p => p > 0 && p < 1 ? '< 1 %' : nf0.format(p) + ' %';
 const lotesTxt = n => n === 1 ? '1 lote' : nf0.format(n) + ' lotes';
 /* Detalle de una fila: número y unidad nunca se separan («132 lotes · 1,119 ha»); si no cabe, baja de línea en el « · ». */
 const leyDetalle = x => (x.n ? nbsp(lotesTxt(x.n)) + ' · ' : '') + nbsp(nf0.format(x.ha) + ' ha');
+function capasRapidas() {
+  const orden = Object.keys(CAPA_CORTA).filter(k => TEMAS[k] && k !== S.colorear && k !== capaAnterior);
+  const ant = capaAnterior && capaAnterior !== S.colorear && TEMAS[capaAnterior] ? [capaAnterior] : [];
+  return [...ant, ...orden].map(k => `<button type="button" data-capa="${k}" class="${k === capaAnterior ? 'ant' : ''}">${k === capaAnterior ? ico('swap') : ''}${esc(CAPA_CORTA[k])}</button>`).join('');
+}
 function pintarLeyenda() {
   const el = $('leyenda'); if (!el) return;
   if (!leyVisible()) { el.classList.add('oculta'); clearTimeout(_leyT); _leyT = null; return; }
@@ -297,13 +311,15 @@ function pintarLeyenda() {
     : leyPlegada ? `${franja}<b>${esc(T.t)}</b>` : `<b>${esc(T.t)}</b>${T.u ? ` <small>${esc(T.u)}</small>` : ''}`;
   el.innerHTML = `<button type="button" class="ley-cab" aria-expanded="${!leyPlegada}" aria-controls="leyCuerpo" aria-label="${esc(T.t)}: ${leyPlegada ? 'mostrar' : 'ocultar'} leyenda${filtro ? ' (filtro: ' + esc(rotulo(filtro.txt)) + ')' : ''}">${cab}<i>${ico('chevDown')}</i></button>` +
     (leyPlegada && filtro ? `<button type="button" class="ley-quitar" aria-label="Quitar filtro y ver todos los lotes">${ico('x')}</button>` : '') +
-    `<div class="ley-cuerpo" id="leyCuerpo">` +
+    (leyPlegada && !filtro && capaAnterior && capaAnterior !== S.colorear ? `<button type="button" class="ley-ab" data-capa="${capaAnterior}" aria-label="Cambiar a ${esc(TEMAS[capaAnterior].t)}" title="Cambiar a ${esc(TEMAS[capaAnterior].t)}">${ico('swap')}</button>` : '') +
+    `<div class="ley-cuerpo" id="leyCuerpo">` + `<div class="ley-capas" role="toolbar" aria-label="Cambiar de capa">${capasRapidas()}</div>` +
     temaLeyenda.map(x => { const p = x.ha / total * 100, on = temaFiltro === x.txt; return `<button type="button" class="${on ? 'activo' : temaFiltro !== null ? 'apagado' : ''}${x.color ? '' : ' neutro'}" data-clase="${esc(x.txt)}" aria-pressed="${on}" style="--p:${Math.min(100, p).toFixed(1)}%${x.color ? ';--c:' + x.color : ''}">${muestra(x.color)}<span class="ley-txt"><b>${esc(rotulo(x.txt))}</b><small>${leyDetalle(x)}<span class="ley-pct"> · ${nbsp(pctTxt(p))}</span></small>${claseSel === x.txt ? '<small class="ley-este"><strong>este lote</strong></small>' : ''}</span><em>${pctTxt(p)}</em></button>`; }).join('') +
     (filtro ? `<div class="ley-acc"><button type="button" data-acc="enc">${ico('zoomIn')} Encuadrar</button><button type="button" data-acc="lista">${ico('file')} Ver lista</button></div>` : '') +
     `<small class="ley-pista">${temaFiltro !== null ? 'Toque de nuevo la clase para ver todo' : 'Toque una clase para resaltarla'}</small></div>`;
   el.querySelector('.ley-cab').onclick = leyAlternar;
   const q = el.querySelector('.ley-quitar'); if (q) q.onclick = () => filtrarClase(null);
-  el.querySelector('.ley-cuerpo').onclick = e => { const a = e.target.closest('button[data-acc]'); if (a) { if (a.dataset.acc === 'enc') encuadrarFiltro(); else verListaFiltro(); return; } const b = e.target.closest('button[data-clase]'); if (!b) return; filtrarClase(temaFiltro === b.dataset.clase ? null : b.dataset.clase); };
+  const ab = el.querySelector('.ley-ab'); if (ab) ab.onclick = () => cambiarCapaRapida(ab.dataset.capa);
+  el.querySelector('.ley-cuerpo').onclick = e => { const k = e.target.closest('button[data-capa]'); if (k) { cambiarCapaRapida(k.dataset.capa); return; } const a = e.target.closest('button[data-acc]'); if (a) { if (a.dataset.acc === 'enc') encuadrarFiltro(); else verListaFiltro(); return; } const b = e.target.closest('button[data-clase]'); if (!b) return; filtrarClase(temaFiltro === b.dataset.clase ? null : b.dataset.clase); };
   leyAncho();
   if (!estabaOculta && antes !== leyPlegada && el.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches)
     el.animate([{opacity: .3, transform: 'scale(.96)'}, {opacity: 1, transform: 'none'}], {duration: 250, easing: 'cubic-bezier(.2,.8,.2,1)'});
@@ -353,6 +369,18 @@ function etqLote(l) {
 }
 /* Etiqueta de cosecha de la tarjeta: fecha programada, días que faltan y semana; alerta si la fecha ya pasó. */
 /* Cosecha del lote para la tarjeta: texto de una línea y, si la fecha ya pasó, una alerta aparte. */
+/* Franja ejecutiva de la tarjeta: semáforo con su motivo principal y tres datos (toneladas, cambio frente a 25/26, corte). */
+function franjaLote(l, sem) {
+  const est = esMolienda(l) && l.tchEst > 0 ? l.tchEst : null, ton = est !== null ? (l.tonEst || est * (l.areaAforo || 0)) : null, prev = l.tchPrev > 0 ? l.tchPrev : null;
+  const dato = (b, s, cls = '') => `<span class="fr-dato"><b class="${cls}">${b}</b><small>${s}</small></span>`;
+  const datos = [];
+  if (ton) datos.push(dato(nbsp(nfT.format(ton) + ' t'), 'estimadas 26/27'));
+  if (est !== null && prev !== null) { const d = est - prev; datos.push(dato(nbsp(signo(d) + ' t/ha'), nbsp('vs 25/26 (' + nfTch.format(prev) + ')'), d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : '')); }
+  if (l.cosechado) datos.push(dato('Cosechado', nbsp(fechaCorta(l.fCorte))));
+  else if (l.fProg) { const d = diasPara(l.fProg); datos.push(dato(d < 0 ? 'Vencido' : d === 0 ? 'Hoy' : nbsp(d + ' días'), nbsp('corte ' + fechaCorta(l.fProg)) + (l.semProg ? ' · sem.&nbsp;' + l.semProg.sem : ''), d < 0 ? 'baja' : d <= 14 ? 'pronto' : '')); }
+  else datos.push(dato('Sin fecha', 'de corte'));
+  return `<div class="franja est-${sem.cls}" role="group" aria-label="Estado del lote: ${esc(sem.txt)}"><div class="sem"><i aria-hidden="true"></i><b>${esc(sem.txt)}</b><span>${esc(sem.motivos[0] || '')}</span></div><div class="fr-datos">${datos.join('')}</div></div>`;
+}
 function corteInfo(l) {
   if (l.cosechado) return {txt: `${ico('check')} Cosechado el ${fechaCorta(l.fCorte)}`, alerta: ''};
   if (!l.fProg) return {txt: '', alerta: ''};
@@ -532,7 +560,7 @@ function kv(k, v) { return v === '' || v === null || v === undefined || v === '�
 function renderCard() {
   const el = $('card'), l = LOTES[selCod];
   if (!l) { el.className = 'card oculta'; ajustarCard(); return; }
-  const st = estadoLote(l), edad = edadMeses(l), c = centroideFeat(selFeat) || centroideLote(l);
+  const st = estadoLote(l), sem = semaforoLote(l), edad = edadMeses(l), c = centroideFeat(selFeat) || centroideLote(l);
   const fav = favoritos().includes(l.cod), enLista = typeof listaTiene === 'function' && listaTiene(l.cod), fijado = typeof GPS !== 'undefined' && GPS.fijado === l.cod;
   const llegar = c ? `https://www.google.com/maps/dir/?api=1&destination=${c[0].toFixed(6)},${c[1].toFixed(6)}&travelmode=driving` : '';
   const brecha = l.tchOpt > 0 && l.tchEst > 0 ? l.tchOpt - l.tchEst : null, validar = estValidar(l);
@@ -552,7 +580,8 @@ function renderCard() {
       ${selFeat && l.nPoly > 1 ? `<div class="mini-seg" role="group" aria-label="Ver lote o tablón"><button type="button" class="${tab ? '' : 'activo'}" aria-pressed="${!tab}" onclick="verComo('lote')">Lote</button><button type="button" class="${tab ? 'activo' : ''}" aria-pressed="${tab}" onclick="verComo('tablon')">Tablón</button></div>` : ''}
       <button type="button" class="card-x" onclick="cerrarCard(true)" aria-label="Cerrar">${ico('x')}</button>
     </div>
-    <div class="fila-estado">${st.cls === 'bien' && l.renovar ? '' : `<span class="chip est-${st.cls}">${esc(st.txt)}</span>`}${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${validar ? '<span class="chip est-medio" title="TCH estimado 26/27 posiblemente provisional: confírmelo con el aforo">Dato a validar</span>' : ''}${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
+    ${franjaLote(l, sem)}
+    ${l.renovar || validar ? `<div class="fila-estado">${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${validar ? '<span class="chip est-medio" title="TCH estimado 26/27 posiblemente provisional: confírmelo con el aforo">Dato a validar</span>' : ''}</div>` : ''}
     ${corte.alerta}
     ${typeof GPS !== 'undefined' && GPS.salio && GPS.salio === l.cod ? `<div class="nota est-medio card-salio">${ico('pin')} Ya no está en este lote según el GPS.</div>` : ''}
     <div class="cifras">
@@ -563,7 +592,7 @@ function renderCard() {
       <button type="button" class="btn ter" onclick="cardAlternar()">${cardFull ? 'Menos ' + ico('chevDown') : 'Más ' + ico('chevUp')}</button>
     </div>
     <div class="solo-full">
-      ${st.det && !(st.cls === 'bien' && (l.renovar || validar)) ? `<div class="nota est-${st.cls}">${esc(st.det)}</div>` : ''}
+      <div class="nota est-${sem.cls === 'bien' ? 'bien' : sem.cls}"><b>${esc(sem.txt)}:</b> ${sem.motivos.map(esc).join(' · ')}${st.det && st.cls !== 'bien' ? `<br><small>Zafra anterior: ${esc(st.det)}</small>` : ''}</div>
       ${validar ? `<div class="nota est-medio">${ico('alert')} Dato a validar: el TCH estimado 26/27 es ${nfTch.format(l.tchEst)} t/ha y su ${l.histProm !== null ? 'promedio histórico' : 'TCH de la zafra anterior'} es ${nfTch.format(refHistorica(l))} t/ha. Parece un valor provisional: confírmelo con el aforo antes de usarlo. Se mantiene en todos los totales.</div>` : ''}
       <div class="kvs">
         ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nfHaLote.format(aT)} ha · ${nfHaLote.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nfHaLote.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : selToque ? kv('Tablón tocado', pt.Tablon) : ''}

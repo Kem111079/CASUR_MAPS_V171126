@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V271126B';
+const APP_VERSION = 'V271126C';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -584,6 +584,32 @@ function estadoLote(l) {
   if (edad !== null && edad >= 12) return {cls: 'medio', txt: 'Edad alta', det: 'Validar programación de corte'};
   if (l.tchAnt !== null && l.tchAnt < 70) return {cls: 'medio', txt: 'Revisar', det: 'TCH zafra anterior entre 55 y 70 t/ha, por debajo de lo esperado (70 o más)' + origen};
   return {cls: 'bien', txt: 'Sin alertas', det: 'Sin alertas con los datos disponibles' + origen};
+}
+
+/* Semáforo integral del lote para la tarjeta: junta el TCH estimado 26/27, su cambio frente a 25/26, la fecha de
+   corte y los datos a validar. Devuelve el color, una palabra y los motivos (el primero es el principal). */
+function semaforoLote(l) {
+  const m = [], ok = [];
+  if (esSinCana(l)) return {cls: 'neutro', txt: 'Sin caña', motivos: ['Lote sin caña: no se estima producción']};
+  if (corteVencido(l)) m.push(['mal', `Fecha de corte vencida (${fechaCorta(l.fProg)})`]);
+  const est = esMolienda(l) && l.tchEst > 0 ? l.tchEst : null, prev = l.tchPrev > 0 ? l.tchPrev : null;
+  if (est !== null && estValidar(l)) m.push(['medio', `TCH estimado ${nfTch.format(est)} t/ha a validar (posible dato provisional)`]);
+  else if (est !== null) {
+    if (est < 40) m.push(['mal', `TCH estimado ${nfTch.format(est)} t/ha, bajo 40`]);
+    else if (est < 55) m.push(['medio', `TCH estimado ${nfTch.format(est)} t/ha, entre 40 y 55`]);
+    else ok.push(est >= 70 ? 'TCH estimado sobre 70 t/ha' : 'TCH estimado entre 55 y 70 t/ha');
+    if (prev !== null) { const d = (est - prev) / prev;
+      if (d <= -0.2) m.push([est < 55 ? 'mal' : 'medio', `Baja ${nf0.format(-d * 100)} % frente a 25/26 (${nfTch.format(prev)} t/ha)`]);
+      else if (d <= -0.1) m.push(['medio', `Baja ${nf0.format(-d * 100)} % frente a 25/26 (${nfTch.format(prev)} t/ha)`]);
+      else if (d >= 0.05) ok.unshift(`Sube ${nf0.format(d * 100)} % frente a 25/26`);
+      else if (d > -0.1) ok.push('Similar a 25/26'); }
+  }
+  const ed = edadMeses(l); if (!l.fProg && !l.cosechado && ed !== null && ed >= 12) m.push(['medio', `${nf0.format(ed)} meses desde el corte y sin fecha programada`]);
+  if (l.renovar === true) m.push(['info', 'Propuesto para renovar']);
+  const peso = {mal: 0, medio: 1, info: 2}, graves = m.filter(x => x[0] !== 'info').sort((a, b) => peso[a[0]] - peso[b[0]]);
+  if (graves.length) return {cls: graves[0][0], txt: graves[0][0] === 'mal' ? 'Crítico' : 'Atención', motivos: [...graves, ...m.filter(x => x[0] === 'info')].map(x => x[1])};
+  if (est === null) return {cls: 'neutro', txt: 'Sin estimado', motivos: [l.conAforo ? (esMolienda(l) ? 'Sin TCH estimado en el aforo' : `${rotulo(l.clas) || 'Fuera de molienda'}: no se estima producción`) : 'Lote sin aforo 26/27', ...m.map(x => x[1])]};
+  return {cls: 'bien', txt: 'Bien', motivos: [...ok, ...m.map(x => x[1])]};
 }
 
 /* ── Geometría ── */
