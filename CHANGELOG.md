@@ -1,5 +1,10 @@
 # Cambios
 
+## V271126C · 27-nov-2026 · Fase 2, entrega 2: tarjeta ejecutiva y cambio de capa rápido
+- **Semáforo del lote** (Bien / Atención / Crítico) que junta el TCH estimado 26/27, su cambio frente a 25/26, la fecha de corte y los datos a validar, con el motivo principal a la vista. En «Más» se ven todos los motivos.
+- **Franja ejecutiva** en la tarjeta: toneladas estimadas, diferencia en t/ha frente a 25/26 y días que faltan para el corte.
+- **Cambio de capa en la leyenda:** fila de botones con todas las capas (un toque) y botón ⇄ en la píldora para volver a la capa anterior. Cada cambio ofrece «Deshacer».
+
 ## V271126B · 27-nov-2026 · Fase 2, entrega 1: resumen ejecutivo
 - **Cómo vamos** al inicio de Resumen: frase ejecutiva, TCH estimado 26/27 frente a 25/26 en los mismos lotes, avance de zafra (cosechado y programado por mes) y lotes de las próximas 2 semanas de corte.
 - **Ranking:** TCH por zona con la marca de 25/26 y la diferencia; 5 fincas con mayor y 5 con menor TCH. Se marcan las que tienen datos a validar.

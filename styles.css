@@ -532,3 +532,28 @@ body[data-tab=mapa] .toast{max-width:none}
 .rank-val-aviso{color:var(--medio);font-weight:800;white-space:nowrap}.rank-val-aviso .ico{width:13px;height:13px;vertical-align:-2px}
 .preguntas .cuenta{flex:none;min-width:2.4em;text-align:center;padding:3px 9px;border-radius:999px;background:var(--info-f);color:var(--info);font-variant-numeric:tabular-nums;font-size:calc(14px * var(--esc))}
 .preguntas .cuenta.cero{background:var(--bien-f);color:var(--bien)}
+
+/* ── Franja ejecutiva y semáforo de la tarjeta ── */
+.franja{--sc:var(--neutro);--sf:var(--neutro-f);margin:8px 0 6px;padding:9px 12px 10px;border-radius:14px;background:var(--sf);border-left:6px solid var(--sc)}
+.franja.est-bien{--sc:var(--bien);--sf:var(--bien-f)}.franja.est-medio{--sc:var(--medio);--sf:var(--medio-f)}.franja.est-mal{--sc:var(--mal);--sf:var(--mal-f)}
+.franja .sem{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.25}
+.franja .sem i{flex:none;width:13px;height:13px;border-radius:50%;background:var(--sc);box-shadow:0 0 0 3px color-mix(in srgb,var(--sc) 25%,transparent);align-self:center}
+.franja .sem b{color:var(--sc);font-size:calc(16px * var(--esc));font-weight:900}
+.franja .sem span{color:var(--texto);font-size:calc(13.5px * var(--esc));min-width:0;flex:1 1 12em}
+.fr-datos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,92px),1fr));gap:6px 10px;margin-top:8px}
+.fr-dato{display:flex;flex-direction:column;min-width:0}
+.fr-dato b{font-size:calc(17px * var(--esc));font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15}
+.fr-dato b.sube{color:var(--bien)}.fr-dato b.baja{color:var(--mal)}.fr-dato b.pronto{color:var(--acento)}
+.fr-dato small{font-size:calc(12px * var(--esc));color:var(--texto2);line-height:1.2}
+/* Cambio rápido de capa dentro de la leyenda */
+.ley-capas{display:flex;gap:6px;overflow-x:auto;padding:2px 8px 8px;margin:0 -2px 4px;border-bottom:1px solid var(--linea);scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.ley-capas::-webkit-scrollbar{display:none}
+.ley-capas button{flex:none;min-height:40px;padding:0 12px;border-radius:999px;border:1px solid var(--linea);background:var(--fondo);color:var(--texto);font-weight:700;font-size:calc(13px * var(--esc));white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+.ley-capas button.ant{background:var(--pri);color:var(--pri-t);border-color:var(--pri)}
+.ley-capas button .ico{width:16px;height:16px}
+.ley-ab{flex:none;width:46px;min-height:46px;border:0;border-left:1px solid var(--linea);background:transparent;color:var(--pri);display:grid;place-items:center}
+.ley-ab .ico{width:22px;height:22px}
+.ley-cuerpo .ley-capas button{width:auto;margin:0;background-image:none;background-color:var(--fondo);border:1px solid var(--linea);border-radius:999px;padding:0 12px;min-height:40px;gap:5px}
+.ley-cuerpo .ley-capas button.ant{background-color:var(--pri);color:var(--pri-t);border-color:var(--pri)}
+.ley-cuerpo .ley-acc button{width:auto;margin:0;background-image:none;border-radius:10px}
+.ley-cuerpo .ley-acc button+button{background-color:var(--fondo)}
