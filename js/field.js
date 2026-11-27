@@ -211,12 +211,12 @@ async function imagenRegistro(o) {
   rr(ctx, 40, 215, W - 80, H - 255, 26, '#fff', '#dbe5dd');
   ctx.fillStyle = '#0f172a'; ctx.font = '900 56px Arial'; ctx.fillText('Lote ' + l.cod, 80, 300);
   ctx.fillStyle = '#334155'; ctx.font = '700 34px Arial'; ctx.fillText(String(l.hac || '').slice(0, 52), 80, 350);
-  ctx.font = '600 26px Arial'; ctx.fillStyle = '#64748b'; ctx.fillText([o.tablon ? 'Tablón ' + o.tablon : '', l.variedad, fmtN(l.area, ' ha'), ncLargo(l)].filter(x => x && x !== '—').join(' · '), 80, 392);
+  ctx.font = '600 26px Arial'; ctx.fillStyle = '#64748b'; ctx.fillText([o.tablon ? 'Tablón ' + o.tablon : '', l.variedad, fmtHaLote(l.area), ncLargo(l)].filter(x => x && x !== '—').join(' · '), 80, 392);
   const sev = {Alta: '#b91c1c', Media: '#b45309', Baja: '#0b7f3a'}[o.severidad] || '#334155';
   [['CATEGORÍA', o.categoria, '#0f172a'], ['SEVERIDAD', o.severidad, sev], ['TÉCNICO', (o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : 'No indicado').slice(0, 20), '#0f172a']].forEach((b, i) => {
     const x = 80 + i * 352; rr(ctx, x, 420, 336, 92, 18, '#f8fafc', '#e2e8f0'); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 20, 452); ctx.fillStyle = b[2]; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 20, 492);
   });
-  [['TCH ANTERIOR', fmtN(l.tchAnt, ' t/ha', nf1)], ['ESTIMADO 26/27', l.tchEst > 0 ? nf1.format(l.tchEst) + ' t/ha' : '—'], ['EDAD', edad === null ? '—' : nf1.format(edad) + ' meses']].forEach((b, i) => {
+  [['TCH ANTERIOR', fmtN(l.tchAnt, ' t/ha', nfTch)], ['ESTIMADO 26/27', l.tchEst > 0 ? nfTch.format(l.tchEst) + ' t/ha' : '—'], ['EDAD', edad === null ? '—' : nfTch.format(edad) + ' meses']].forEach((b, i) => {
     const x = 80 + i * 352; rr(ctx, x, 528, 336, 92, 18, ['#fff6d8', '#e8f6ee', '#e9f0fb'][i], '#e2e8f0'); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 20, 560); ctx.fillStyle = '#0f172a'; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 20, 600);
   });
   let y = 640; rr(ctx, 80, y, W - 160, hNota - 16, 20, '#f8fafc', '#dbe5dd');
@@ -520,7 +520,7 @@ function planBuscar(q) {
   const fincas = Object.values(FINCAS).filter(f => sinTildes(f.nombre).includes(t)).sort((a, b) => b.lotes.length - a.lotes.length).slice(0, 4);
   const lotes = Object.values(LOTES).filter(l => l.nPoly && l.cod.startsWith(t)).sort((a, b) => a.cod.length - b.cod.length || a.cod.localeCompare(b.cod, 'es', {numeric: true})).slice(0, 6);
   res.innerHTML = fincas.map(f => { const g = planGrupos(f); return `<div class="plan-finca"><b>${ico('home')} ${esc(f.nombre)}</b><div class="obs-acc"><button type="button" data-finca="${esc(f.nombre)}" data-g="todos">${ico('plus')} Todos (${g.todos.length})</button>${g.alta.length ? `<button type="button" data-finca="${esc(f.nombre)}" data-g="alta">${ico('plus')} Prioridad alta (${g.alta.length})</button>` : ''}${g.corte.length ? `<button type="button" data-finca="${esc(f.nombre)}" data-g="corte">${ico('plus')} Corte próximo (${g.corte.length})</button>` : ''}</div></div>`; }).join('') +
-    lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtN(l.area, ' ha', nf1)}</span><i class="chip ${listaTiene(l.cod) ? 'est-bien' : 'est-neutro'}">${listaTiene(l.cod) ? ico('check') + ' en lista' : ico('plus') + ' agregar'}</i></button>`).join('') || '<p class="vacio">Sin coincidencias.</p>';
+    lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtHaLote(l.area)}</span><i class="chip ${listaTiene(l.cod) ? 'est-bien' : 'est-neutro'}">${listaTiene(l.cod) ? ico('check') + ' en lista' : ico('plus') + ' agregar'}</i></button>`).join('') || '<p class="vacio">Sin coincidencias.</p>';
 }
 function planClick(e) {
   const b = e.target.closest('button'); if (!b) return;
@@ -554,7 +554,7 @@ async function reporteVisita(v) {
   const ini = new Date(v.inicio).getTime(), fin = new Date(v.fin || Date.now()).getTime(), cods = lotesVisitados(v);
   const obs = obsTodas().filter(o => { const t = new Date(o.fecha_hora).getTime(); return t >= ini && t <= fin; });
   const fotos = {}; for (const o of obs) for (const id of [o.photo_id, o.photo_id2]) if (id) { const r = await fotoGet(id).catch(() => null); if (r) fotos[id] = r.data_url; }
-  const filasL = cods.map(c => { const l = LOTES[c] || {}, s = estadoLote(LOTES[c]); return `<tr><td><b>${esc(c)}</b></td><td>${esc(l.hac || '—')}</td><td>${esc(l.variedad || '—')}</td><td>${fmtN(l.area, '', nf1)}</td><td>${fmtN(l.tchAnt, '', nf1)}</td><td>${l.tchEst > 0 ? nf1.format(l.tchEst) : '—'}</td><td>${esc(s.txt)}</td><td>${obs.filter(o => codKey(o.codlote) === c).length}</td></tr>`; }).join('');
+  const filasL = cods.map(c => { const l = LOTES[c] || {}, s = estadoLote(LOTES[c]); return `<tr><td><b>${esc(c)}</b></td><td>${esc(l.hac || '—')}</td><td>${esc(l.variedad || '—')}</td><td>${fmtN(l.area, '', nfHaLote)}</td><td>${fmtTch(l.tchAnt)}</td><td>${l.tchEst > 0 ? nfTch.format(l.tchEst) : '—'}</td><td>${esc(s.txt)}</td><td>${obs.filter(o => codKey(o.codlote) === c).length}</td></tr>`; }).join('');
   const bloquesO = obs.map(o => `<div class="o"><b>Lote ${esc(o.codlote)} · ${esc(o.categoria)} · ${esc(o.severidad)}</b> <span class="s">${esc(new Date(o.fecha_hora).toLocaleString('es-NI'))}${o.lat !== '' ? ' · ' + Number(o.lat).toFixed(5) + ', ' + Number(o.lng).toFixed(5) : ''}</span><p>${esc(o.nota || 'Sin nota')}</p>${[o.photo_id, o.photo_id2].filter(id => fotos[id]).map(id => `<img src="${fotos[id]}">`).join('')}</div>`).join('');
   const alta = obs.filter(o => o.severidad === 'Alta');
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reporte de visita ${esc(v.id)}</title><style>
@@ -580,8 +580,8 @@ function renderMas() {
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
   $('tabMas').innerHTML = `<div class="marca"><img src="./assets/logo_casur.png" alt="CASUR"><div><b>CASUR Maps</b><span>Departamento de Negocios de Caña</span></div></div>
     <button type="button" class="btn sec ancho" onclick="abrirTablero(true)">${ico('board')} Tablero de hoy</button>
-    <header><h2>Resumen aforo 26/27</h2></header>
-    <div class="cifras c4">${cifra('Área molienda', nf0.format(g.area_ha || 0) + ' ha')}${cifra('Toneladas', nf0.format(g.toneladas || 0))}${cifra('TCH pond.', fmtN(g.tch_ponderado, '', nf), 'c-est')}${cifra('TCH optimista', fmtN(g.tch_opt_ponderado, '', nf))}</div>
+    <header><h2>Resumen aforo 26/27</h2><p>Datos al ${fechaCorta(META.datos_al || META.generated_at)} · TCH en t/ha, ponderado por área</p></header>
+    <div class="cifras c4">${cifra('Área molienda', conUnidad(nfHa.format(g.area_ha || 0), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(g.toneladas || 0), ' t'))}${cifra('TCH pond.', fmtTch(g.tch_ponderado), 'c-est')}${cifra('TCH optimista', fmtTch(g.tch_opt_ponderado))}</div>
     <label class="campo">Buscar finca o lote<input id="aforoQ" type="search" placeholder="Nombre de finca, productor o código de lote" autocomplete="off" autocapitalize="characters" enterkeyhint="search"></label>
     <div id="aforoRes" class="lista-lotes"></div>
     <label class="campo">Agrupar por${sel('aforoGrupo', [['hacienda', 'Hacienda / productor'], ['zona', 'Zona'], ['finca', 'Finca y tenencia']], aforoGrupo)}</label>
@@ -592,17 +592,27 @@ function renderMas() {
   $('aforoQ').addEventListener('input', e => buscarAforo(e.target.value));
   $('aforoRes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.finca) abrirFinca(b.dataset.finca); else seleccionarLote(b.dataset.lote, {zoom: true}); });
   $('tabMas').querySelector('tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-finca]'); if (tr) abrirFinca(tr.dataset.finca); });
+  // Filas que se tocan: también con teclado (Enter o espacio), como un botón.
+  $('tabMas').addEventListener('keydown', e => { const tr = e.target.closest && e.target.closest('tr[role=button]'); if (!tr || (e.key !== 'Enter' && e.key !== ' ')) return; e.preventDefault(); tr.click(); });
 }
 /* ── Pestaña Ajustes: preferencias del teléfono, datos y actualización ── */
 function renderAjustes() {
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
+  // Opciones cortas para que quepan con cualquier tamaño de letra; la explicación de la elegida va debajo.
+  const AYUDAS = {
+    ajGps: [['vehiculo', 'En vehículo (recomendado)', 'Para recorrer las fincas en vehículo.'], ['campo', 'Caminando', 'Para recorrer el lote a pie.'], ['preciso', 'Punto fijo', 'Máxima precisión, sin moverse del punto.']],
+    ajTema: [['campo', 'Campo', 'Alto contraste, para leer a pleno sol.'], ['auto', 'Automático', 'Oscuro de 7 p. m. a 5:30 a. m.; Campo el resto del día.'], ['claro', 'Claro suave', 'Fondo claro con menos contraste.'], ['oscuro', 'Oscuro', 'Para la madrugada.']],
+    ajGiro: [['suave', 'Suave (recomendado)', 'Gira poco, solo al avanzar.'], ['normal', 'Normal', 'Sigue cada cambio de rumbo.'], ['sin', 'Sin giro', 'El norte siempre arriba.']]
+  };
+  const ayuda = (id, val) => ((AYUDAS[id].find(o => o[0] === val) || AYUDAS[id][0])[2]);
+  const selA = (id, val) => sel(id, AYUDAS[id], val) + `<small class="ayuda" id="${id}Ayuda">${ayuda(id, val)}</small>`;
   $('tabAjustes').innerHTML = `<header><h2>Ajustes</h2></header>
     <label class="campo">Técnico<input id="ajTec" type="text" value="${esc(S.tecnico)}" placeholder="Su nombre"></label>
-    <label class="campo">Uso del GPS${sel('ajGps', [['vehiculo', 'En vehículo (recomendado)'], ['campo', 'Caminando'], ['preciso', 'Punto fijo, máxima precisión']], S.gpsPerfil)}</label>
-    <label class="campo">Pantalla${sel('ajTema', [['campo', 'Campo · alto contraste para sol'], ['auto', 'Automático · oscuro de 7 p. m. a 5:30 a. m.'], ['claro', 'Claro suave'], ['oscuro', 'Oscuro · madrugada']], S.tema)}</label>
+    <label class="campo">Uso del GPS${selA('ajGps', S.gpsPerfil)}</label>
+    <label class="campo">Pantalla${selA('ajTema', S.tema)}</label>
     <label class="campo">Tamaño de letra${sel('ajLetra', [['normal', 'Normal'], ['grande', 'Grande'], ['muygrande', 'Muy grande']], S.letra || 'normal')}</label>
     <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tableroAbrir ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
- <label class="campo">Giro del mapa con GPS${sel('ajGiro', [['suave', 'Suave · gira poco, solo al avanzar (recomendado)'], ['normal', 'Normal · sigue cada cambio de rumbo'], ['sin', 'Sin giro · norte siempre arriba']], S.giro)}</label>
+    <label class="campo">Giro del mapa con GPS${selA('ajGiro', S.giro)}</label>
     <label class="interruptor"><input type="checkbox" id="ajAuto" ${S.gpsAuto ? 'checked' : ''}><span>Activar el GPS al abrir la app</span></label>
     <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Mantener la pantalla encendida durante la visita</span></label>
     <label class="interruptor"><input type="checkbox" id="ajVib" ${S.vibrar ? 'checked' : ''}><span>Vibrar al entrar a un lote</span></label>
@@ -617,7 +627,8 @@ function renderAjustes() {
   $('ajTec').addEventListener('change', e => { S.tecnico = e.target.value.trim(); guardarAjustes(); });
   $('ajGps').addEventListener('change', e => { S.gpsPerfil = e.target.value; guardarAjustes(); });
   $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); pintarSeleccion(); });
-  $('ajLetra').addEventListener('change', e => { S.letra = e.target.value; guardarAjustes(); aplicarTema(); });
+  $('ajLetra').addEventListener('change', e => { S.letra = e.target.value; guardarAjustes(); aplicarTema(); if (selCod) renderCard(); pintarLeyenda(); }); // la tarjeta vuelve a medir su alto
+  Object.keys(AYUDAS).forEach(id => $(id).addEventListener('change', e => { $(id + 'Ayuda').textContent = ayuda(id, e.target.value); }));
   $('ajTab').addEventListener('change', e => { S.tableroAbrir = e.target.checked; guardarAjustes(); });
   $('ajGiro').addEventListener('change', e => { S.giro = e.target.value; S.orientacion = S.giro === 'sin' ? 'norte' : 'rumbo'; guardarAjustes(); aplicarGiroCss(); orientar(true); pintarBrujula(); });
   $('ajAuto').addEventListener('change', e => { S.gpsAuto = e.target.checked; guardarAjustes(); });
@@ -629,19 +640,19 @@ function renderAjustes() {
 /* ── Resumen de renovación: área por zona, TCH estimado, referencia y deltas ── */
 function renovacionHtml() {
   const r = resumenRenovacion(); if (!r.n) return '';
-  const d = v => v === null ? '—' : signo(v), t = v => v === null ? '—' : nf1.format(v);
+  const d = v => v === null ? '—' : signo(v), t = v => v === null ? '—' : nfTch.format(v);
   // Dos tablas que caben en la pantalla, sin deslizar hacia los lados: qué se espera ganar y qué dice el histórico.
   return `<h3>Renovación propuesta</h3>
-    <div class="cifras c4">${cifra('Lotes', nf0.format(r.n))}${cifra('Hectáreas', nf0.format(r.area))}${cifra('Estimado', nf1.format(r.est))}${cifra('Δ esperado', signo(r.dEsp), 'c-est')}</div>
+    <div class="cifras c4">${cifra('Lotes', nf0.format(r.n))}${cifra('Hectáreas', nfHa.format(r.area))}${cifra('TCH estimado', nfTch.format(r.est))}${cifra('Δ esperado', conUnidad(signo(r.dEsp), ' t/ha'), 'c-est')}</div>
     <h4>Qué se espera al renovar</h4>
     <div class="tabla compacta"><table><thead><tr><th>Zona</th><th>ha</th><th>Estim.</th><th>Plantillas</th><th>Δ t/ha</th><th>Δ ton.</th></tr></thead>
-      <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}"><td>${esc(f.zona)}</td><td>${nf0.format(f.area)}</td><td>${nf1.format(f.est)}</td><td>${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nf0)}</td></tr>`).join('')}
-      <tr class="total"><td>Total</td><td>${nf0.format(r.area)}</td><td>${nf1.format(r.est)}</td><td></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nf0)}</td></tr></tbody></table></div>
+      <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}" tabindex="0" role="button"><td>${esc(f.zona)}</td><td>${nfHa.format(f.area)}</td><td>${nfTch.format(f.est)}</td><td>${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nfT)}</td></tr>`).join('')}
+      <tr class="total"><td>Total</td><td>${nfHa.format(r.area)}</td><td>${nfTch.format(r.est)}</td><td></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nfT)}</td></tr></tbody></table></div>
     <p class="pie">Estim. = TCH estimado del lote. Plantillas = TCH estimado de las plantillas de la misma zona. Δ = diferencia entre ambos.</p>
     <h4>Histórico de esos lotes (techo)</h4>
     <div class="tabla compacta"><table><thead><tr><th>Zona</th><th>Lotes</th><th>Prom.</th><th>Máximo</th><th>Δ t/ha</th><th>Δ ton.</th></tr></thead>
-      <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}"><td>${esc(f.zona)}</td><td>${f.n}</td><td>${t(f.prom)}</td><td>${t(f.max)}</td><td><b>${d(f.dTecho)}</b></td><td>${f.max === null ? '—' : signo(f.tonTecho, nf0)}</td></tr>`).join('')}
-      <tr class="total"><td>Total</td><td>${r.n}</td><td></td><td></td><td><b>${signo(r.dTecho)}</b></td><td>${signo(r.tonTecho, nf0)}</td></tr></tbody></table></div>
+      <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}" tabindex="0" role="button"><td>${esc(f.zona)}</td><td>${f.n}</td><td>${t(f.prom)}</td><td>${t(f.max)}</td><td><b>${d(f.dTecho)}</b></td><td>${f.max === null ? '—' : signo(f.tonTecho, nfT)}</td></tr>`).join('')}
+      <tr class="total"><td>Total</td><td>${r.n}</td><td></td><td></td><td><b>${signo(r.dTecho)}</b></td><td>${signo(r.tonTecho, nfT)}</td></tr></tbody></table></div>
     <p class="pie">Prom. y Máximo = TCH histórico de cada lote. Δ = máximo histórico menos el estimado. Todo en t/ha, ponderado por área. Toque una zona para ver sus lotes.</p>
     <button type="button" class="btn sec ancho" onclick="verRenovacionMapa()">${ico('map')} Ver lotes a renovar en el mapa</button>`;
 }
@@ -656,12 +667,12 @@ function abrirRenovZona(zona) {
   const f = resumenRenovacion().filas.find(x => x.zona === zona); if (!f) return;
   const orden = f.lotes.slice().sort((a, b) => (deltaEsperado(b) ?? -1e9) * (b.areaAforo || 0) - (deltaEsperado(a) ?? -1e9) * (a.areaAforo || 0));
   abrirHoja(`Renovación · ${zona}`, `
-    <div class="cifras c4">${cifra('Lotes', f.n)}${cifra('Área', nf0.format(f.area) + ' ha')}${cifra('Estimado', nf1.format(f.est))}${cifra('Δ esperado', f.dEsp === null ? '—' : signo(f.dEsp), 'c-est')}</div>
-    <p class="pie">Plantillas de la zona: ${f.plant === null ? '—' : nf1.format(f.plant)} t/ha · máximo histórico ${f.max === null ? '—' : nf1.format(f.max)} t/ha. Ordenados por toneladas que se ganarían.</p>
-    <div class="lista-lotes">${orden.map(l => { const de = deltaEsperado(l), dt = deltaTecho(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtN(l.areaAforo, ' ha', nf1)} · ${l.grCorte === 'Planta' ? 'plantilla' : esc(l.grCorte.toLowerCase())}<br>est. ${fmtN(l.tchEst, '', nf1)} · prom. ${fmtN(l.histProm, '', nf0)} · máx. ${fmtN(l.histMax, '', nf0)}</span><i class="chip ${de > 0 ? 'est-bien' : 'est-neutro'}">${de === null ? '—' : signo(de) + ' t/ha'}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`, 'alta');
+    <div class="cifras c4">${cifra('Lotes', nf0.format(f.n))}${cifra('Área', conUnidad(nfHa.format(f.area), ' ha'))}${cifra('TCH estimado', nfTch.format(f.est))}${cifra('Δ esperado', f.dEsp === null ? '—' : conUnidad(signo(f.dEsp), ' t/ha'), 'c-est')}</div>
+    <p class="pie">Plantillas de la zona: ${f.plant === null ? '—' : nfTch.format(f.plant)} t/ha · máximo histórico ${f.max === null ? '—' : nfTch.format(f.max)} t/ha. Ordenados por toneladas que se ganarían.</p>
+    <div class="lista-lotes">${orden.map(l => { const de = deltaEsperado(l), dt = deltaTecho(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${fmtHaLote(l.areaAforo)} · ${l.grCorte === 'Planta' ? 'plantilla' : esc(l.grCorte.toLowerCase())}<br>est. ${fmtTch(l.tchEst)} · prom. ${fmtTch(l.histProm)} · máx. ${fmtTch(l.histMax)}</span><i class="chip ${de > 0 ? 'est-bien' : 'est-neutro'}">${de === null ? '—' : signo(de) + ' t/ha'}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`, 'alta');
 }
 function filasAforo(filas) {
-  return filas.map(x => `<tr ${aforoGrupo === 'hacienda' ? `data-finca="${esc(x.key)}"` : ''}><td>${esc(x.key)}</td><td>${nf0.format(x.area_ha)}</td><td>${nf0.format(x.toneladas)}</td><td><b>${x.area_ha ? nf1.format(x.tch_ponderado) : '—'}</b></td><td>${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</td></tr>`).join('') || '<tr><td colspan="5">Sin coincidencias en esta agrupación.</td></tr>';
+  return filas.map(x => `<tr ${aforoGrupo === 'hacienda' ? `data-finca="${esc(x.key)}" tabindex="0" role="button"` : ''}><td>${esc(x.key)}</td><td>${nfHa.format(x.area_ha)}</td><td>${nfT.format(x.toneladas)}</td><td><b>${x.area_ha ? nfTch.format(x.tch_ponderado) : '—'}</b></td><td>${x.area_ha ? nfTch.format(x.tch_opt_ponderado) : '—'}</td></tr>`).join('') || '<tr><td colspan="5">Sin coincidencias en esta agrupación.</td></tr>';
 }
 /* Búsqueda dentro del resumen: fincas/productores con sus totales y lotes con su aforo. También filtra la tabla. */
 function buscarAforo(q) {
@@ -670,8 +681,8 @@ function buscarAforo(q) {
   if (!t) { res.innerHTML = ''; return; }
   const fincas = ((RESUMEN.resumen || {}).hacienda || []).filter(x => sinTildes(x.key).includes(t)).slice(0, 6);
   const lotes = Object.values(LOTES).filter(l => l.cod.startsWith(t)).sort((a, b) => a.cod.length - b.cod.length || a.cod.localeCompare(b.cod, 'es', {numeric: true})).slice(0, 8);
-  res.innerHTML = fincas.map(x => `<button type="button" data-finca="${esc(x.key)}"><b>${ico('home')}</b><span><strong>${esc(x.key)}</strong><br>${nf0.format(x.area_ha)} ha mol. · ${nf0.format(x.toneladas)} t · TCH ${x.area_ha ? nf1.format(x.tch_ponderado) : '—'} · optim. ${x.area_ha ? nf1.format(x.tch_opt_ponderado) : '—'}</span></button>`).join('') +
-    lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)}<br>${fmtN(l.area, ' ha', nf1)} · ${l.conAforo ? `${esc(l.clas || '')} · est. ${l.tchEst > 0 ? nf1.format(l.tchEst) : '—'} · optim. ${l.tchOpt > 0 ? nf1.format(l.tchOpt) : '—'} · ${l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '— t'}` : 'sin aforo 26/27'}</span></button>`).join('') ||
+  res.innerHTML = fincas.map(x => `<button type="button" data-finca="${esc(x.key)}"><b>${ico('home')}</b><span><strong>${esc(x.key)}</strong><br>${nfHa.format(x.area_ha)} ha mol. · ${nfT.format(x.toneladas)} t · TCH ${x.area_ha ? nfTch.format(x.tch_ponderado) : '—'} · optim. ${x.area_ha ? nfTch.format(x.tch_opt_ponderado) : '—'}</span></button>`).join('') +
+    lotes.map(l => `<button type="button" data-lote="${esc(l.cod)}"><b>${esc(l.cod)}</b><span>${esc(l.hac)}<br>${fmtHaLote(l.area)} · ${l.conAforo ? `${esc(l.clas || '')} · est. ${l.tchEst > 0 ? nfTch.format(l.tchEst) : '—'} · optim. ${l.tchOpt > 0 ? nfTch.format(l.tchOpt) : '—'} · ${l.tonEst > 0 ? nfT.format(l.tonEst) + ' t' : '— t'}` : 'sin aforo 26/27'}</span></button>`).join('') ||
     '<p class="vacio">Sin coincidencias. Pruebe con el código del lote o parte del nombre.</p>';
 }
 async function revisarDatos() { buscarActualizacion(await dataCache(), META, true); }

@@ -17,7 +17,15 @@ let DATA = null, META = {}, RESUMEN = {}, LOTES = {}, FINCAS = {}, HIST = null;
 const $ = id => document.getElementById(id);
 const nf = new Intl.NumberFormat('es-NI', {maximumFractionDigits: 2});
 const nf0 = new Intl.NumberFormat('es-NI', {maximumFractionDigits: 0});
-const nf1 = new Intl.NumberFormat('es-NI', {maximumFractionDigits: 1});
+/* Formateadores únicos de cifras (Resumen, tarjeta, finca y renovación):
+   TCH, t/ha y edad con 1 decimal fijo (61.6 · 79.0); ha y toneladas agregadas sin decimales (9,102 ha · 560,673 t);
+   área de un lote o tablón con 1 decimal fijo (12.4 ha); variaciones con signo (+16.5 · −3.0 · +812). */
+const nfTch = new Intl.NumberFormat('es-NI', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+const nfHa = nf0, nfT = nf0, nfHaLote = nfTch;
+const fmtTch = v => num(v) === null ? '—' : nfTch.format(Number(v));
+const fmtHaLote = v => num(v) === null ? '—' : nfHaLote.format(Number(v)) + ' ha';
+const signo = (v, f = nfTch) => { const t = f.format(Math.abs(v)); return (/[1-9]/.test(t) ? (v > 0 ? '+' : '−') : '') + t; };
+const conUnidad = (valor, u) => `${valor}<small>${u}</small>`; // unidad pequeña dentro de una cifra KPI
 const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[m]));
 const num = v => { if (v === null || v === undefined || v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 const fmtN = (v, suf = '', f = nf) => num(v) === null ? '—' : f.format(Number(v)) + suf;

@@ -403,9 +403,10 @@ function seleccionarLote(cod, o = {}) {
   if (!o.gps) { const r = [cod, ...recientes().filter(c => c !== cod)].slice(0, 10); escribirLS(REC_KEY, r); }
   if (o.full !== undefined) cardFull = o.full;
   if (o.zoom && l.bbox) soltarSeguimiento();
-  if (o.zoom && l.bbox) map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, 290), {maxZoom: 18}));
   if (!l.nPoly) toast('Este lote no tiene polígono en el shape.');
   mostrarTab('mapa'); renderCard();
+  // Se encuadra después de pintar la tarjeta, con su altura real (cambia con el tamaño de letra y la pantalla).
+  if (o.zoom && l.bbox) map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, margenCard()), {maxZoom: 18}));
   return true;
 }
 const porTablon = () => selVista === 'tablon' && !!selFeat && LOTES[selCod] && LOTES[selCod].nPoly > 1;
@@ -431,7 +432,7 @@ function pintarSeleccion() {
 function menuLote(f) {
   const l = LOTES[f._cod]; if (!l) return; vibrar(30);
   const c = centroideFeat(f), st = estadoLote(l);
-  abrirHoja(`Lote ${l.cod}`, `<p class="pie">${esc(l.hac)} · ${fmtN(l.area, ' ha')}${f.properties.Tablon ? ' · tablón ' + esc(f.properties.Tablon) : ''} · <span class="chip est-${st.cls}">${esc(st.txt)}</span></p>
+  abrirHoja(`Lote ${l.cod}`, `<p class="pie">${esc(l.hac)} · ${fmtHaLote(l.area)}${f.properties.Tablon ? ' · tablón ' + esc(f.properties.Tablon) : ''} · <span class="chip est-${st.cls}">${esc(st.txt)}</span></p>
     <div class="menu-rapido">
       <button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{feat:DATA.features[${f._i}],toque:true});abrirRegistro('${esc(l.cod)}')">${ico('plus')}<span>Registrar hallazgo</span></button>
       <button type="button" onclick="cerrarHoja();listaToggle('${esc(l.cod)}')">${ico(listaTiene(l.cod) ? 'check' : 'listPlus')}<span>${listaTiene(l.cod) ? 'Quitar de la lista' : 'Lista del día'}</span></button>
@@ -451,8 +452,15 @@ function ajustarCard() {
   if (vis && !cardFull) document.body.style.setProperty('--card-h', Math.round(el.getBoundingClientRect().height) + 'px');
   histPedir();
 }
+/* Relleno inferior para encuadrar un lote sobre la tarjeta compacta: su alto medido + 16 px, sin dejar
+   menos de 120 px de mapa visible. En pantalla ancha la tarjeta va a un lado y se conserva el relleno fijo. */
+function margenCard() {
+  const el = $('card'), h = $('vistaMapa').clientHeight;
+  if (window.innerWidth >= 900 || cardFull || el.classList.contains('oculta')) return 290;
+  return Math.max(40, Math.min(Math.round(el.getBoundingClientRect().height) + 16, h - 90 - 120));
+}
+const nbsp = t => String(t).replace(/ /g, '&nbsp;'); // «15.8 ha» y «corte 11» no se parten al bajar de línea
 function cifra(rot, val, cls = '', extra = '') { return `<div class="${cls}"><span>${rot}</span><b>${val}</b>${extra}</div>`; }
-const signo = (v, f = nf1) => (v > 0 ? '+' : v < 0 ? '−' : '') + f.format(Math.abs(v));
 function kv(k, v) { return v === '' || v === null || v === undefined || v === '—' ? '' : `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`; }
 function renderCard() {
   const el = $('card'), l = LOTES[selCod];
@@ -461,7 +469,7 @@ function renderCard() {
   const fav = favoritos().includes(l.cod), enLista = typeof listaTiene === 'function' && listaTiene(l.cod), fijado = typeof GPS !== 'undefined' && GPS.fijado === l.cod;
   const llegar = c ? `https://www.google.com/maps/dir/?api=1&destination=${c[0].toFixed(6)},${c[1].toFixed(6)}&travelmode=driving` : '';
   const brecha = l.tchOpt > 0 && l.tchEst > 0 ? l.tchOpt - l.tchEst : null;
-  const estim = l.conAforo ? (esMolienda(l) || l.tchEst > 0 ? fmtN(l.tchEst, '', nf1) : '—') : '—';
+  const estim = l.conAforo ? (esMolienda(l) || l.tchEst > 0 ? fmtTch(l.tchEst) : '—') : '—';
   const obs = typeof obsDeLote === 'function' ? obsDeLote(l.cod) : [];
   const tab = porTablon(), pt = selFeat ? selFeat.properties : {}, aT = Number(pt.Area_Ha) || 0, corte = corteInfo(l);
   if (!HIST && !_histPedido) { _histPedido = true; cargarHistorico().then(() => { if (selCod) renderCard(); }).catch(() => {}); }
@@ -471,7 +479,7 @@ function renderCard() {
     <button type="button" class="card-asa" onclick="cardAlternar()" aria-label="Ampliar o reducir tarjeta"><i></i></button>
     <div class="card-top">
       <div class="card-id">
-        <div class="card-cod">${tab ? 'Tablón ' + esc(pt.Tablon || '—') : 'Lote ' + esc(l.cod)} <small>${tab ? fmtN(pt.Area_Ha, ' ha') : fmtN(l.area, ' ha')}${l.nc ? ' · ' + esc(ncLargo(l)) : ''}</small></div>
+        <div class="card-cod">${tab ? 'Tablón ' + esc(pt.Tablon || '—') : 'Lote ' + esc(l.cod)} <small>${nbsp(tab ? fmtHaLote(pt.Area_Ha) : fmtHaLote(l.area))}${l.nc ? ' · ' + nbsp(esc(ncLargo(l))) : ''}</small></div>
         <div class="card-sub"><button type="button" class="card-finca" onclick="abrirFinca(LOTES[selCod].hac)">${tab ? 'Lote ' + esc(l.cod) + ' · ' : ''}${esc(l.hac)} ›</button></div>
       </div>
       ${selFeat && l.nPoly > 1 ? `<div class="mini-seg" role="group" aria-label="Ver lote o tablón"><button type="button" class="${tab ? '' : 'activo'}" aria-pressed="${!tab}" onclick="verComo('lote')">Lote</button><button type="button" class="${tab ? 'activo' : ''}" aria-pressed="${tab}" onclick="verComo('tablon')">Tablón</button></div>` : ''}
@@ -480,7 +488,7 @@ function renderCard() {
     <div class="fila-estado"><span class="chip est-${st.cls}">${esc(st.txt)}</span>${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
     ${corte.alerta}
     <div class="cifras">
-      ${cifra('TCH anterior', l.tchAnt > 0 ? nf1.format(l.tchAnt) : '—', '', chispa(l.cod))}${cifra('Estimado', estim, 'c-est')}${cifra('Optimista', l.tchOpt > 0 ? fmtN(l.tchOpt, '', nf1) : '—')}${cifra('Edad', edad === null ? '—' : nf1.format(edad) + ' m')}
+      ${cifra('TCH anterior', l.tchAnt > 0 ? nfTch.format(l.tchAnt) : '—', '', chispa(l.cod))}${cifra('Estimado', estim, 'c-est')}${cifra('Optimista', l.tchOpt > 0 ? fmtTch(l.tchOpt) : '—')}${cifra('Edad', edad === null ? '—' : conUnidad(nfTch.format(edad), ' m'))}
     </div>
     <div class="acciones">
       <button type="button" class="btn pri" onclick="abrirRegistro(selCod)">${ico('plus')} Registrar hallazgo</button>
@@ -489,19 +497,19 @@ function renderCard() {
     <div class="solo-full">
       ${st.det ? `<div class="nota est-${st.cls}">${esc(st.det)}</div>` : ''}
       <div class="kvs">
-        ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nf.format(aT)} ha · ${nf.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nf.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : selToque ? kv('Tablón tocado', pt.Tablon) : ''}
-        ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nf.format(l.areaShape)} ha en shape` : 'Sin polígono')}
+        ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nfHaLote.format(aT)} ha · ${nfHaLote.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nfHaLote.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : selToque ? kv('Tablón tocado', pt.Tablon) : ''}
+        ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nfHaLote.format(l.areaShape)} ha en shape` : 'Sin polígono')}
         ${kv('Variedad', rotulo(l.variedad))}${kv('Zona', l.zona)}${kv('Riego', rotulo(l.riego))}${kv('Tenencia', l.tenencia)}
         ${kv('Clasificación', rotulo(l.clas) || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
         ${kv('Grupo de corte', l.grCorte ? (l.grCorte === 'Planta' ? 'Plantilla' : 'Soca · ' + l.grCorte.toLowerCase()) : '')}${kv('Propuesta de renovación', l.renovar === true ? 'Sí, renovar' : l.renovar === false ? 'No' : '')}
-        ${kv('Promedio histórico', l.histProm !== null ? `${nf1.format(l.histProm)} t/ha · ${l.histN} zafras` : '')}${kv('Máximo histórico', l.histMax !== null ? nf1.format(l.histMax) + ' t/ha' : '')}
-        ${l.renovar && deltaEsperado(l) !== null ? kv('Al renovar, esperado', `${signo(deltaEsperado(l))} t/ha (plantillas de la zona: ${nf1.format(PLANT_ZONA[l.zona])})`) + kv('Al renovar, techo', deltaTecho(l) === null ? '' : `${signo(deltaTecho(l))} t/ha (su máximo)`) : ''}
+        ${kv('Promedio histórico', l.histProm !== null ? `${nfTch.format(l.histProm)} t/ha · ${l.histN} zafras` : '')}${kv('Máximo histórico', l.histMax !== null ? nfTch.format(l.histMax) + ' t/ha' : '')}
+        ${l.renovar && deltaEsperado(l) !== null ? kv('Al renovar, esperado', `${signo(deltaEsperado(l))} t/ha (plantillas de la zona: ${nfTch.format(PLANT_ZONA[l.zona])})`) + kv('Al renovar, techo', deltaTecho(l) === null ? '' : `${signo(deltaTecho(l))} t/ha (su máximo)`) : ''}
         ${kv('Corte programado', l.fProg ? `${fechaCorta(l.fProg)}${l.semProg ? ' · semana ' + l.semProg.sem : ''}` : '')}${kv('Último corte', l.fCorte ? `${fechaCorta(l.fCorte)}${l.zafra ? ' · zafra ' + l.zafra : ''}` : '')}${kv('Días desde el corte', diasDesde(l.fCorte) === null ? '' : nf0.format(diasDesde(l.fCorte)))}
-        ${kv('Toneladas estimadas', l.tonEst > 0 ? nf0.format(l.tonEst) + ' t' : '')}${kv('Toneladas optimistas', l.tonOpt > 0 ? nf0.format(l.tonOpt) + ' t' : '')}
-        ${kv('Brecha vs. optimista', brecha === null ? '' : nf1.format(brecha) + ' t/ha')}
+        ${kv('Toneladas estimadas', l.tonEst > 0 ? nfT.format(l.tonEst) + ' t' : '')}${kv('Toneladas optimistas', l.tonOpt > 0 ? nfT.format(l.tonOpt) + ' t' : '')}
+        ${kv('Brecha vs. optimista', brecha === null ? '' : signo(brecha) + ' t/ha')}
       </div>
       ${tab ? '<p class="pie">TCH, edad, variedad y aforo son datos del lote completo; el shape no los trae por tablón.</p>' : ''}
-      ${tablones.length > 1 ? `<h4>Tablones del lote (${tablones.length})</h4><div class="tablones">${tablones.map(f => `<button type="button" class="${f === selFeat ? 'activo' : ''}" onclick="seleccionarTablon(${f._i})"><b>${esc(f.properties.Tablon || '—')}</b><span>${nf.format(f.properties.Area_Ha)} ha</span></button>`).join('')}</div>` : ''}
+      ${tablones.length > 1 ? `<h4>Tablones del lote (${tablones.length})</h4><div class="tablones">${tablones.map(f => `<button type="button" class="${f === selFeat ? 'activo' : ''}" onclick="seleccionarTablon(${f._i})"><b>${esc(f.properties.Tablon || '—')}</b><span>${fmtHaLote(f.properties.Area_Ha)}</span></button>`).join('')}</div>` : ''}
       <div class="mini-acc">
         ${llegar ? `<a href="${llegar}" target="_blank" rel="noopener">${ico('nav')} Llegar</a>` : ''}
         <button type="button" onclick="favToggle(selCod)">${ico(fav ? 'starFill' : 'star')} Favorito</button>
@@ -521,7 +529,7 @@ function renderCard() {
   ajustarCard(); if (cardFull) { el.scrollTop = 0; if (typeof pintarFotosLote === 'function') pintarFotosLote(l.cod); }
 }
 function cardAlternar() { cardFull = !cardFull; renderCard(); }
-function acercarLote() { const l = LOTES[selCod]; if (l && l.bbox) { soltarSeguimiento(); cardFull = false; renderCard(); map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, 290), {maxZoom: 19})); } }
+function acercarLote() { const l = LOTES[selCod]; if (l && l.bbox) { soltarSeguimiento(); cardFull = false; renderCard(); map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, margenCard()), {maxZoom: 19})); } }
 function copiarTexto(txt, ok = 'Copiado') {
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(() => toast(ok, {tipo: 'bien'})).catch(() => prompt('Copie:', txt)); else prompt('Copie:', txt);
 }
@@ -529,7 +537,7 @@ function copiarCoords() { const c = centroideFeat(selFeat) || centroideLote(LOTE
 function enlaceLote(cod) { return location.origin + location.pathname + '?lote=' + encodeURIComponent(cod); }
 function compartirLote(cod) {
   const l = LOTES[cod], c = centroideLote(l); if (!l) return;
-  const txt = `Lote ${l.cod} · ${l.hac}\n${fmtN(l.area, ' ha')}${l.variedad ? ' · ' + l.variedad : ''}\nAbrir en CASUR Maps: ${enlaceLote(cod)}` + (c ? `\nCómo llegar: https://www.google.com/maps/dir/?api=1&destination=${c[0].toFixed(6)},${c[1].toFixed(6)}` : '');
+  const txt = `Lote ${l.cod} · ${l.hac}\n${fmtHaLote(l.area)}${l.variedad ? ' · ' + l.variedad : ''}\nAbrir en CASUR Maps: ${enlaceLote(cod)}` + (c ? `\nCómo llegar: https://www.google.com/maps/dir/?api=1&destination=${c[0].toFixed(6)},${c[1].toFixed(6)}` : '');
   if (navigator.share) navigator.share({title: 'Lote ' + l.cod, text: txt}).catch(() => {}); else window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 
@@ -549,7 +557,7 @@ function histSvg(item) {
   const max = Math.ceil((Math.max(...v, avg) + 10) / 10) * 10, pw = W - ml - mr, ph = H - mt - mb, bw = Math.min(46, pw / rows.length * .62);
   const x = i => ml + (i + .5) * pw / rows.length, y = t => mt + (max - t) * ph / max;
   const bars = rows.map((r, i) => `<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${y(r.tch).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - mb - y(r.tch)).toFixed(1)}" rx="5" class="${r.tch >= avg ? 'hb-ok' : (r.tch < 55 ? 'hb-mal' : 'hb-med')}"/><text x="${x(i).toFixed(1)}" y="${(y(r.tch) - 7).toFixed(1)}" class="hv">${nf0.format(r.tch)}</text><text x="${x(i).toFixed(1)}" y="${H - 14}" class="hz">${esc(r.zafra || '')}</text>`).join('');
-  return `<svg class="hist" viewBox="0 0 ${W} ${H}" role="img" aria-label="TCH por zafra">${bars}<line x1="${ml}" x2="${W - mr}" y1="${y(avg).toFixed(1)}" y2="${y(avg).toFixed(1)}" class="hprom"/><text x="${W - mr}" y="${(y(avg) - 6).toFixed(1)}" class="hpt">Prom. ${nf1.format(avg)}</text></svg>`;
+  return `<svg class="hist" viewBox="0 0 ${W} ${H}" role="img" aria-label="TCH por zafra">${bars}<line x1="${ml}" x2="${W - mr}" y1="${y(avg).toFixed(1)}" y2="${y(avg).toFixed(1)}" class="hprom"/><text x="${W - mr}" y="${(y(avg) - 6).toFixed(1)}" class="hpt">Prom. ${nfTch.format(avg)}</text></svg>`;
 }
 
 /* ── Resumen de finca / productor ── */
@@ -561,10 +569,10 @@ function abrirFinca(nombre, zoom = false) {
   const rojos = ls.filter(l => estadoLote(l).cls === 'mal');
   const orden = ls.slice().sort((a, b) => ({mal: 0, medio: 1}[estadoLote(a).cls] ?? 2) - ({mal: 0, medio: 1}[estadoLote(b).cls] ?? 2) || a.cod.localeCompare(b.cod, 'es', {numeric: true}));
   abrirHoja(nombre, `
-    <div class="cifras c4">${cifra('Lotes', ls.length)}${cifra('Área molienda', nf0.format(area) + ' ha')}${cifra('Toneladas', nf0.format(ton))}${cifra('TCH pond.', area ? nf1.format(ton / area) : '—', 'c-est')}</div>
-    <p class="pie">Área total ${nf0.format(areaTot)} ha · optimista ${area ? nf1.format(tonOpt / area) : '—'} t/ha · ${rojos.length} lote(s) en prioridad alta${ls.some(l => l.renovar) ? ` · ${ls.filter(l => l.renovar).length} a renovar (${nf0.format(ls.filter(l => l.renovar).reduce((s, l) => s + (l.area || 0), 0))} ha)` : ''}</p>
+    <div class="cifras c4">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área molienda', conUnidad(nfHa.format(area), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(ton), ' t'))}${cifra('TCH pond.', area ? nfTch.format(ton / area) : '—', 'c-est')}</div>
+    <p class="pie">Área total ${nfHa.format(areaTot)} ha · optimista ${area ? nfTch.format(tonOpt / area) : '—'} t/ha · ${rojos.length} lote(s) en prioridad alta${ls.some(l => l.renovar) ? ` · ${ls.filter(l => l.renovar).length} a renovar (${nfHa.format(ls.filter(l => l.renovar).reduce((s, l) => s + (l.area || 0), 0))} ha)` : ''}</p>
     <div class="acciones"><button type="button" class="btn sec" onclick="verFincaEnMapa('${esc(nombre).replace(/'/g, '&#39;')}')">${ico('zoomIn')} Ver en mapa</button></div>
-    <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${fmtN(l.area, ' ha', nf1)} · ant. ${fmtN(l.tchAnt, '', nf0)} · est. ${l.tchEst > 0 ? nf0.format(l.tchEst) : '—'}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`);
+    <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${fmtHaLote(l.area)} · ant. ${fmtTch(l.tchAnt)} · est. ${l.tchEst > 0 ? nfTch.format(l.tchEst) : '—'}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`);
   if (zoom) verFincaEnMapa(nombre, false);
 }
 function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) { soltarSeguimiento(); map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); } }
