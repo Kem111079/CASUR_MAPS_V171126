@@ -320,7 +320,7 @@ function pintarLeyenda() {
   const q = el.querySelector('.ley-quitar'); if (q) q.onclick = () => filtrarClase(null);
   const ab = el.querySelector('.ley-ab'); if (ab) ab.onclick = () => cambiarCapaRapida(ab.dataset.capa);
   el.querySelector('.ley-cuerpo').onclick = e => { const k = e.target.closest('button[data-capa]'); if (k) { cambiarCapaRapida(k.dataset.capa); return; } const a = e.target.closest('button[data-acc]'); if (a) { if (a.dataset.acc === 'enc') encuadrarFiltro(); else verListaFiltro(); return; } const b = e.target.closest('button[data-clase]'); if (!b) return; filtrarClase(temaFiltro === b.dataset.clase ? null : b.dataset.clase); };
-  leyAncho();
+  leyAncho(); if (antes !== leyPlegada || estabaOculta) etiquetasDebounce();
   if (!estabaOculta && antes !== leyPlegada && el.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches)
     el.animate([{opacity: .3, transform: 'scale(.96)'}, {opacity: 1, transform: 'none'}], {duration: 250, easing: 'cubic-bezier(.2,.8,.2,1)'});
 }
@@ -335,10 +335,12 @@ function actualizarEtiquetas() {
   if (!S.etiquetas) return;
   const z = map.getZoom(), b = map.getBounds().pad(0.05), w = b.getWest(), e = b.getEast(), s = b.getSouth(), n = b.getNorth();
   const toca = bb => bb && !(bb[0] > e || bb[2] < w || bb[1] > n || bb[3] < s);
-  // Evita etiquetas encimadas: se colocan primero las más importantes y se descarta la que choque con una ya puesta.
-  const cajas = [];
+  // Evita etiquetas encimadas, cortadas en el borde o tapadas por la interfaz: se trabaja en coordenadas de pantalla
+  // (el mapa puede estar girado), con el ancho real del texto; se colocan primero las más importantes.
+  const cajas = obstaculosEtq(), vis = visibleEtq(), toPant = puntoPantalla();
   const poner = (ll, txt, cls) => {
-    const p = map.latLngToContainerPoint(ll), w = txt.length * (cls === 'etq-finca' ? 8.6 : 6.8) + 8, h = 20, c = [p.x - w / 2, p.y - h / 2, p.x + w / 2, p.y + h / 2];
+    const p = toPant(map.latLngToContainerPoint(ll)), w = anchoEtq(txt, cls) + 8, h = cls === 'etq-tab' ? 18 : 20, c = [p.x - w / 2, p.y - h / 2, p.x + w / 2, p.y + h / 2];
+    if (c[0] < vis[0] || c[1] < vis[1] || c[2] > vis[2] || c[3] > vis[3]) return false;
     if (cajas.some(o => !(c[0] > o[2] || c[2] < o[0] || c[1] > o[3] || c[3] < o[1]))) return false;
     cajas.push(c);
     L.marker(ll, {interactive: false, keyboard: false, icon: L.divIcon({className: 'etq ' + cls, html: `<span>${esc(txt)}</span>`, iconSize: [0, 0]})}).addTo(capaEtiquetas);
@@ -351,15 +353,41 @@ function actualizarEtiquetas() {
     let k = 0;
     // Con la capa Semana de corte, los lotes con fecha próxima o vencida se etiquetan primero.
     const pri = l => { if (S.colorear !== 'semana') return 0; const c = claseCorte(l); return c !== null && c <= 2 ? 1 : 0; };
-    const vis = Object.values(LOTES).filter(l => l.principal && toca(l.bbox)).sort((a, b) => pri(b) - pri(a) || b.areaShape - a.areaShape);
-    for (const l of vis) { const c = centroideLote(l); if (c && b.contains(c) && poner(c, etqLote(l), 'etq-lote') && ++k > 320) break; }
+    const lv = Object.values(LOTES).filter(l => l.principal && toca(l.bbox)).sort((a, b) => pri(b) - pri(a) || b.areaShape - a.areaShape);
+    for (const l of lv) { const c = centroideLote(l); if (c && b.contains(c) && poner(c, etqLote(l), 'etq-lote') && ++k > 320) break; }
   } else if (z >= 12.5) {
-    const vis = Object.values(FINCAS).filter(f => toca(f.bbox)).sort((a, b) => b.lotes.length - a.lotes.length);
-    for (const f of vis) poner([(f.bbox[1] + f.bbox[3]) / 2, (f.bbox[0] + f.bbox[2]) / 2], f.nombre, 'etq-finca');
+    const fv = Object.values(FINCAS).filter(f => toca(f.bbox)).sort((a, b) => b.lotes.length - a.lotes.length);
+    for (const f of fv) poner(puntoFinca(f), f.nombre, 'etq-finca');
   }
 }
 
 /* Con la capa Semana de corte, los lotes vencidos o de las dos próximas semanas llevan su fecha en la etiqueta. */
+/* Ancho real del texto de una etiqueta (misma letra que el CSS: 800, 13 px; finca en mayúsculas con espaciado). */
+let _etqCtx = null, _etqFuente = '';
+function anchoEtq(txt, cls) {
+  if (!_etqCtx) { _etqCtx = document.createElement('canvas').getContext('2d'); _etqFuente = getComputedStyle(document.body).fontFamily || 'sans-serif'; }
+  const fin = cls === 'etq-finca', t = fin ? txt.toUpperCase() : txt;
+  _etqCtx.font = `800 ${cls === 'etq-tab' ? 12 : 13}px ${_etqFuente}`;
+  return _etqCtx.measureText(t).width + (fin ? t.length * 0.26 : 0) + 4; // + halo del texto
+}
+/* Punto del contenedor del mapa (que puede estar girado) → punto de pantalla. */
+function puntoPantalla() {
+  const sz = map.getSize(), r = map.getContainer().getBoundingClientRect(), t = mapRot * Math.PI / 180, cs = Math.cos(t), sn = Math.sin(t), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  return P => { const dx = P.x - sz.x / 2, dy = P.y - sz.y / 2; return {x: cx + cs * dx - sn * dy, y: cy + sn * dx + cs * dy}; };
+}
+/* Parte visible del mapa en pantalla (con un margen) y elementos de la interfaz que tapan etiquetas. */
+function visibleEtq() { const r = $('vistaMapa').getBoundingClientRect(); return [r.left + 4, r.top + 4, r.right - 4, r.bottom - 4]; }
+function obstaculosEtq() {
+  const sel = ['#arriba', '#chips>*:not([hidden])', '#leyenda:not(.oculta)', '#card:not(.oculta)', '.fab', '#medirBar:not([hidden])', '#atrib'];
+  const out = [];
+  sel.forEach(q => document.querySelectorAll(q).forEach(el => { if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return; const r = el.getBoundingClientRect(); if (r.width && r.height) out.push([r.left - 3, r.top - 3, r.right + 3, r.bottom + 3]); }));
+  return out;
+}
+/* Punto para el nombre de la finca: dentro de su lote más grande (el centro del recuadro puede caer fuera de la finca). */
+function puntoFinca(f) {
+  if (!f._pto) { let mejor = null; f.lotes.forEach(c => { const l = LOTES[c]; if (l && l.principal && (!mejor || l.areaShape > mejor.areaShape)) mejor = l; }); f._pto = (mejor && centroideLote(mejor)) || [(f.bbox[1] + f.bbox[3]) / 2, (f.bbox[0] + f.bbox[2]) / 2]; }
+  return f._pto;
+}
 function etqLote(l) {
   const nc = S.etqNc ? ncCorto(l) : '', base = l.cod + (nc ? ' · ' + nc : '');
   if (S.colorear !== 'semana') return base;
@@ -511,7 +539,7 @@ function ajustarCard() {
   const el = $('card'), vis = !el.classList.contains('oculta');
   document.body.classList.toggle('con-card', vis); document.body.classList.toggle('card-full', vis && cardFull); leyPorCard(vis);
   if (vis && !cardFull) document.body.style.setProperty('--card-h', Math.round(el.getBoundingClientRect().height) + 'px');
-  fabsConSitio(vis && !cardFull); ubicarAvisos(); histPedir();
+  fabsConSitio(vis && !cardFull); ubicarAvisos(); histPedir(); etiquetasDebounce();
 }
 /* Con la tarjeta compacta en una pantalla baja, «Ver alrededores» y la brújula subirían hasta el buscador:
    se ocultan mientras la tarjeta esté abierta (se calcula con su posición final, no durante la transición). */

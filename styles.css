@@ -286,7 +286,7 @@ svg.hist{width:100%;height:auto;display:block}
 .campo .req{font-weight:600;color:var(--texto2);font-size:calc(13px * var(--esc))}
 .cifras.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .cifras .c-alerta{background:var(--mal-f)}.cifras .c-alerta b{color:var(--mal)}
-.segmento.filtro{margin:10px 0;display:flex;flex-wrap:wrap} /* si «Resueltos» no cabe, baja a otra fila */
+.segmento.filtro{margin:10px auto;display:flex;flex-wrap:wrap} /* si «Resueltos» no cabe, baja a otra fila */
 .segmento.filtro button{flex:1 1 auto;padding:0 12px}
 .desliza{touch-action:pan-y;transition:transform .18s ease,opacity .18s ease;position:relative}
 /* Detrás de la fila que se desliza: qué va a pasar (Resolver, Reabrir o Borrar); al pasar el umbral se resalta. */
@@ -557,3 +557,26 @@ body[data-tab=mapa] .toast{max-width:none}
 .ley-cuerpo .ley-capas button.ant{background-color:var(--pri);color:var(--pri-t);border-color:var(--pri)}
 .ley-cuerpo .ley-acc button{width:auto;margin:0;background-image:none;border-radius:10px}
 .ley-cuerpo .ley-acc button+button{background-color:var(--fondo)}
+
+/* ── Tableta ── */
+.mas-c2>.btn.ancho+header{margin-top:22px}
+@media (min-width:1000px){
+  .tab>.mas-grid{max-width:1240px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+  .mas-grid .ejec{margin-top:4px}
+  .tab>.marca{max-width:1240px}
+}
+/* Riel de navegación a la izquierda en tableta horizontal: deja toda la altura para el mapa. */
+@media (min-width:1000px) and (min-aspect-ratio:5/4){
+  :root{--nav:0px;--rail:96px}
+  #nav{top:0;right:auto;width:var(--rail);height:auto;padding:calc(10px + var(--sat)) 0 calc(10px + var(--sab));grid-template-columns:1fr;grid-template-rows:repeat(5,84px);align-content:center;border-top:0;border-right:1px solid var(--linea)}
+  #nav::before{left:auto;right:-1px;top:0;bottom:0;width:3px;height:auto;background:linear-gradient(180deg,#0b7f3a 0 45%,#005baa 45% 85%,#f4c542 85%)}
+  #nav button{font-size:13px}
+  #nav button.activo{background:color-mix(in srgb,var(--pri) 10%,transparent)}
+  #nav button.activo svg{transform:none}
+  #vistaMapa,.tab{left:var(--rail)}
+  .barra-accion{left:var(--rail)}
+  #toasts{left:calc(var(--rail) + 12px)}
+  body[data-tab=mapa] #toasts{left:calc(var(--rail) + 76px)}
+  body[data-tab=mapa].con-card #toasts,body[data-tab=mapa].con-card.card-full #toasts{left:calc(var(--rail) + 518px)}
+  .hoja{left:var(--rail)}
+}
