@@ -503,6 +503,8 @@ function cierreVisita(v) {
   const d = datosVisita(v);
   abrirHoja('Visita finalizada', `
     <div class="cifras c4">${cifra('Duración', fmtDur(d.fin - d.ini))}${cifra('Distancia', fmtDist(v.dist || 0))}${cifra('Lotes', d.cods.length)}${cifra('Hallazgos', d.obs.length, d.alta.length ? 'c-alerta' : '')}</div>
+    ${(() => { const pl = v.plan || [], t = pl.length; if (!t) return ''; const h = pl.filter(x => x.hecho).length, pc = Math.round(h / t * 100), falt = pl.filter(x => !x.hecho).map(x => x.cod);
+      return `<div class="cumple ${pc >= 100 ? 'est-bien' : pc >= 60 ? 'est-medio' : 'est-mal'}"><div><b>${pc} %</b><span>Cumplimiento de la lista del día: ${h} de ${t} lotes</span></div><i><u style="width:${pc}%"></u></i>${falt.length ? `<small>Faltaron: ${falt.slice(0, 12).map(esc).join(' · ')}${falt.length > 12 ? ' …' : ''}</small>` : ''}</div>`; })()}
     ${d.cods.length ? `<p class="pie">Lotes visitados: ${d.cods.map(esc).join(' · ')}</p>` : '<p class="vacio">No se registró ningún lote visitado (hay que estar dentro del lote).</p>'}
     ${d.pend.length ? `<h4>Pendientes abiertos (${d.pend.length})</h4>${d.pend.slice(0, 6).map(o => `<div class="hist-fila"><b>Lote ${esc(o.codlote)}</b><span>${esc(o.categoria)} · ${esc(o.severidad)}${o.nota ? ' · ' + esc(o.nota.slice(0, 60)) : ''}</span></div>`).join('')}` : '<div class="nota est-bien">Sin pendientes abiertos en esta visita.</div>'}
     <button type="button" class="btn pri ancho grande" onclick="compartirVisita('${esc(v.id)}')">${ico('share')} Enviar resumen por WhatsApp</button>
@@ -721,10 +723,28 @@ function rapidosHtml() {
     <div class="rapidos" id="rapidos">${RAPIDOS.map(c => { const s = rapSev || sevDe(c); return `<button type="button" onclick="registroRapido('${c}')">${ico(ICONO_CAT[c])}${c}<small class="sev-${s.toLowerCase()}">${s}</small></button>`; }).join('')}</div>`;
 }
 let bitFiltro = 'pendientes';
+/* Filtros de la lista de la Bitácora: estado (arriba), severidad, categoría y texto (lote, finca o nota). */
+let bitSev = '', bitCat = '', bitQ = '';
+function bitFiltrar(todas) {
+  const pend = todas.filter(esPendiente), q = sinTildes(bitQ.trim()).toUpperCase();
+  let l = bitFiltro === 'pendientes' ? pend : bitFiltro === 'resueltos' ? todas.filter(o => o.resuelto) : todas;
+  if (bitSev) l = l.filter(o => o.severidad === bitSev);
+  if (bitCat) l = l.filter(o => o.categoria === bitCat);
+  if (q) l = l.filter(o => sinTildes([o.codlote, (LOTES[o.codlote] || {}).hac, o.nota, o.categoria].join(' ')).toUpperCase().includes(q));
+  return l;
+}
+function pintarBitLista() {
+  const box = $('bitLista'); if (!box) return;
+  const todas = obsTodas().slice().reverse(), lista = bitFiltrar(todas), filtrando = bitSev || bitCat || bitQ.trim();
+  box.innerHTML = (filtrando ? `<p class="pie bit-cuenta"><b>${nf0.format(lista.length)}</b> de ${nf0.format(todas.length)} registros · <button type="button" class="enlace" onclick="bitSev='';bitCat='';bitQ='';renderBitacora()">Quitar filtros</button></p>` : '') +
+    (lista.length ? `<p class="pie">${AYUDA_DESLIZA[bitFiltro]}</p>` + lista.map(filaDeslizaHtml).join('')
+      : `<p class="vacio">${todas.length ? (bitFiltro === 'pendientes' && !filtrando ? 'Sin pendientes: todo lo de severidad media o alta está resuelto.' : 'Nada en este filtro.') : 'Aún no hay registros. Use un botón de registro rápido o "Nuevo hallazgo".'}</p>`);
+  activarDeslizar(box);
+}
 function renderBitacora() {
   const todas = obsTodas().slice().reverse(), pend = todas.filter(esPendiente);
   if (bitFiltro === 'pendientes' && !pend.length && todas.length) bitFiltro = 'todos';
-  const lista = bitFiltro === 'pendientes' ? pend : bitFiltro === 'resueltos' ? todas.filter(o => o.resuelto) : todas;
+  const cats = [...new Set(todas.map(o => o.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
   const semana = todas.filter(o => Date.now() - new Date(o.fecha_hora) < 7 * 86400000).length;
   _destHtml = '';
   $('tabBitacora').innerHTML = `<header><h2>Bitácora</h2></header>
@@ -733,15 +753,22 @@ function renderBitacora() {
     <h3>Registros</h3>
     <div class="cifras c3">${cifra('Pendientes', pend.length, pend.length ? 'c-alerta' : '')}${cifra('Últimos 7 días', semana)}${cifra('Total', todas.length)}</div>
     <div class="segmento filtro">${[['pendientes', 'Pendientes'], ['todos', 'Todos'], ['resueltos', 'Resueltos']].map(f => `<button type="button" class="${bitFiltro === f[0] ? 'activo' : ''}" onclick="bitFiltro='${f[0]}';renderBitacora()">${f[1]}</button>`).join('')}</div>
-    ${lista.length ? `<p class="pie">${AYUDA_DESLIZA[bitFiltro]}</p>` + lista.map(filaDeslizaHtml).join('')
-      : `<p class="vacio">${todas.length ? (bitFiltro === 'pendientes' ? 'Sin pendientes: todo lo de severidad media o alta está resuelto.' : 'Nada en este filtro.') : 'Aún no hay registros. Use un botón de registro rápido o "Nuevo hallazgo".'}</p>`}
+    ${todas.length > 1 ? `<div class="bit-filtros">
+      <input id="bitQ" type="search" placeholder="Buscar lote, finca o nota" value="${esc(bitQ)}" autocomplete="off" enterkeyhint="search" aria-label="Buscar en la bitácora">
+      <div class="chips-fil" role="group" aria-label="Severidad">${[['', 'Toda severidad'], ['Alta', 'Alta'], ['Media', 'Media'], ['Baja', 'Baja']].map(x => `<button type="button" class="${bitSev === x[0] ? 'activo' : ''}" aria-pressed="${bitSev === x[0]}" data-sev="${x[0]}">${x[1]}</button>`).join('')}</div>
+      ${cats.length > 1 ? `<select id="bitCat" aria-label="Categoría"><option value="">Todas las categorías</option>${cats.map(c => `<option ${c === bitCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : ''}
+    </div>` : ''}
+    <div id="bitLista"></div>
     ${todas.length ? `<h3>Respaldo</h3><p class="pie">Los registros viven solo en este teléfono. Exporte para respaldarlos.</p><div class="acciones"><button type="button" class="btn sec" onclick="exportarZip()">${ico('download')} ZIP con fotos</button><button type="button" class="btn ter" onclick="exportarCsv()">CSV</button></div>
       <button type="button" class="btn peligro ancho" onclick="vaciarBitacora()">Borrar toda la bitácora y sus fotos</button>` : ''}
     <div class="barra-accion"><button type="button" class="btn pri grande" onclick="nuevoRegistro()">${ico('plus')} Nuevo hallazgo</button></div>`;
   $('rapidosBox').addEventListener('click', e => { const b = e.target.closest('#rapSev button'); if (!b) return; rapSev = b.dataset.v; $('rapidosBox').innerHTML = rapidosHtml(); pintarDestino(); });
   pintarDestino();
   clearInterval(_destT); _destT = setInterval(() => { if (document.body.dataset.tab === 'bitacora') pintarDestino(); else clearInterval(_destT); }, 1000);
-  activarDeslizar($('tabBitacora'));
+  activarDeslizar($('tabBitacora')); pintarBitLista();
+  const q = $('bitQ'); if (q) q.addEventListener('input', e => { bitQ = e.target.value; pintarBitLista(); });
+  const ct = $('bitCat'); if (ct) ct.addEventListener('change', e => { bitCat = e.target.value; pintarBitLista(); });
+  const fs = document.querySelector('#tabBitacora .chips-fil'); if (fs) fs.addEventListener('click', e => { const b = e.target.closest('button[data-sev]'); if (!b) return; bitSev = b.dataset.sev; fs.querySelectorAll('button').forEach(x => { x.classList.toggle('activo', x === b); x.setAttribute('aria-pressed', x === b); }); pintarBitLista(); });
 }
 /* ── Exportar: CSV para Excel con fecha y hora locales (no UTC) y columnas para gerencia; ZIP con el CSV y las fotos ── */
 const dos = n => String(n).padStart(2, '0');
@@ -1078,7 +1105,7 @@ async function iniciar() {
     $('hojaX').addEventListener('click', () => pedirCerrarHoja()); $('hojaFondo').addEventListener('click', e => { if (!hojaRecien(e)) pedirCerrarHoja(); });
     $('hojaBody').addEventListener('click', e => { if (hojaRecien(e)) { e.stopPropagation(); e.preventDefault(); } }, true); // segundo toque de un doble toque
     $('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) mostrarTab(b.dataset.tab); });
-    $('medirDeshacer').addEventListener('click', medirDeshacer); $('medirFin').addEventListener('click', medirCerrar);
+    $('medirDeshacer').addEventListener('click', medirDeshacer); $('medirFin').addEventListener('click', medirCerrar); $('medirCompartir').addEventListener('click', medirCompartir);
     document.addEventListener('keydown', e => { // Escape (tableta o escritorio): diálogo, sugerencias, hoja y luego la tarjeta
       if (e.key !== 'Escape') return;
       if (cerrarPregunta(false)) return;

@@ -1,5 +1,11 @@
 # Cambios
 
+## V271126E · 27-nov-2026 · Fase 2, entrega 4: campo
+- **Visita:** el aviso del mapa dice «Grabando» con un punto rojo que late, para saber con certeza que se está grabando la ruta.
+- **Cierre de visita:** cumplimiento de la lista del día (porcentaje, barra y lotes que faltaron).
+- **Bitácora:** búsqueda por lote, finca o nota, filtro por severidad y por categoría, con el número de registros que cumplen y «Quitar filtros».
+- **Medición:** botón «Compartir» que genera una imagen con la figura sobre los lotes y el resultado (ha, mz, perímetro o distancia), lista para WhatsApp.
+
 ## V271126D · 27-nov-2026 · Fase 2, entrega 3: tableta y etiquetas sin cortes
 - **Tableta horizontal:** la navegación pasa a una barra lateral (más alto para el mapa) y Resumen se ve en dos columnas: «Cómo vamos» a la izquierda y el aforo y la renovación a la derecha.
 - **Etiquetas sin cortes:** se mide el ancho real de cada texto y no se dibujan etiquetas cortadas en el borde ni tapadas por el buscador, los avisos, la leyenda, la tarjeta o los botones. Funciona también con el mapa girado.
