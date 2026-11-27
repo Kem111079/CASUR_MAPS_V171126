@@ -149,18 +149,18 @@ const CAT_NEUTROS = new Set(['', 'SIN DATO', 'SIN AFORO', 'VARIEDADES', 'SIN DEF
 const esNeutro = k => CAT_NEUTROS.has(sinTildes(k).trim());
 const TEMAS = {
   ninguno: {t: 'Sin color'},
-  tchEst: {t: 'TCH estimado 26/27', u: 't/ha', val: l => esMolienda(l) && l.tchEst > 0 ? l.tchEst : null, cortes: [40, 55, 70, 85], rampa: RAMPA_TCH},
-  edad: {t: 'Edad desde el corte', u: 'meses', val: edadMeses, cortes: [3, 6, 9, 12]},
+  tchEst: {t: 'TCH estimado 26/27', u: 't/ha', sin: 'Sin aforo', val: l => esMolienda(l) && l.tchEst > 0 ? l.tchEst : null, cortes: [40, 55, 70, 85], rampa: RAMPA_TCH},
+  edad: {t: 'Edad desde el corte', u: 'meses', sin: 'Sin fecha de corte', val: edadMeses, cortes: [3, 6, 9, 12]},
   zona: {t: 'Zona', cat: l => l.zona || 'Sin dato'},
   riego: {t: 'Tipo de riego', cat: l => l.riego || 'Sin dato'},
   variedad: {t: 'Variedad', cat: l => l.variedad || 'Sin dato'},
   destino: {t: 'Destino / clasificación', cat: l => l.conAforo ? (l.clas || 'Sin dato') : 'Sin aforo'},
-  socas: {t: 'Plantillas y socas', clave: l => { const i = GR_CORTE.indexOf(l.grCorte); return i < 0 ? null : i; }, clases: () => [
+  socas: {t: 'Plantillas y socas', sin: 'Sin grupo de corte', clave: l => { const i = GR_CORTE.indexOf(l.grCorte); return i < 0 ? null : i; }, clases: () => [
     {txt: 'Plantilla', color: '#1a9850'}, {txt: 'Soca, corte 2', color: '#a6d96a'}, {txt: 'Soca, corte 3', color: '#fee08b'},
     {txt: 'Soca, corte 4', color: '#fdae61'}, {txt: 'Soca, corte 5', color: '#f46d43'}, {txt: 'Soca, más de 5 cortes', color: '#a50026'}]},
-  renovacion: {t: 'Propuesta de renovación', clave: l => l.renovar === true ? 0 : l.renovar === false ? 1 : null, clases: () => [
+  renovacion: {t: 'Propuesta de renovación', sin: 'Sin propuesta', clave: l => l.renovar === true ? 0 : l.renovar === false ? 1 : null, clases: () => [
     {txt: 'Renovar', color: '#d7191c'}, {txt: 'No renovar', color: '#74add1'}]},
-  semana: {t: 'Semana de corte', sin: 'Sin fecha', clave: claseCorte, clases: () => [
+  semana: {t: 'Semana de corte', sin: 'Sin fecha programada', clave: claseCorte, clases: () => [
     {txt: 'Fecha vencida', color: '#d7191c'},
     {txt: SEMANAS_PROX[0] ? `Sem. ${SEMANAS_PROX[0].sem} · ${rangoSemana(SEMANAS_PROX[0])}` : 'Próxima semana', color: '#ff8c00'},
     {txt: SEMANAS_PROX[1] ? `Sem. ${SEMANAS_PROX[1].sem} · ${rangoSemana(SEMANAS_PROX[1])}` : 'Semana siguiente', color: '#1f77b4'},
@@ -169,6 +169,17 @@ const TEMAS = {
 };
 if (!TEMAS[S.colorear]) S.colorear = 'ninguno'; // capas retiradas (TCH última zafra, brecha)
 let temaColor = new Map(), temaLeyenda = [], temaClase = new Map(), temaFiltro = null;
+/* Lotes sin valor en la capa: se separan los que no son de molienda (Semilla, Baja rentabilidad, Sin caña…: no llevan
+   ese dato) de los que sí deberían tenerlo (falta información). Cada fila trae su desglose. */
+const FUERA = 'Fuera de molienda', esFuera = l => l.conAforo && !esMolienda(l);
+function filasSinValor(ls, T) {
+  const fuera = ls.filter(esFuera), falta = ls.filter(l => !esFuera(l)), filas = [];
+  const desglose = (arr, k) => { const g = {}; arr.forEach(l => { const x = k(l); g[x] = (g[x] || 0) + 1; }); return Object.entries(g).sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} ${n}`).join(' · '); };
+  if (fuera.length) { fuera.forEach(l => temaClase.set(l.cod, FUERA)); filas.push({color: null, fuera: true, txt: FUERA, ha: fuera.reduce((s, l) => s + l.areaShape, 0), n: fuera.length, det: desglose(fuera, l => ({Semilla: 'Semilla', 'Baja rentabilidad': 'Baja rent.', Investigacion: 'Invest.'})[l.clas] || rotulo(l.clas) || 'Otro')}); }
+  if (falta.length) { const nom = T.sin || 'Sin dato'; falta.forEach(l => temaClase.set(l.cod, nom)); const sinAf = falta.filter(l => !l.conAforo).length;
+    filas.push({color: null, txt: nom, ha: falta.reduce((s, l) => s + l.areaShape, 0), n: falta.length, det: S.colorear === 'tchEst' && sinAf && sinAf < falta.length ? `${sinAf} sin aforo · ${falta.length - sinAf} sin TCH est.` : ''}); }
+  return filas;
+}
 function prepararTema() {
   temaColor = new Map(); temaLeyenda = []; temaClase = new Map();
   const T = TEMAS[S.colorear] || TEMAS.ninguno, lotes = Object.values(LOTES).filter(l => l.nPoly);
@@ -176,14 +187,16 @@ function prepararTema() {
     const c = T.cortes, rotulos = [`< ${c[0]}`, ...c.slice(0, -1).map((v, i) => `${v} – ${c[i + 1]}`), `> ${c[c.length - 1]}`];
     const ha = new Array(rotulos.length).fill(0), n = ha.slice(); let sin = 0, nSin = 0;
     const R = T.rampa || RAMPA;
-    lotes.forEach(l => { const v = T.val(l); if (v === null || v === undefined) { sin += l.areaShape; nSin++; return; } let i = c.findIndex(x => v < x); if (i < 0) i = c.length; temaColor.set(l.cod, R[i]); temaClase.set(l.cod, rotulos[i]); ha[i] += l.areaShape; n[i]++; });
+    const faltan = [];
+    lotes.forEach(l => { const v = T.val(l); if (v === null || v === undefined) { faltan.push(l); return; } let i = c.findIndex(x => v < x); if (i < 0) i = c.length; temaColor.set(l.cod, R[i]); temaClase.set(l.cod, rotulos[i]); ha[i] += l.areaShape; n[i]++; });
     temaLeyenda = rotulos.map((r, i) => ({color: R[i], txt: r, ha: ha[i], n: n[i]})).filter(x => x.n);
-    if (sin > 0) temaLeyenda.push({color: null, txt: 'Sin dato', ha: sin, n: nSin});
+    temaLeyenda.push(...filasSinValor(faltan, T));
   } else if (T.clases) {
     const defs = T.clases(), ha = defs.map(() => 0), n = defs.map(() => 0); let sin = 0, nSin = 0;
-    lotes.forEach(l => { const i = T.clave(l); if (i === null) { sin += l.areaShape; nSin++; return; } temaColor.set(l.cod, defs[i].color); temaClase.set(l.cod, defs[i].txt); ha[i] += l.areaShape; n[i]++; });
+    const faltan = [];
+    lotes.forEach(l => { const i = T.clave(l); if (i === null) { faltan.push(l); return; } temaColor.set(l.cod, defs[i].color); temaClase.set(l.cod, defs[i].txt); ha[i] += l.areaShape; n[i]++; });
     temaLeyenda = defs.map((d, i) => ({color: d.color, txt: d.txt, ha: ha[i], n: n[i]})).filter(x => x.n);
-    if (sin > 0) temaLeyenda.push({color: null, txt: T.sin || 'Sin dato', ha: sin, n: nSin});
+    temaLeyenda.push(...filasSinValor(faltan, T));
   } else if (T.cat) {
     const ha = {}, n = {}; lotes.forEach(l => { const k = T.cat(l); ha[k] = (ha[k] || 0) + l.areaShape; n[k] = (n[k] || 0) + 1; });
     const fijos = CAT_COLORES[S.colorear] || {}, reserva = CATS_RESERVA.slice(), col = {};
@@ -223,8 +236,12 @@ function estiloFeat(f) {
       if (n === 0) return estiloPlano(g, .9);
       return {stroke: true, color: sat ? '#ffffff' : g, weight: n === 1 ? .6 : 1, opacity: .9, fillColor: g, fillOpacity: n === 1 ? .7 : .6};
     }
+    if (temaClase.get(f._cod) === FUERA) { // no lleva el dato: gris liso, más tenue que «sin dato»
+      if (n === 0) return estiloPlano('#c3c9d0', .35);
+      return {stroke: true, color: sat ? '#ffffff' : '#a3abb4', weight: n === 1 ? .3 : .6, opacity: n === 1 ? .4 : .6, fillColor: '#c3c9d0', fillOpacity: n === 1 ? .28 : .22};
+    }
     if (n === 0) return estiloPlano('#9aa3ad', .45);
-    return {stroke: true, color: sat ? '#ffffff' : '#7b8794', weight: n === 1 ? .4 : .8, opacity: n === 1 ? .5 : .7, fillColor: '#9aa3ad', fillOpacity: n === 1 ? .2 : .12};
+    return {stroke: true, color: sat ? '#ffffff' : '#7b8794', weight: n === 1 ? .4 : .8, opacity: n === 1 ? .5 : .7, fillColor: '#9aa3ad', fillOpacity: n === 1 ? .2 : .12, dashArray: n === 2 ? '4 3' : null};
   }
   const filtrado = temaFiltro !== null; // la clase elegida se pinta más intensa sobre el resto atenuado
   if (n === 0) return estiloPlano(c, filtrado ? .95 : sat ? .8 : .85);
@@ -298,7 +315,7 @@ function capasRapidas() {
 function pintarLeyenda() {
   const el = $('leyenda'); if (!el) return;
   if (!leyVisible()) { el.classList.add('oculta'); clearTimeout(_leyT); _leyT = null; return; }
-  const T = TEMAS[S.colorear], total = temaLeyenda.reduce((s, x) => s + x.ha, 0) || 1;
+  const T = TEMAS[S.colorear], total = temaLeyenda.filter(x => x.color).reduce((s, x) => s + x.ha, 0) || 1;
   const filtro = temaFiltro !== null ? temaLeyenda.find(x => x.txt === temaFiltro) : null;
   const claseSel = selCod && LOTES[selCod] ? (temaClase.get(selCod) || T.sin || 'Sin dato') : null;
   const antes = el.classList.contains('plegada'), estabaOculta = el.classList.contains('oculta');
@@ -313,7 +330,7 @@ function pintarLeyenda() {
     (leyPlegada && filtro ? `<button type="button" class="ley-quitar" aria-label="Quitar filtro y ver todos los lotes">${ico('x')}</button>` : '') +
     (leyPlegada && !filtro && capaAnterior && capaAnterior !== S.colorear ? `<button type="button" class="ley-ab" data-capa="${capaAnterior}" aria-label="Cambiar a ${esc(TEMAS[capaAnterior].t)}" title="Cambiar a ${esc(TEMAS[capaAnterior].t)}">${ico('swap')}</button>` : '') +
     `<div class="ley-cuerpo" id="leyCuerpo">` + `<div class="ley-capas" role="toolbar" aria-label="Cambiar de capa">${capasRapidas()}</div>` +
-    temaLeyenda.map(x => { const p = x.ha / total * 100, on = temaFiltro === x.txt; return `<button type="button" class="${on ? 'activo' : temaFiltro !== null ? 'apagado' : ''}${x.color ? '' : ' neutro'}" data-clase="${esc(x.txt)}" aria-pressed="${on}" style="--p:${Math.min(100, p).toFixed(1)}%${x.color ? ';--c:' + x.color : ''}">${muestra(x.color)}<span class="ley-txt"><b>${esc(rotulo(x.txt))}</b><small>${leyDetalle(x)}<span class="ley-pct"> · ${nbsp(pctTxt(p))}</span></small>${claseSel === x.txt ? '<small class="ley-este"><strong>este lote</strong></small>' : ''}</span><em>${pctTxt(p)}</em></button>`; }).join('') +
+    temaLeyenda.map(x => { const p = x.color ? x.ha / total * 100 : 0, on = temaFiltro === x.txt; return `${!x.color && temaLeyenda.find(y => !y.color) === x ? '<hr class="ley-sep">' : ''}<button type="button" class="${on ? 'activo' : temaFiltro !== null ? 'apagado' : ''}${x.color ? '' : ' neutro'}${x.fuera ? ' fuera' : ''}" data-clase="${esc(x.txt)}" aria-pressed="${on}" style="--p:${Math.min(100, p).toFixed(1)}%${x.color ? ';--c:' + x.color : ''}">${x.fuera ? '<span class="ley-color fuera"></span>' : muestra(x.color)}<span class="ley-txt"><b>${esc(rotulo(x.txt))}</b><small>${leyDetalle(x)}${x.color ? `<span class="ley-pct"> · ${nbsp(pctTxt(p))}</span>` : ''}</small>${x.det ? `<small class="ley-det">${esc(x.det)}</small>` : ''}${claseSel === x.txt ? '<small class="ley-este"><strong>este lote</strong></small>' : ''}</span><em>${x.color ? pctTxt(p) : ''}</em></button>`; }).join('') +
     (filtro ? `<div class="ley-acc"><button type="button" data-acc="enc">${ico('zoomIn')} Encuadrar</button><button type="button" data-acc="lista">${ico('file')} Ver lista</button></div>` : '') +
     `<small class="ley-pista">${temaFiltro !== null ? 'Toque de nuevo la clase para ver todo' : 'Toque una clase para resaltarla'}</small></div>`;
   el.querySelector('.ley-cab').onclick = leyAlternar;
