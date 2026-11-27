@@ -2,14 +2,21 @@
 'use strict';
 let map, capaLotes, capaVelo, capaSel, capaEtiquetas, capaLista, capaMedir, baseLayers = {}, baseActiva = null;
 let selCod = '', selFeat = null, cardFull = false, _histPedido = false;
+/* Vista de la selección actual (lote o tablón). No se guarda: solo un toque sobre el mapa toma la preferencia
+   «Al tocar el mapa, seleccionar» (S.selModo); buscar o abrir desde una lista siempre muestra el lote completo. */
+let selVista = 'lote', selToque = false;
 const VISTA_KEY = 'casur_maps_vista_v2', FAV_KEY = 'casur_maps_favoritos_v2', REC_KEY = 'casur_maps_recientes_v2';
 
 /* ── Hoja modal genérica ── */
 function abrirHoja(titulo, html, clase = '') {
   $('hojaTitulo').textContent = titulo; $('hojaBody').innerHTML = html;
-  $('hoja').className = 'hoja abierta ' + clase; $('hojaFondo').classList.add('abierta');
+  $('hoja').className = 'hoja abierta ' + clase; $('hojaFondo').classList.add('abierta'); histPedir();
 }
-function cerrarHoja() { $('hoja').classList.remove('abierta'); $('hojaFondo').classList.remove('abierta'); if (typeof detenerDictado === 'function') detenerDictado(); }
+function cerrarHoja() {
+  $('hoja').classList.remove('abierta'); $('hojaFondo').classList.remove('abierta');
+  if (typeof soltarRegistro === 'function') soltarRegistro(); else if (typeof detenerDictado === 'function') detenerDictado();
+  histPedir();
+}
 
 /* ── Mapa ── */
 /* ── Rumbo arriba ──
@@ -61,7 +68,11 @@ function initMap() {
     style: estiloFeat,
     onEachFeature: (f, layer) => {
       f._layer = layer;
-      layer.on('click', e => { if (medir.modo) { L.DomEvent.stopPropagation(e); medirPunto(e.latlng); return; } seleccionarLote(f._cod, {feat: f}); });
+      layer.on('click', e => {
+        if (medir.modo) { L.DomEvent.stopPropagation(e); medirPunto(e.latlng); return; }
+        if (e.originalEvent) e.originalEvent._lote = true; // el mismo toque llega luego al mapa: que no cierre lo que acaba de abrir
+        seleccionarLote(f._cod, {feat: f, toque: true});
+      });
       layer.on('contextmenu', e => { L.DomEvent.stop(e); if (!medir.modo) menuLote(f); }); // toque largo
     }
   }).addTo(map);
@@ -70,7 +81,8 @@ function initMap() {
   capaEtiquetas = L.layerGroup().addTo(map);
   capaLista = L.layerGroup().addTo(map);
   capaMedir = L.layerGroup().addTo(map);
-  map.on('click', e => { if (medir.modo) medirPunto(e.latlng); });
+  map.on('click', e => { if (medir.modo) medirPunto(e.latlng); else if (!(e.originalEvent && e.originalEvent._lote)) toqueVacio(); });
+  map.on('dblclick', () => clearTimeout(_vacioT)); // el doble toque es para acercar, no para cerrar la tarjeta
   map.on('moveend zoomend', () => { etiquetasDebounce(); guardarVista(); });
   map.on('zoomend', () => { const n = nivelZoom(map.getZoom()); if (n !== nivelEstilo) { nivelEstilo = n; restilar(); } });
   map.on('zoomend', () => { if (panorama && map.getZoom() > 15.5) { panorama = null; pintarPanorama(); } });
@@ -89,6 +101,17 @@ function initMap() {
   actualizarEtiquetas(); pintarLeyenda(); leyArmar();
 }
 let _vistaT = null;
+/* Tocar el mapa fuera de los lotes: la tarjeta completa se pliega a compacta; la compacta se cierra y se quita el velo.
+   Espera un instante para no actuar si el toque era el primero de un doble toque. */
+let _vacioT = 0;
+function toqueVacio() {
+  clearTimeout(_vacioT); if (!selCod) return;
+  const cod = selCod;
+  _vacioT = setTimeout(() => {
+    if (selCod !== cod || medir.modo || document.body.dataset.tab !== 'mapa' || $('hoja').classList.contains('abierta')) return;
+    if (cardFull) { cardFull = false; renderCard(); } else cerrarCard();
+  }, 300);
+}
 function guardarVista() { clearTimeout(_vistaT); _vistaT = setTimeout(() => { const c = map.getCenter(); escribirLS(VISTA_KEY, {lat: c.lat, lng: c.lng, z: map.getZoom()}); }, 600); }
 function setBase(nombre, repintar = true) {
   if (baseActiva) map.removeLayer(baseActiva);
@@ -374,8 +397,8 @@ function boundsDe(bb) { return L.latLngBounds([bb[1], bb[0]], [bb[3], bb[2]]); }
 function seleccionarLote(cod, o = {}) {
   cod = codKey(cod); const l = LOTES[cod];
   if (!l) { toast('No encontré el lote ' + cod, {tipo: 'mal'}); return false; }
-  selCod = cod; selFeat = o.feat || l.principal;
-  if (o.modo) { S.selModo = o.modo; guardarAjustes(); }
+  selCod = cod; selFeat = o.feat || l.principal; selToque = !!o.toque;
+  selVista = o.modo || (o.toque ? S.selModo : 'lote');
   pintarSeleccion();
   if (!o.gps) { const r = [cod, ...recientes().filter(c => c !== cod)].slice(0, 10); escribirLS(REC_KEY, r); }
   if (o.full !== undefined) cardFull = o.full;
@@ -385,7 +408,7 @@ function seleccionarLote(cod, o = {}) {
   mostrarTab('mapa'); renderCard();
   return true;
 }
-const porTablon = () => S.selModo === 'tablon' && !!selFeat;
+const porTablon = () => selVista === 'tablon' && !!selFeat && LOTES[selCod] && LOTES[selCod].nPoly > 1;
 let _pulso = 0;
 function pintarSeleccion() {
   capaSel.clearLayers(); const l = LOTES[selCod];
@@ -410,21 +433,23 @@ function menuLote(f) {
   const c = centroideFeat(f), st = estadoLote(l);
   abrirHoja(`Lote ${l.cod}`, `<p class="pie">${esc(l.hac)} · ${fmtN(l.area, ' ha')}${f.properties.Tablon ? ' · tablón ' + esc(f.properties.Tablon) : ''} · <span class="chip est-${st.cls}">${esc(st.txt)}</span></p>
     <div class="menu-rapido">
-      <button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{feat:DATA.features[${f._i}]});abrirRegistro('${esc(l.cod)}')">${ico('plus')}<span>Registrar hallazgo</span></button>
+      <button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{feat:DATA.features[${f._i}],toque:true});abrirRegistro('${esc(l.cod)}')">${ico('plus')}<span>Registrar hallazgo</span></button>
       <button type="button" onclick="cerrarHoja();listaToggle('${esc(l.cod)}')">${ico(listaTiene(l.cod) ? 'check' : 'listPlus')}<span>${listaTiene(l.cod) ? 'Quitar de la lista' : 'Lista del día'}</span></button>
       ${c ? `<a href="${urlLlegar(c[0], c[1])}" target="_blank" rel="noopener" onclick="cerrarHoja()">${ico('nav')}<span>Llegar</span></a>` : ''}
-      <button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{feat:DATA.features[${f._i}],full:true})">${ico('file')}<span>Ver ficha</span></button>
+      <button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{feat:DATA.features[${f._i}],toque:true,full:true})">${ico('file')}<span>Ver ficha</span></button>
       <button type="button" onclick="cerrarHoja();favToggle('${esc(l.cod)}')">${ico(favoritos().includes(l.cod) ? 'starFill' : 'star')}<span>Favorito</span></button>
-      <button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{feat:DATA.features[${f._i}],modo:'tablon'})">${ico('lot')}<span>Ver tablón</span></button>
+      ${l.nPoly > 1 ? `<button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{feat:DATA.features[${f._i}],toque:true,modo:'tablon'})">${ico('lot')}<span>Ver tablón</span></button>` : ''}
     </div>`);
 }
-function setSelModo(modo) { S.selModo = modo; guardarAjustes(); pintarSeleccion(); renderCard(); }
+function setSelModo(modo) { S.selModo = modo; guardarAjustes(); if (selCod) verComo(modo); } // preferencia de Capas: rige los próximos toques en el mapa
+function verComo(modo) { selVista = modo; pintarSeleccion(); renderCard(); } // botones Lote/Tablón de la tarjeta: solo esta selección
 function seleccionarTablon(i) { const f = DATA.features[i]; if (f) seleccionarLote(f._cod, {feat: f, modo: 'tablon', zoom: true}); }
-function cerrarCard() { selCod = ''; selFeat = null; pintarSeleccion(); $('card').className = 'card oculta'; ajustarCard(); }
+function cerrarCard() { clearTimeout(_vacioT); selCod = ''; selFeat = null; selToque = false; pintarSeleccion(); $('card').className = 'card oculta'; ajustarCard(); }
 function ajustarCard() {
   const el = $('card'), vis = !el.classList.contains('oculta');
   document.body.classList.toggle('con-card', vis); document.body.classList.toggle('card-full', vis && cardFull); leyPorCard(vis);
   if (vis && !cardFull) document.body.style.setProperty('--card-h', Math.round(el.getBoundingClientRect().height) + 'px');
+  histPedir();
 }
 function cifra(rot, val, cls = '', extra = '') { return `<div class="${cls}"><span>${rot}</span><b>${val}</b>${extra}</div>`; }
 const signo = (v, f = nf1) => (v > 0 ? '+' : v < 0 ? '−' : '') + f.format(Math.abs(v));
@@ -449,7 +474,7 @@ function renderCard() {
         <div class="card-cod">${tab ? 'Tablón ' + esc(pt.Tablon || '—') : 'Lote ' + esc(l.cod)} <small>${tab ? fmtN(pt.Area_Ha, ' ha') : fmtN(l.area, ' ha')}${l.nc ? ' · ' + esc(ncLargo(l)) : ''}</small></div>
         <div class="card-sub"><button type="button" class="card-finca" onclick="abrirFinca(LOTES[selCod].hac)">${tab ? 'Lote ' + esc(l.cod) + ' · ' : ''}${esc(l.hac)} ›</button></div>
       </div>
-      ${selFeat ? `<div class="mini-seg" role="group" aria-label="Ver lote o tablón"><button type="button" class="${tab ? '' : 'activo'}" onclick="setSelModo('lote')">Lote</button><button type="button" class="${tab ? 'activo' : ''}" onclick="setSelModo('tablon')">Tablón</button></div>` : ''}
+      ${selFeat && l.nPoly > 1 ? `<div class="mini-seg" role="group" aria-label="Ver lote o tablón"><button type="button" class="${tab ? '' : 'activo'}" aria-pressed="${!tab}" onclick="verComo('lote')">Lote</button><button type="button" class="${tab ? 'activo' : ''}" aria-pressed="${tab}" onclick="verComo('tablon')">Tablón</button></div>` : ''}
       <button type="button" class="card-x" onclick="cerrarCard()" aria-label="Cerrar">${ico('x')}</button>
     </div>
     <div class="fila-estado"><span class="chip est-${st.cls}">${esc(st.txt)}</span>${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
@@ -464,7 +489,7 @@ function renderCard() {
     <div class="solo-full">
       ${st.det ? `<div class="nota est-${st.cls}">${esc(st.det)}</div>` : ''}
       <div class="kvs">
-        ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nf.format(aT)} ha · ${nf.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nf.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : kv('Tablón tocado', pt.Tablon)}
+        ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nf.format(aT)} ha · ${nf.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nf.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : selToque ? kv('Tablón tocado', pt.Tablon) : ''}
         ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nf.format(l.areaShape)} ha en shape` : 'Sin polígono')}
         ${kv('Variedad', rotulo(l.variedad))}${kv('Zona', l.zona)}${kv('Riego', rotulo(l.riego))}${kv('Tenencia', l.tenencia)}
         ${kv('Clasificación', rotulo(l.clas) || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
@@ -582,10 +607,10 @@ function pintarPanorama() { const b = $('btnPanorama'); if (b) { b.classList.tog
 
 /* ── Medición de distancia y área ── */
 const medir = {modo: null, pts: []};
-function medirIniciar(modo) { medir.modo = modo; medir.pts = []; cerrarCard(); medirPintar(); toast(modo === 'area' ? 'Toque el mapa para marcar el contorno.' : 'Toque el mapa para marcar puntos.'); }
+function medirIniciar(modo) { medir.modo = modo; medir.pts = []; cerrarCard(); medirPintar(); histPedir(); toast(modo === 'area' ? 'Toque el mapa para marcar el contorno.' : 'Toque el mapa para marcar puntos.'); }
 function medirPunto(ll) { medir.pts.push(L.latLng(ll.lat, ll.lng)); medirPintar(); }
 function medirDeshacer() { medir.pts.pop(); medirPintar(); }
-function medirCerrar() { medir.modo = null; medir.pts = []; capaMedir.clearLayers(); $('medirBar').hidden = true; }
+function medirCerrar() { medir.modo = null; medir.pts = []; capaMedir.clearLayers(); $('medirBar').hidden = true; histPedir(); }
 function areaM2(pts) {
   if (pts.length < 3) return 0;
   const lat0 = pts.reduce((s, p) => s + p.lat, 0) / pts.length * Math.PI / 180, my = 111132.92 - 559.82 * Math.cos(2 * lat0), mx = 111412.84 * Math.cos(lat0) - 93.5 * Math.cos(3 * lat0);

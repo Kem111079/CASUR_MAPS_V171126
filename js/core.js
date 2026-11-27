@@ -118,6 +118,21 @@ function confirmar(txt) {
   document.body.appendChild(el); setTimeout(() => el.classList.add('fuera'), 900); setTimeout(() => el.remove(), 1250);
 }
 
+/* Pregunta con dos botones dentro de la app (confirm() del navegador se ve ajeno y bloquea la página).
+   Devuelve una promesa: true con «si», false con «no», el fondo, Escape o Atrás. El botón seguro queda enfocado. */
+let _pregunta = null;
+function preguntar(titulo, texto, si = 'Aceptar', no = 'Cancelar') {
+  cerrarPregunta(false);
+  return new Promise(res => {
+    const el = document.createElement('div'); el.className = 'pregunta-fondo';
+    el.innerHTML = `<div class="pregunta" role="alertdialog" aria-modal="true" aria-labelledby="pregTit"${texto ? ' aria-describedby="pregTxt"' : ''}><b id="pregTit">${esc(titulo)}</b>${texto ? `<p id="pregTxt">${esc(texto)}</p>` : ''}<div class="acciones"><button type="button" class="btn ter" data-r="0">${esc(no)}</button><button type="button" class="btn peligro" data-r="1">${esc(si)}</button></div></div>`;
+    el.addEventListener('click', e => { const b = e.target.closest('button'); if (b) cerrarPregunta(b.dataset.r === '1'); else if (e.target === el) cerrarPregunta(false); });
+    document.body.appendChild(el); _pregunta = {el, res};
+    el.querySelector('[data-r="0"]').focus({preventScroll: true});
+  });
+}
+function cerrarPregunta(v) { const p = _pregunta; if (!p) return false; _pregunta = null; p.el.remove(); p.res(v); return true; }
+
 /* ── IndexedDB: clave/valor para visitas y recorrido (sin el límite de ~5 MB de localStorage) ── */
 let _kvDb = null;
 function kvDb() {

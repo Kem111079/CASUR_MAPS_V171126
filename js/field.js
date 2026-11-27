@@ -75,8 +75,11 @@ async function abrirRegistro(cod, id = '') {
   cod = codKey(cod); const l = LOTES[cod]; if (!l) { toast('Seleccione primero un lote.'); return; }
   const o = id ? obsTodas().find(x => x.id === id) : null;
   reg = {cod, id, fotos: [null, null], ids: o ? [o.photo_id || '', o.photo_id2 || ''] : ['', ''], sev: o ? o.severidad : 'Media'};
+  const bor = _borrador && _borrador.cod === cod && _borrador.id === id ? _borrador : null;
+  if (_borradorAviso) { _borradorAviso.remove(); _borradorAviso = null; }
   abrirHoja((o ? 'Editar registro · ' : 'Registrar en ') + 'lote ' + cod, `
     <p class="pie">${esc(l.hac)}${selFeat && selFeat._cod === cod && selFeat.properties.Tablon ? ' · tablón ' + esc(selFeat.properties.Tablon) : ''}</p>
+    ${bor ? `<div id="regBorrador" class="nota est-neutro">${ico('rotate')} Se recuperó lo que había escrito sin guardar. <button type="button" class="enlace" onclick="descartarBorrador()">Empezar de nuevo</button></div>` : ''}
     ${o ? `<div class="nota est-neutro">${o.pos_fuente === 'gps' ? ico('pin') + ' Se conserva la posición GPS original del registro.' : 'Registro anterior sin posición GPS: se puede editar, pero no compartir como hallazgo.'}</div>` : '<div id="regGps" class="nota est-neutro">Comprobando GPS…</div>'}
     <label class="campo">Categoría<select id="regCat">${CATEGORIAS.map(c => `<option ${o && o.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
     <div class="campo">Severidad<div class="segmento" id="regSev">${['Baja', 'Media', 'Alta'].map(s => `<button type="button" data-v="${s}" class="${reg.sev === s ? 'activo' : ''}">${s}</button>`).join('')}</div></div>
@@ -86,6 +89,12 @@ async function abrirRegistro(cod, id = '') {
     <label class="campo">Técnico<input id="regTec" type="text" value="${esc((o && o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : '') || S.tecnico)}" placeholder="Su nombre (se guarda para la próxima vez)"></label>
     <p class="pie">En severidad alta la foto es obligatoria.</p>
     <div class="acciones"><button type="button" class="btn pri reg-guardar" onclick="guardarRegistro(false)">Guardar</button>${!o || o.pos_fuente === 'gps' ? '<button type="button" class="btn sec reg-guardar" onclick="guardarRegistro(true)">Guardar y compartir</button>' : ''}</div>`, 'alta');
+  reg.ini = {cat: $('regCat').value, sev: reg.sev, nota: $('regNota').value.trim()}; // para saber si hay cambios sin guardar
+  if (bor) {
+    $('regCat').value = bor.cat; $('regNota').value = bor.nota; if (bor.tec) $('regTec').value = bor.tec;
+    reg.sev = bor.sev; $('regSev').querySelectorAll('button').forEach(x => x.classList.toggle('activo', x.dataset.v === bor.sev));
+    reg.fotos = bor.fotos.slice(); reg.fotos.forEach((f, i) => { if (f) pintarFotoReg(i, f); });
+  }
   if (!o) { if (GPS.watch === null) iniciarGps(false); vigilarGpsRegistro(); }
   $('regSev').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; reg.sev = b.dataset.v; $('regSev').querySelectorAll('button').forEach(x => x.classList.toggle('activo', x === b)); });
   $('hojaBody').querySelectorAll('.foto input').forEach(inp => inp.addEventListener('change', async () => {
@@ -94,8 +103,22 @@ async function abrirRegistro(cod, id = '') {
   }));
   $('regVoz').addEventListener('click', alternarDictado);
   if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) $('regVoz').innerHTML = ico('mic') + ' Use el micrófono del teclado para dictar';
-  for (let i = 0; i < 2; i++) if (reg.ids[i]) { const r = await fotoGet(reg.ids[i]).catch(() => null); if (r && reg && reg.id === id) pintarFotoReg(i, r.data_url); }
+  for (let i = 0; i < 2; i++) if (reg.ids[i] && !reg.fotos[i]) { const r = await fotoGet(reg.ids[i]).catch(() => null); if (r && reg && reg.id === id && !reg.fotos[i]) pintarFotoReg(i, r.data_url); }
 }
+/* Cambios sin guardar en el formulario abierto: nota, categoría, severidad o fotos nuevas. */
+function registroSucio() {
+  if (!reg || !reg.ini || !$('regNota')) return false;
+  return reg.fotos.some(Boolean) || $('regNota').value.trim() !== reg.ini.nota || $('regCat').value !== reg.ini.cat || reg.sev !== reg.ini.sev;
+}
+/* Borrador en memoria (las fotos son pesadas para localStorage): se recupera al volver a abrir el registro de ese lote. */
+let _borrador = null, _borradorAviso = null;
+function guardarBorrador() {
+  _borrador = {cod: reg.cod, id: reg.id, cat: $('regCat').value, sev: reg.sev, nota: $('regNota').value, tec: $('regTec').value, fotos: reg.fotos.slice()};
+  return _borrador;
+}
+function olvidarBorrador() { if (_borrador && reg && _borrador.cod === reg.cod && _borrador.id === reg.id) _borrador = null; }
+function descartarBorrador() { const r = reg; olvidarBorrador(); if (r) abrirRegistro(r.cod, r.id); }
+function soltarRegistro() { detenerDictado(); clearInterval(_regGpsT); reg = null; } // al cerrar la hoja, el formulario deja de estar en curso
 function pintarFotoReg(i, url) { const l = $('regFotoL' + i); if (l) { l.style.backgroundImage = `url(${url})`; l.classList.add('con-foto'); l.querySelector('span').innerHTML = ico('rotate') + ' Cambiar'; } }
 function alternarDictado() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition, b = $('regVoz');
@@ -157,7 +180,7 @@ async function guardarRegistro(compartir) {
   });
   if (!prev) arr.push(o);
   if (!obsGuardar(arr)) return;
-  const id = o.id; reg = null; clearInterval(_regGpsT); cerrarHoja(); refrescarVistas(); confirmar('Hallazgo guardado');
+  const id = o.id; olvidarBorrador(); reg = null; clearInterval(_regGpsT); cerrarHoja(); refrescarVistas(); confirmar('Hallazgo guardado');
   if (compartir) compartirRegistro(id);
 }
 function obsBorrar(id) {
@@ -336,6 +359,79 @@ function mostrarTab(t) {
   document.body.dataset.tab = t;
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('activo', b.dataset.tab === t));
   if (t === 'visita') renderVisita(); else if (t === 'bitacora') renderBitacora(); else if (t === 'mas') renderMas(); else if (t === 'ajustes') renderAjustes(); else setTimeout(() => map && map.invalidateSize(), 50);
+  histPedir();
+}
+
+/* ── Botón Atrás (Android y navegador) ──
+   Cada cosa abierta que Atrás puede cerrar ocupa una entrada del historial, sobre una «guardia» que evita salir de golpe:
+   hoja → pestaña distinta de Mapa → medición → tarjeta completa → tarjeta compacta → aviso «Toque Atrás otra vez para salir».
+   En vez de apilar una entrada por cada apertura, se compara cuántas capas hay abiertas con cuántas entradas hay (history.state.casur)
+   y se ajusta al final de la tarea: así las hojas encadenadas (cerrarHoja → abrirHoja) y las hojas sobre hojas no dejan entradas de más.
+   Solo se agregan entradas tras un toque del usuario: Chrome salta en el botón Atrás las que una página agrega sola. */
+let _histListo = false, _histN = 0, _histMeta = null, _histT = 0, _histSeguro = 0, _guardia = true, _salirT = 0;
+const histEstado = () => { const e = history.state; return e && Number.isInteger(e.casur) ? e.casur : 0; };
+function capasAbiertas() {
+  let n = 0;
+  if ($('hoja').classList.contains('abierta')) n++;
+  if (document.body.dataset.tab !== 'mapa') n++;
+  if (typeof medir !== 'undefined' && medir.modo) n++;
+  if (selCod && !$('card').classList.contains('oculta')) n += cardFull ? 2 : 1;
+  return n;
+}
+function histPedir() { if (!_histT) _histT = setTimeout(() => { _histT = 0; histAjustar(); }, 0); }
+function histAjustar() {
+  if (!_histListo || _histMeta !== null) return;
+  const capas = capasAbiertas(); if (capas) _guardia = true;
+  const quiere = capas ? capas + 1 : (_guardia ? 1 : 0);
+  if (quiere < _histN) { // sobran entradas (se cerró algo con la X, el fondo o un toque): se retroceden sin cerrar nada más
+    _histMeta = quiere; history.go(quiere - _histN);
+    clearTimeout(_histSeguro); _histSeguro = setTimeout(() => { if (_histMeta !== null) { _histMeta = null; _histN = histEstado(); histPedir(); } }, 1500);
+    return;
+  }
+  if (quiere > _histN) {
+    const ua = navigator.userActivation; if (ua && !ua.isActive) return; // se completa en el próximo toque
+    while (_histN < quiere) { _histN++; history.pushState({casur: _histN}, ''); }
+  }
+}
+function alPopstate() {
+  const n = histEstado(); let antes = _histN; _histN = n;
+  if (_histMeta !== null) { const meta = _histMeta; _histMeta = null; clearTimeout(_histSeguro); if (n >= meta) { histPedir(); return; } antes = meta; }
+  if (n >= antes) { histPedir(); return; } // adelante (navegador de escritorio): se reajusta
+  for (let k = antes - n; k > 0; k--) atrasUnaCapa();
+  histPedir();
+}
+function atrasUnaCapa() {
+  if ($('hoja').classList.contains('abierta')) { pedirCerrarHoja(true); return; }
+  if (cerrarPregunta(false)) return;
+  if (document.body.dataset.tab !== 'mapa') { mostrarTab('mapa'); return; }
+  if (medir.modo) { medirCerrar(); return; }
+  if (selCod && !$('card').classList.contains('oculta')) { if (cardFull) { cardFull = false; renderCard(); } else cerrarCard(); return; }
+  // Mapa limpio: se avisa; si vuelve a tocar Atrás en 2 s, el navegador sale (ya no queda guardia).
+  _guardia = false; toast('Toque Atrás otra vez para salir.', {ms: 2000});
+  clearTimeout(_salirT); _salirT = setTimeout(() => { const ua = navigator.userActivation; if (!ua || ua.isActive) { _guardia = true; histPedir(); } }, 2000);
+}
+function iniciarHistorial() {
+  _histListo = true; _histN = histEstado(); // tras recargar, el historial puede conservar entradas de la sesión anterior: se retroceden
+  window.addEventListener('popstate', alPopstate);
+  const toque = () => { if (!_guardia) { _guardia = true; clearTimeout(_salirT); } histPedir(); };
+  document.addEventListener('pointerup', toque, true); document.addEventListener('keydown', toque, true);
+  histPedir();
+}
+/* Cerrar la hoja a pedido del usuario (X, fondo, Escape o Atrás). Si es un registro con cambios sin guardar:
+   con la X, el fondo o Escape se pregunta; con Atrás se cierra sin preguntar y lo escrito queda como borrador. */
+function pedirCerrarHoja(porAtras = false) {
+  if (!$('hoja').classList.contains('abierta')) return;
+  if (registroSucio()) {
+    if (porAtras || _pregunta) {
+      cerrarPregunta(false); const b = guardarBorrador(); cerrarHoja();
+      _borradorAviso = toast('Lo escrito quedó como borrador.', {accion: 'Retomar', ms: 8000, alAccion: () => abrirRegistro(b.cod, b.id)});
+      return;
+    }
+    preguntar('¿Descartar lo escrito?', 'La nota, las fotos y los cambios de este registro no se guardarán.', 'Descartar', 'Seguir editando')
+      .then(si => { if (si && registroSucio()) { olvidarBorrador(); cerrarHoja(); } });
+    return;
+  }
+  cerrarHoja();
 }
 /* Gesto sobre un registro: deslizar a la derecha lo resuelve, a la izquierda lo borra (ambos con deshacer). */
 function activarDeslizar(cont) {
@@ -624,16 +720,23 @@ async function iniciar() {
     construirLotes(d.geo, d.metricas, d.cortes, d.renov); construirIndice();
     initMap(); bindBusqueda();
     $('btnGps').addEventListener('click', gpsBoton); $('btnBrujula').addEventListener('click', alternarOrientacion); aplicarGiroCss(); pintarBrujula(); $('btnCapas').addEventListener('click', abrirCapas); $('chipGps').addEventListener('click', abrirGps);
-    $('hojaX').addEventListener('click', cerrarHoja); $('hojaFondo').addEventListener('click', cerrarHoja);
+    $('hojaX').addEventListener('click', () => pedirCerrarHoja()); $('hojaFondo').addEventListener('click', () => pedirCerrarHoja());
     $('nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) mostrarTab(b.dataset.tab); });
     $('medirDeshacer').addEventListener('click', medirDeshacer); $('medirFin').addEventListener('click', medirCerrar);
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarHoja(); cerrarSugerencias(); } });
+    document.addEventListener('keydown', e => { // Escape (tableta o escritorio): diálogo, sugerencias, hoja y luego la tarjeta
+      if (e.key !== 'Escape') return;
+      if (cerrarPregunta(false)) return;
+      if ($('sugerencias').classList.contains('abierta')) { cerrarSugerencias(); return; }
+      if ($('hoja').classList.contains('abierta')) { pedirCerrarHoja(); return; }
+      if (document.body.dataset.tab === 'mapa' && selCod && !$('card').classList.contains('oculta')) { if (cardFull) { cardFull = false; renderCard(); } else cerrarCard(); }
+    });
     pintarGpsBtn(); pintarLista(); actualizarRed(); pintarInsignia(); pintarRegistros();
     $('btnPanorama').addEventListener('click', alternarPanorama);
     $('loader').hidden = true; map.invalidateSize();
     await cargarVisitas();
     const lote = new URLSearchParams(location.search).get('lote'), conEnlace = lote && LOTES[codKey(lote)];
     if (conEnlace) seleccionarLote(lote, {zoom: true});
+    iniciarHistorial();
     // GPS automático al abrir, con seguimiento. Si se abrió con un enlace a un lote, no se mueve el mapa de ese lote.
     if (S.gpsAuto) iniciarGps(!conEnlace, true);
     registrarSW();
