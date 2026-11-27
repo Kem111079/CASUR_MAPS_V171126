@@ -619,18 +619,28 @@ function cerrarVueloReg() {
   cierreVuelo(R);
 }
 const vueloPorId = id => VUELOS.find(x => x.id === id);
+/* Lotes del recorrido: «sobrevolados» = el recorrido pasa por dentro; «a la vista» = a 100 m o menos del recorrido.
+   Se calcula también desde los puntos guardados, así sirve para vuelos anteriores. */
+const VISTA_M = 100, TIERRA_M = 30;
 function datosVuelo(R) {
-  const lotes = Object.keys(R.lotes || {}).filter(c => LOTES[c]), ha = lotes.reduce((s, c) => s + (LOTES[c].area || 0), 0);
-  const fincas = {}; lotes.forEach(c => { const f = LOTES[c].hac; fincas[f] = (fincas[f] || 0) + 1; });
+  if (!R._lotes) {
+    const dentro = new Set(Object.keys(R.lotes || {}).filter(c => LOTES[c])), vista = new Set();
+    R.pts.forEach(p => cercanos(p.lng, p.lat, VISTA_M).forEach(c => { if (!LOTES[c.cod]) return; if (c.inside) dentro.add(c.cod); else vista.add(c.cod); }));
+    dentro.forEach(c => vista.delete(c));
+    Object.defineProperty(R, '_lotes', {value: {dentro: [...dentro], vista: [...vista]}, enumerable: false, configurable: true});
+  }
+  const lotes = R._lotes.dentro, vista = R._lotes.vista, haDe = ls => ls.reduce((s, c) => s + (LOTES[c].area || 0), 0);
+  const fincas = {}; [...lotes, ...vista].forEach(c => { const f = LOTES[c].hac; fincas[f] = (fincas[f] || 0) + 1; });
   const hs = R.pts.map(p => p.h).filter(x => x !== null), vs = R.pts.map(p => p.v).filter(x => x !== null);
-  return {lotes, ha, fincas: Object.entries(fincas).sort((a, b) => b[1] - a[1]), dur: new Date(R.fin || Date.now()) - new Date(R.inicio),
-    hProm: hs.length ? hs.reduce((a, b) => a + b, 0) / hs.length : null, vMax: vs.length ? Math.max(...vs) : null};
+  return {lotes, vista, ha: haDe(lotes), haVista: haDe(vista), fincas: Object.entries(fincas).sort((a, b) => b[1] - a[1]), dur: new Date(R.fin || Date.now()) - new Date(R.inicio),
+    hProm: hs.length ? hs.reduce((a, b) => a + b, 0) / hs.length : null, vMax: vs.length ? Math.max(...vs) : null, tierra: R.altMax === null || R.altMax < TIERRA_M};
 }
 function cierreVuelo(R) {
   if (!R) return; const d = datosVuelo(R);
-  abrirHoja('Vuelo finalizado', `
-    <div class="cifras c4">${cifra('Duración', fmtDur(d.dur))}${cifra('Distancia', fmtDist(R.dist || 0))}${cifra('Lotes sobrevolados', nf0.format(d.lotes.length), '', `<small class="kpi-d">${nfHa.format(d.ha)} ha</small>`)}${cifra('Altura máx.', R.altMax !== null ? nf0.format(R.altMax) + ' m' : '—', '', d.hProm !== null ? `<small class="kpi-d">prom. ${nf0.format(d.hProm)} m</small>` : '')}</div>
-    ${d.fincas.length ? `<p class="pie">${d.fincas.slice(0, 12).map(([f, n]) => `${esc(f)} ${n}`).join(' · ')}${d.fincas.length > 12 ? ' …' : ''}</p>` : '<p class="vacio">No se sobrevoló ningún lote.</p>'}
+  abrirHoja(d.tierra ? 'Recorrido en tierra' : 'Vuelo finalizado', `
+    <div class="cifras c4">${cifra('Duración', fmtDur(d.dur))}${cifra('Distancia', fmtDist(R.dist || 0))}${cifra(d.tierra ? 'Lotes recorridos' : 'Sobrevolados', nf0.format(d.lotes.length), '', `<small class="kpi-d">${nfHa.format(d.ha)} ha</small>`)}${cifra('A la vista', nf0.format(d.vista.length), '', `<small class="kpi-d">≤ ${VISTA_M} m · ${nfHa.format(d.haVista)} ha</small>`)}</div>
+    <p class="pie">${d.tierra ? 'En tierra (sin altura de vuelo)' : `Altura máx. ${nf0.format(R.altMax)} m${d.hProm !== null ? ` · prom. ${nf0.format(d.hProm)} m` : ''}`}${d.vMax !== null ? ` · vel. máx. ${nf0.format(d.vMax)} km/h` : ''}</p>
+    ${d.fincas.length ? `<p class="pie">${d.fincas.slice(0, 12).map(([f, n]) => `${esc(f)} ${n}`).join(' · ')}${d.fincas.length > 12 ? ' …' : ''}</p>` : '<p class="vacio">El recorrido no pasó cerca de ningún lote.</p>'}
     ${R.marcas.length ? `<h4>Marcas desde el aire (${R.marcas.length})</h4>${R.marcas.map(m => `<div class="hist-fila"><b>Lote ${esc(m.cod)}</b><span>${new Date(m.t).toLocaleTimeString('es-NI', {hour: '2-digit', minute: '2-digit'})}${m.h !== null ? ' · ' + nf0.format(m.h) + ' m' : ''}</span></div>`).join('')}` : ''}
     <button type="button" class="btn pri ancho grande" onclick="compartirVuelo('${esc(R.id)}')">${ico('share')} Compartir imagen del vuelo</button>
     <div class="acciones"><button type="button" class="btn sec" onclick="verRutaVuelo(vueloPorId('${esc(R.id)}'))">${ico('map')} Ver ruta</button><button type="button" class="btn ter" onclick="cerrarHoja()">Cerrar</button></div>`, 'alta');
@@ -638,8 +648,8 @@ function cierreVuelo(R) {
 function verRutaVuelo(R) {
   if (!R) return; cerrarHoja(); mostrarTab('mapa'); soltarSeguimiento();
   if (capaVuelo) map.removeLayer(capaVuelo);
-  const feats = Object.keys(R.lotes).flatMap(c => (LOTES[c] || {feats: []}).feats);
-  capaVuelo = L.layerGroup([L.geoJSON({type: 'FeatureCollection', features: feats}, {interactive: false, style: {color: '#0a66ff', weight: 2, fillColor: '#0a66ff', fillOpacity: .18}}),
+  const d = datosVuelo(R), fe = ls => ({type: 'FeatureCollection', features: ls.flatMap(c => (LOTES[c] || {feats: []}).feats)});
+  capaVuelo = L.layerGroup([L.geoJSON(fe(d.vista), {interactive: false, style: {color: '#7aa7e6', weight: 1.5, fillColor: '#0a66ff', fillOpacity: .08}}), L.geoJSON(fe(d.lotes), {interactive: false, style: {color: '#0a66ff', weight: 2, fillColor: '#0a66ff', fillOpacity: .22}}),
     L.polyline(R.pts.map(p => [p.lat, p.lng]), {color: '#fff', weight: 7, opacity: .9, interactive: false}), L.polyline(R.pts.map(p => [p.lat, p.lng]), {color: '#e6007e', weight: 3.5, interactive: false}),
     ...R.marcas.map(m => L.circleMarker([m.lat, m.lng], {radius: 7, color: '#fff', weight: 2.5, fillColor: '#d4a017', fillOpacity: 1, interactive: false}))]).addTo(map);
   if (R.pts.length > 1) map.fitBounds(L.latLngBounds(R.pts.map(p => [p.lat, p.lng])), margenes(90, 40));
@@ -649,24 +659,33 @@ async function borrarVuelo(id) { if (!await preguntar('¿Borrar este vuelo?', ''
 function imagenVuelo(R) {
   const d = datosVuelo(R), W = 1080, H = 1320, c = document.createElement('canvas'), ctx = c.getContext('2d'); c.width = W; c.height = H;
   const pts = R.pts; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; const ext = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
-  pts.forEach(p => ext(p.lng, p.lat)); d.lotes.forEach(cd => LOTES[cd].feats.forEach(f => { ext(f.bbox[0], f.bbox[1]); ext(f.bbox[2], f.bbox[3]); }));
+  pts.forEach(p => ext(p.lng, p.lat)); [...d.lotes, ...d.vista].forEach(cd => LOTES[cd].feats.forEach(f => { ext(f.bbox[0], f.bbox[1]); ext(f.bbox[2], f.bbox[3]); }));
+  R.marcas.forEach(m => ext(m.lng, m.lat));
   if (x0 === Infinity) { ext(-85.84, 11.48); ext(-85.83, 11.49); }
+  { const px = Math.max((x1 - x0) * .15, .002), py = Math.max((y1 - y0) * .15, .002); x0 -= px; x1 += px; y0 -= py; y1 += py; } // margen: se ven los lotes de alrededor
   const k = Math.cos((y0 + y1) / 2 * Math.PI / 180), mw = Math.max((x1 - x0) * k, 1e-5), mh = Math.max(y1 - y0, 1e-5), top = 430, alto = H - top - 90, es = Math.min((W - 120) / mw, alto / mh);
   const ox = (W - mw * es) / 2, oy = top + (alto - mh * es) / 2, X = x => ox + (x - x0) * k * es, Y = y => oy + (y1 - y) * es;
   ctx.fillStyle = '#f4f7f5'; ctx.fillRect(0, 0, W, H);
   const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#0b7f3a'); g.addColorStop(1, '#005baa'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, 210);
-  ctx.fillStyle = '#fff'; ctx.font = '700 34px Arial'; ctx.fillText('CASUR Maps · Vuelo de reconocimiento', 60, 70);
+  ctx.fillStyle = '#fff'; ctx.font = '700 34px Arial'; ctx.fillText(d.tierra ? 'CASUR Maps · Recorrido en tierra' : 'CASUR Maps · Vuelo de reconocimiento', 60, 70);
   ctx.font = '900 54px Arial'; ctx.fillText(new Date(R.inicio).toLocaleDateString('es-NI', {day: 'numeric', month: 'long', year: 'numeric'}), 60, 140);
   ctx.font = '600 28px Arial'; ctx.fillText(`${new Date(R.inicio).toLocaleTimeString('es-NI', {hour: '2-digit', minute: '2-digit'})} a ${new Date(R.fin || Date.now()).toLocaleTimeString('es-NI', {hour: '2-digit', minute: '2-digit'})}${R.tecnico ? ' · ' + R.tecnico : ''}`, 60, 186);
-  [['DURACIÓN', fmtDur(d.dur)], ['DISTANCIA', fmtDist(R.dist || 0)], ['LOTES', `${d.lotes.length} · ${nfHa.format(d.ha)} ha`], ['ALTURA MÁX.', R.altMax !== null ? nf0.format(R.altMax) + ' m' : '—']].forEach((b, i) => {
+  [['DURACIÓN', fmtDur(d.dur)], ['DISTANCIA', fmtDist(R.dist || 0)], [d.tierra ? 'RECORRIDOS' : 'SOBREVOLADOS', `${d.lotes.length} · ${nfHa.format(d.ha)} ha`], d.tierra ? ['A LA VISTA', `${d.vista.length} ${d.vista.length === 1 ? 'lote' : 'lotes'}`] : ['ALTURA MÁX.', nf0.format(R.altMax) + ' m']].forEach((b, i) => {
     const x = 40 + i * 252; ctx.fillStyle = '#fff'; ctx.fillRect(x, 240, 236, 100); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 16, 274); ctx.fillStyle = '#0f172a'; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 16, 318); });
   ctx.fillStyle = '#334155'; ctx.font = '600 24px Arial'; ctx.fillText(d.fincas.slice(0, 5).map(([f, n]) => `${f} ${n}`).join(' · ').slice(0, 80), 40, 390);
   ctx.save(); ctx.beginPath(); ctx.rect(0, top - 10, W, alto + 20); ctx.clip();
-  d.lotes.forEach(cd => LOTES[cd].feats.forEach(f => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates).forEach(pg => { ctx.beginPath(); pg.forEach(r => { r.forEach((q, i) => i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))); ctx.closePath(); }); ctx.fillStyle = 'rgba(10,102,255,.18)'; ctx.fill(); ctx.strokeStyle = '#7aa7e6'; ctx.lineWidth = 1.5; ctx.stroke(); })));
+  const dentro = new Set(d.lotes), vista = new Set(d.vista), etq = [];
+  DATA.features.forEach(f => { const b = f.bbox; if (!b || b[0] > x1 || b[2] < x0 || b[1] > y1 || b[3] < y0) return;
+    const tipo = dentro.has(f._cod) ? 2 : vista.has(f._cod) ? 1 : 0;
+    (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates).forEach(pg => { ctx.beginPath(); pg.forEach(r => { r.forEach((q, i) => i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))); ctx.closePath(); });
+      ctx.fillStyle = ['rgba(61,107,153,.08)', 'rgba(10,102,255,.12)', 'rgba(10,102,255,.28)'][tipo]; ctx.fill(); ctx.strokeStyle = ['#b6c0ca', '#7aa7e6', '#2f6fd6'][tipo]; ctx.lineWidth = tipo ? 1.8 : 1.2; ctx.stroke(); });
+    if (tipo && !etq.includes(f._cod)) etq.push(f._cod); });
+  ctx.font = '800 22px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#0b3a66';
+  etq.forEach(cd => { const ce = centroideLote(LOTES[cd]); if (ce) ctx.fillText(cd, X(ce[1]), Y(ce[0]) + 8); }); ctx.textAlign = 'left';
   if (pts.length > 1) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(X(p.lng), Y(p.lat)) : ctx.moveTo(X(p.lng), Y(p.lat))); ctx.strokeStyle = '#fff'; ctx.lineWidth = 10; ctx.lineJoin = 'round'; ctx.stroke(); ctx.strokeStyle = '#e6007e'; ctx.lineWidth = 5; ctx.stroke(); }
   R.marcas.forEach(m => { ctx.beginPath(); ctx.arc(X(m.lng), Y(m.lat), 12, 0, 7); ctx.fillStyle = '#d4a017'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke(); });
   ctx.restore();
-  ctx.fillStyle = '#64748b'; ctx.font = '600 24px Arial'; ctx.fillText(`Altura aproximada por GPS, sobre el punto de despegue${R.marcas.length ? ` · ${R.marcas.length} marca(s) desde el aire` : ''}`, 40, H - 40);
+  ctx.fillStyle = '#64748b'; ctx.font = '600 24px Arial'; ctx.fillText(`${d.tierra ? 'Sin altura de vuelo' : 'Altura aprox. por GPS sobre el despegue'} · azul: ${d.tierra ? 'recorridos' : 'sobrevolados'} · celeste: a la vista (≤ ${VISTA_M} m)${R.marcas.length ? ` · ${R.marcas.length} marca(s)` : ''}`, 40, H - 40);
   return new Promise(r => c.toBlob(r, 'image/jpeg', .9));
 }
 async function compartirVuelo(id) { const R = vueloPorId(id); if (!R) return; const b = await imagenVuelo(R); if (b) compartirImagen(b, `vuelo_${R.inicio.slice(0, 10)}.jpg`); }

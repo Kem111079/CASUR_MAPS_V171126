@@ -1,5 +1,11 @@
 # Cambios
 
+## V271126M · 27-nov-2026 · Ajustes del Modo vuelo tras la primera prueba
+- **Imagen del recorrido con contexto:** se dibujan los lotes de alrededor en gris; los recorridos o sobrevolados en azul y los «a la vista» en celeste, con su código.
+- **Lotes a la vista:** además de los que el recorrido cruza por dentro, se cuentan los lotes a 100 m o menos del recorrido (también en vuelos ya guardados).
+- **Recorrido en tierra:** si la altura nunca pasa de 30 m, el resumen y la imagen dicen «Recorrido en tierra» y no muestran «Altura máx. 0 m».
+- «Ver ruta» resalta también los lotes a la vista.
+
 ## V271126L · 27-nov-2026 · Modo vuelo: grabación y marcas desde el aire
 - **Grabación del vuelo:** al activar el Modo vuelo se graba el recorrido con altura y velocidad, y los lotes sobrevolados. Si la app se cierra, el vuelo se retoma al abrirla (con la misma altura de referencia). Los saltos imposibles del GPS no entran a la ruta.
 - **«Aterrizar»** cierra el vuelo con un resumen: duración, distancia, lotes y hectáreas sobrevolados por finca, altura máxima y promedio, y las marcas. Imagen del vuelo para compartir y «Ver ruta» en el mapa.
