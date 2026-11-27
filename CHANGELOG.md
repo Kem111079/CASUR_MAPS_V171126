@@ -1,5 +1,10 @@
 # Cambios
 
+## V271126P · 27-nov-2026 · Análisis: tenencia, n.º de corte y administración
+- Nuevas agrupaciones en Análisis: **Tenencia** (Propio, Arrendamiento, Productores), **N.º de corte** (Plantilla, corte 2 a 10 y 11 o más) y **Administración** (Administración directa frente a Productores).
+- Nueva opción de zona **«Administración directa (sin Productores)»**: todo el análisis solo con 1-Sur, 2-Centro y 3-Norte.
+- El Excel del análisis pasa a 6 hojas e incluye el bloque de Administración directa en cada una.
+
 ## V271126O · 27-nov-2026 · Análisis del aforo
 - Nueva pestaña **Análisis** en Resumen: aforo ponderado por **variedad, riego o mes de cosecha**, para el **global o cada zona**. Por grupo: lotes, ha, toneladas, TCH 26/27 (barra), marca de 25/26 y Δ en los mismos lotes.
 - Tocar un grupo abre sus lotes, con «Ver en el mapa» (resaltados) y Excel.
