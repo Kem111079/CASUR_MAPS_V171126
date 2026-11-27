@@ -881,7 +881,7 @@ function renderMas() {
   const g = (RESUMEN.resumen || {}).global || {}, filas = ((RESUMEN.resumen || {})[aforoGrupo] || []);
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
   $('tabMas').innerHTML = `<div class="marca"><img src="./assets/logo_casur.png" alt="CASUR"><div><b>CASUR Maps</b><span>Departamento de Negocios de Caña</span></div></div>
-    ${ejecutivoHtml()}
+    <div class="mas-grid"><div class="mas-c1">${ejecutivoHtml()}</div><div class="mas-c2">
     <button type="button" class="btn sec ancho" onclick="abrirTablero(true)">${ico('board')} Tablero de hoy</button>
     <header><h2>Resumen aforo 26/27</h2><p>Datos al ${fechaCorta(META.datos_al || META.generated_at)} · TCH en t/ha, ponderado por área</p></header>
     <div class="cifras c4">${cifra('Área molienda', conUnidad(nfHa.format(g.area_ha || 0), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(g.toneladas || 0), ' t'))}${cifra('TCH estimado 26/27', fmtTch(g.tch_ponderado), 'c-est')}${cifra('TCH optimista', fmtTch(g.tch_opt_ponderado))}</div>
@@ -891,7 +891,7 @@ function renderMas() {
     <div class="tabla"><table><thead><tr><th>${(AFORO_GRUPOS.find(o => o[0] === aforoGrupo) || AFORO_GRUPOS[0])[1]}</th><th title="Área de molienda (ha)">Área (ha)</th><th title="Toneladas estimadas 26/27">Ton.</th><th title="TCH estimado 26/27 (t/ha)">TCH est.</th><th title="TCH optimista (t/ha)">TCH opt.</th></tr></thead><tbody id="aforoFilas">${filasAforo(aforoTodas ? filas : filas.slice(0, AFORO_TOP))}</tbody></table></div>
     ${filas.length > AFORO_TOP ? `<button type="button" class="btn ter ancho" id="aforoMas" aria-expanded="${aforoTodas}">${aforoTodas ? `${ico('chevUp')} Ver solo las ${AFORO_TOP} primeras` : `${ico('chevDown')} Ver las ${nf0.format(filas.length)} ${aforoGrupo === 'hacienda' ? 'fincas' : 'filas'}`}</button>` : ''}
     <p class="pie">${filas.length > AFORO_TOP && !aforoTodas ? `Las ${AFORO_TOP} de más toneladas. ` : ''}Área de molienda en ha. TCH est. = TCH estimado 26/27 · TCH opt. = TCH optimista (t/ha, ponderados por área).</p>
-    <div id="renovBox"></div>`;
+    <div id="renovBox"></div></div></div>`;
   pintarRenovBox();
   const mas = $('aforoMas');
   if (mas) mas.addEventListener('click', () => { aforoTodas = !aforoTodas; const y = $('tabMas').scrollTop; renderMas(); $('tabMas').scrollTop = y; if (!aforoTodas) $('aforoMas').scrollIntoView({block: 'nearest'}); });

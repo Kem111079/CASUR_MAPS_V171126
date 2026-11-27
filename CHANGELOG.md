@@ -1,5 +1,11 @@
 # Cambios
 
+## V271126D · 27-nov-2026 · Fase 2, entrega 3: tableta y etiquetas sin cortes
+- **Tableta horizontal:** la navegación pasa a una barra lateral (más alto para el mapa) y Resumen se ve en dos columnas: «Cómo vamos» a la izquierda y el aforo y la renovación a la derecha.
+- **Etiquetas sin cortes:** se mide el ancho real de cada texto y no se dibujan etiquetas cortadas en el borde ni tapadas por el buscador, los avisos, la leyenda, la tarjeta o los botones. Funciona también con el mapa girado.
+- El nombre de la finca va dentro de su lote más grande, no en el centro del recuadro (que podía caer fuera de la finca).
+- Las etiquetas se recolocan cuando se abre o cierra la tarjeta, se pliega la leyenda o aparece un aviso.
+
 ## V271126C · 27-nov-2026 · Fase 2, entrega 2: tarjeta ejecutiva y cambio de capa rápido
 - **Semáforo del lote** (Bien / Atención / Crítico) que junta el TCH estimado 26/27, su cambio frente a 25/26, la fecha de corte y los datos a validar, con el motivo principal a la vista. En «Más» se ven todos los motivos.
 - **Franja ejecutiva** en la tarjeta: toneladas estimadas, diferencia en t/ha frente a 25/26 y días que faltan para el corte.

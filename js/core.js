@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V271126C';
+const APP_VERSION = 'V271126D';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -154,7 +154,8 @@ function ubicarAvisos() {
     bajo = ult.getBoundingClientRect().top < tope + 20; // 20 px: margen y la animación de entrada
   }
   b.classList.toggle('aviso-bajo', bajo);
-  b.style.setProperty('--aviso-h', ult ? Math.round(ult.getBoundingClientRect().height) + 'px' : '0px');
+  const h = ult ? Math.round(ult.getBoundingClientRect().height) + 'px' : '0px';
+  if (b.style.getPropertyValue('--aviso-h') !== h) { b.style.setProperty('--aviso-h', h); if (typeof etiquetasDebounce === 'function') setTimeout(etiquetasDebounce, 260); } // la leyenda se mueve: recolocar etiquetas
 }
 function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} } }
 
