@@ -56,6 +56,7 @@ function initMap() {
   Object.values(baseLayers).forEach(b => b.on && b.on('tileerror', () => { tileErrores++; actualizarRed(); }));
   setBase(S.base in baseLayers ? S.base : 'claro', false);
   prepararTema();
+  nivelEstilo = nivelZoom(map.getZoom() || 0);
   capaLotes = L.geoJSON(DATA, {
     style: estiloFeat,
     onEachFeature: (f, layer) => {
@@ -71,6 +72,7 @@ function initMap() {
   capaMedir = L.layerGroup().addTo(map);
   map.on('click', e => { if (medir.modo) medirPunto(e.latlng); });
   map.on('moveend zoomend', () => { etiquetasDebounce(); guardarVista(); });
+  map.on('zoomend', () => { const n = nivelZoom(map.getZoom()); if (n !== nivelEstilo) { nivelEstilo = n; restilar(); } });
   map.on('zoomend', () => { if (panorama && map.getZoom() > 15.5) { panorama = null; pintarPanorama(); } });
   map.on('dragstart', () => { if (typeof GPS !== 'undefined') { GPS.siguiendo = false; pintarGpsBtn(); } });
   // La leyenda se pliega con el primer arrastre o zoom del usuario; fitBounds, setView y el GPS no disparan estos eventos.
@@ -164,13 +166,33 @@ function prepararTema() {
     lotes.forEach(l => { const k = T.cat(l); if (esNeutro(k)) { temaClase.set(l.cod, k); return; } temaColor.set(l.cod, col[k] || COLOR_OTRAS); temaClase.set(l.cod, col[k] ? k : 'Otras'); });
   }
 }
+/* Estilo por nivel de zoom, para que la vista general se lea: 0 = z ≤ 11 (sin contorno oscuro: el borde toma el
+   color del relleno, así cada lote se ve como una mancha limpia de su clase y no desaparece por ser pequeño),
+   1 = z 12–14 (contorno fino 0.4 px al 50 %), 2 = z ≥ 15 (contorno completo). Solo se restila al cruzar un umbral. */
+const nivelZoom = z => z < 12 ? 0 : z < 15 ? 1 : 2;
+const estiloPlano = (col, op) => ({stroke: true, color: col, weight: 1, opacity: op, fillColor: col, fillOpacity: op});
+let nivelEstilo = 2;
 function estiloFeat(f) {
-  const sat = S.base === 'satelite', oscuro = S.base === 'ninguno' && temaEfectivo() === 'oscuro';
-  if (temaFiltro !== null && (temaClase.get(f._cod) || (TEMAS[S.colorear] || {}).sin || 'Sin dato') !== temaFiltro) return {color: sat ? '#ffffff' : '#9aa3ad', weight: .5, opacity: .45, fillColor: '#9aa3ad', fillOpacity: .04};
-  if (S.colorear === 'ninguno') return {color: sat || oscuro ? '#ffffff' : '#0b3a66', weight: sat ? 1.6 : 1, opacity: sat ? .95 : .8, fillColor: sat ? '#ffffff' : '#3d6b99', fillOpacity: sat ? .05 : .13};
+  const sat = S.base === 'satelite', oscuro = S.base === 'ninguno' && temaEfectivo() === 'oscuro', n = nivelEstilo;
+  if (temaFiltro !== null && (temaClase.get(f._cod) || (TEMAS[S.colorear] || {}).sin || 'Sin dato') !== temaFiltro) {
+    if (n === 0) return estiloPlano(sat || oscuro ? '#ffffff' : '#9aa3ad', sat || oscuro ? .12 : .2);
+    return {stroke: true, color: sat || oscuro ? '#ffffff' : '#9aa3ad', weight: n === 1 ? .4 : .5, opacity: n === 1 ? .35 : .45, fillColor: '#9aa3ad', fillOpacity: .04};
+  }
+  if (S.colorear === 'ninguno') {
+    if (n === 0) return estiloPlano(sat ? '#ffffff' : oscuro ? '#9cc3ea' : '#3d6b99', sat ? .5 : oscuro ? .45 : .55);
+    if (n === 1) return {stroke: true, color: sat || oscuro ? '#ffffff' : '#0b3a66', weight: sat ? 1 : .6, opacity: sat ? .85 : .6, fillColor: sat ? '#ffffff' : '#3d6b99', fillOpacity: sat ? .08 : .2};
+    return {stroke: true, color: sat || oscuro ? '#ffffff' : '#0b3a66', weight: sat ? 1.6 : 1, opacity: sat ? .95 : .8, fillColor: sat ? '#ffffff' : '#3d6b99', fillOpacity: sat ? .05 : .13};
+  }
   const c = temaColor.get(f._cod);
-  if (!c) return {color: sat ? '#ffffff' : '#7b8794', weight: .8, opacity: .7, fillColor: '#9aa3ad', fillOpacity: .12};
-  return {color: sat ? '#ffffff' : '#1c2733', weight: sat ? 1.2 : .7, opacity: .9, fillColor: c, fillOpacity: sat ? .55 : .68};
+  if (!c) {
+    if (n === 0) return estiloPlano('#9aa3ad', .45);
+    return {stroke: true, color: sat ? '#ffffff' : '#7b8794', weight: n === 1 ? .4 : .8, opacity: n === 1 ? .5 : .7, fillColor: '#9aa3ad', fillOpacity: n === 1 ? .2 : .12};
+  }
+  const filtrado = temaFiltro !== null; // la clase elegida se pinta más intensa sobre el resto atenuado
+  if (n === 0) return estiloPlano(c, filtrado ? .95 : sat ? .8 : .85);
+  if (sat) return {stroke: true, color: '#ffffff', weight: n === 1 ? .5 : .8, opacity: n === 1 ? .6 : .9, fillColor: c, fillOpacity: filtrado ? .8 : n === 1 ? .7 : .65};
+  if (n === 1) return {stroke: true, color: oscuro ? '#e6edf3' : '#1c2733', weight: .4, opacity: oscuro ? .35 : .5, fillColor: c, fillOpacity: filtrado ? .85 : .72};
+  return {stroke: true, color: '#1c2733', weight: .7, opacity: .9, fillColor: c, fillOpacity: .68};
 }
 /* Resaltado del lote seleccionado. Sin capa: contorno dorado y relleno amarillo suave.
    Con capa temática: solo contorno dorado grueso (con halo oscuro para que se vea sobre la mostaza) y el lote
