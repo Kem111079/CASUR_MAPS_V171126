@@ -160,7 +160,7 @@ function alPosicion(pos) {
   // Solo la primera lectura acerca el mapa; después se respeta el zoom elegido (por ejemplo, la vista de alrededores).
   // El mapa se recentra solo al avanzar unos metros, con desplazamiento suave: quieto, no tiembla con el ruido del GPS.
   vueloLectura(c, vCruda);
-  if (VUELO.on) { if (GPS.siguiendo) vueloSeguir(lat, lng, v, primera); orientar(); vueloLote(lng, lat); pintarVueloHud(); pintarGpsChip(); pintarGpsBtn(); return; }
+  if (VUELO.on) { if (GPS.siguiendo) vueloSeguir(lat, lng, v, primera); orientar(); vueloLote(lng, lat); vueloGrabar(lat, lng, v, acc, t); pintarVueloHud(); pintarGpsChip(); pintarGpsBtn(); return; }
   if (GPS.siguiendo) {
     if (primera) { map.setView([lat, lng], Math.max(map.getZoom(), 17)); GPS.centro = aqui; }
     else if (!GPS.centro || haversineM(GPS.centro.lng, GPS.centro.lat, lng, lat) >= G.centrar) { map.panTo([lat, lng], {animate: true, duration: .9, easeLinearity: .6}); GPS.centro = aqui; }
@@ -513,15 +513,20 @@ function vueloLectura(c, v) {
 }
 const mediana = a => { const b = a.slice().sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
 function alturaVuelo() { return VUELO.alt === null ? null : VUELO.base !== null ? VUELO.alt - VUELO.base : null; }
-function activarVuelo(on) {
+function activarVuelo(on, retomar = false) {
+  if (on === VUELO.on && !retomar) return;
   VUELO.on = on; document.body.classList.toggle('vuelo', on); cerrarHoja();
+  if (on && !retomar) { VUELO_REG = {id: 'VUE-' + Date.now(), inicio: new Date().toISOString(), tecnico: S.tecnico || '', pts: [], lotes: {}, marcas: [], dist: 0, altMax: null}; kvSet('vuelo_activo', VUELO_REG); }
+  if (!on) cerrarVueloReg();
   if (on) {
     mostrarTab('mapa'); if (selCod) cerrarCard(); if (typeof quitarModoFinca === 'function') quitarModoFinca();
+    if (retomar && VUELO_REG && VUELO_REG.base !== null && VUELO_REG.base !== undefined) VUELO.base = VUELO_REG.base; // tras recargar, la misma referencia del despegue
     if (VUELO.base === null && VUELO.alt !== null) VUELO.base = VUELO.alt; // sin referencia previa: se toma la altitud actual
+    if (VUELO_REG) VUELO_REG.base = VUELO.base;
     if (GPS.watch === null) iniciarGps(true); else { GPS.siguiendo = true; }
     GPS.ancla = null; VUELO.zoomT = 0; VUELO.lote = ''; aplicarGiroCss(); pedirPantalla(); leyPlegar(true);
-    toast('Modo vuelo activo. Altura aproximada (GPS), sobre el punto de despegue.', {tipo: 'bien', ms: 5000});
-  } else { soltarPantalla(); pedirPantalla(); aplicarGiroCss(); GPS.ancla = null; toast('Modo vuelo desactivado.'); }
+    toast(retomar ? 'Se retomó el vuelo en curso.' : 'Modo vuelo activo: se graba el recorrido. Altura aproximada (GPS), sobre el punto de despegue.', {tipo: 'bien', ms: 5000});
+  } else { soltarPantalla(); pedirPantalla(); aplicarGiroCss(); GPS.ancla = null; }
   pintarVueloHud(); etiquetasDebounce();
 }
 /* Zoom según la velocidad y la altura; el punto propio queda en el tercio inferior para ver lo que viene adelante. */
@@ -556,10 +561,11 @@ function pintarVueloHud() {
   const f = GPS.fix, v = f && f.v !== null ? f.v * 3.6 : null, h = alturaVuelo(), rumbo = Number.isFinite(GPS.rumbo) ? GPS.rumbo : Number.isFinite(GPS.curso) ? GPS.curso : null;
   const l = VUELO.lote ? LOTES[VUELO.lote] : null, sem = l ? semaforoLote(l) : null;
   const dato = (b, s) => `<div><b>${b}</b><small>${s}</small></div>`;
-  el.innerHTML = `<div class="vh-cab"><span>${ico('heli')} Modo vuelo</span><button type="button" onclick="activarVuelo(false)">Salir</button></div>
+  const R = VUELO_REG, grab = R ? `<em class="vh-rec"><span class="rec"></span>${fmtDur(Date.now() - new Date(R.inicio))} · ${fmtDist(R.dist)} · ${Object.keys(R.lotes).length} lotes</em>` : '';
+  el.innerHTML = `<div class="vh-cab"><span>${ico('heli')} Modo vuelo</span>${grab}<button type="button" onclick="pedirSalirVuelo()">Aterrizar</button></div>
     <div class="vh-datos">${dato(h !== null ? nf0.format(h) + ' m' : VUELO.alt !== null ? nf0.format(VUELO.alt) + ' m' : '—', h !== null ? 'altura aprox.' : VUELO.alt !== null ? 'sobre el mar' : 'altura sin dato')}${dato(v !== null ? nf0.format(v) : '—', 'km/h')}${dato(rumbo !== null ? nf0.format(rumbo) + '° ' + CARDINAL[Math.round(rumbo / 45) % 8] : '—', 'rumbo')}</div>
     <div class="vh-lote est-${sem ? sem.cls : 'neutro'}">${l ? `<i></i><b>${esc(l.cod)}</b><span>${esc(l.hac)}${l.tchEst > 0 && esMolienda(l) ? ` · ${nfTch.format(l.tchEst)} t/ha` : l.clas ? ' · ' + esc(rotulo(l.clas)) : ''}${l.nc ? ' · ' + esc(ncCorto(l)) : ''}</span>`
-      : VUELO.cerca ? `<span>Fuera de lotes · ${esc(VUELO.cerca.cod)} a ${nf0.format(VUELO.cerca.d)} m</span>` : `<span>${f ? 'Fuera de lotes' : 'Buscando señal GPS…'}</span>`}</div>`;
+      : VUELO.cerca ? `<span>Fuera de lotes · ${esc(VUELO.cerca.cod)} a ${nf0.format(VUELO.cerca.d)} m</span>` : `<span>${f ? 'Fuera de lotes' : 'Buscando señal GPS…'}</span>`}<button type="button" class="vh-marcar" onclick="marcarDesdeAire()" aria-label="Marcar el lote de abajo">${ico('pin')} Marcar</button></div>`;
 }
 /* Antes de despegar: guarda el mapa base de toda la zona de lotes (vista general hasta acercamiento medio) para tenerlo sin señal. */
 async function prepararVuelo() {
@@ -580,4 +586,104 @@ async function prepararVuelo() {
   await Promise.all(Array.from({length: 6}, trabajador));
   aviso && aviso.remove();
   toast(ok ? `Mapa guardado para el vuelo: ${ok} cuadros hasta acercamiento ${zMax}. Los lotes ya están en el teléfono.` : 'No se pudo guardar el mapa (¿sin señal?).', {tipo: ok ? 'bien' : 'mal', ms: 7000});
+}
+
+/* ── Grabación del vuelo: recorrido con altura, lotes sobrevolados y marcas desde el aire ── */
+let VUELO_REG = null, VUELOS = [], _vueloGuardT = 0, capaVuelo = null;
+function vueloGrabar(lat, lng, v, acc, t) {
+  const R = VUELO_REG; if (!R || acc > 60) return;
+  const h = alturaVuelo(), u = R.pts[R.pts.length - 1];
+  if (u) { const d = haversineM(u.lng, u.lat, lng, lat); if (d < 25 && t - u.t < 10000) return; if (d > VEL_MAX_VUELO * Math.max((t - u.t) / 1000, 1) + 200) return; R.dist += d; } // salto imposible del GPS: no entra a la ruta
+  if (VUELO.lote && !R.lotes[VUELO.lote]) R.lotes[VUELO.lote] = new Date(t).toISOString();
+  R.pts.push({lat, lng, t, h: h === null ? null : Math.round(h), v: v === null ? null : Math.round(v * 3.6)});
+  if (h !== null && (R.altMax === null || h > R.altMax)) R.altMax = Math.round(h);
+  if (Date.now() - _vueloGuardT > 15000) { _vueloGuardT = Date.now(); kvSet('vuelo_activo', R); }
+}
+async function cargarVuelos() {
+  VUELOS = (await kvGet('vuelos')) || [];
+  const act = await kvGet('vuelo_activo');
+  if (act && act.pts && Date.now() - new Date(act.inicio) < 12 * 3600000) { VUELO_REG = act; activarVuelo(true, true); }
+  else if (act) kvSet('vuelo_activo', null);
+}
+async function pedirSalirVuelo() {
+  if (!await preguntar('¿Terminar el vuelo?', 'Se guarda el recorrido y se muestra el resumen.', 'Terminar', 'Seguir volando')) return;
+  activarVuelo(false);
+}
+function cerrarVueloReg() {
+  const R = VUELO_REG; VUELO_REG = null; kvSet('vuelo_activo', null);
+  if (!R) return;
+  R.fin = new Date().toISOString();
+  if (R.pts.length < 2 && !R.marcas.length) { toast('Modo vuelo desactivado. No se grabó recorrido.'); return; }
+  VUELOS.push(R); if (VUELOS.length > 60) VUELOS = VUELOS.slice(-60); kvSet('vuelos', VUELOS);
+  if (document.body.dataset.tab === 'visita') renderVisita();
+  cierreVuelo(R);
+}
+const vueloPorId = id => VUELOS.find(x => x.id === id);
+function datosVuelo(R) {
+  const lotes = Object.keys(R.lotes || {}).filter(c => LOTES[c]), ha = lotes.reduce((s, c) => s + (LOTES[c].area || 0), 0);
+  const fincas = {}; lotes.forEach(c => { const f = LOTES[c].hac; fincas[f] = (fincas[f] || 0) + 1; });
+  const hs = R.pts.map(p => p.h).filter(x => x !== null), vs = R.pts.map(p => p.v).filter(x => x !== null);
+  return {lotes, ha, fincas: Object.entries(fincas).sort((a, b) => b[1] - a[1]), dur: new Date(R.fin || Date.now()) - new Date(R.inicio),
+    hProm: hs.length ? hs.reduce((a, b) => a + b, 0) / hs.length : null, vMax: vs.length ? Math.max(...vs) : null};
+}
+function cierreVuelo(R) {
+  if (!R) return; const d = datosVuelo(R);
+  abrirHoja('Vuelo finalizado', `
+    <div class="cifras c4">${cifra('Duración', fmtDur(d.dur))}${cifra('Distancia', fmtDist(R.dist || 0))}${cifra('Lotes sobrevolados', nf0.format(d.lotes.length), '', `<small class="kpi-d">${nfHa.format(d.ha)} ha</small>`)}${cifra('Altura máx.', R.altMax !== null ? nf0.format(R.altMax) + ' m' : '—', '', d.hProm !== null ? `<small class="kpi-d">prom. ${nf0.format(d.hProm)} m</small>` : '')}</div>
+    ${d.fincas.length ? `<p class="pie">${d.fincas.slice(0, 12).map(([f, n]) => `${esc(f)} ${n}`).join(' · ')}${d.fincas.length > 12 ? ' …' : ''}</p>` : '<p class="vacio">No se sobrevoló ningún lote.</p>'}
+    ${R.marcas.length ? `<h4>Marcas desde el aire (${R.marcas.length})</h4>${R.marcas.map(m => `<div class="hist-fila"><b>Lote ${esc(m.cod)}</b><span>${new Date(m.t).toLocaleTimeString('es-NI', {hour: '2-digit', minute: '2-digit'})}${m.h !== null ? ' · ' + nf0.format(m.h) + ' m' : ''}</span></div>`).join('')}` : ''}
+    <button type="button" class="btn pri ancho grande" onclick="compartirVuelo('${esc(R.id)}')">${ico('share')} Compartir imagen del vuelo</button>
+    <div class="acciones"><button type="button" class="btn sec" onclick="verRutaVuelo(vueloPorId('${esc(R.id)}'))">${ico('map')} Ver ruta</button><button type="button" class="btn ter" onclick="cerrarHoja()">Cerrar</button></div>`, 'alta');
+}
+function verRutaVuelo(R) {
+  if (!R) return; cerrarHoja(); mostrarTab('mapa'); soltarSeguimiento();
+  if (capaVuelo) map.removeLayer(capaVuelo);
+  const feats = Object.keys(R.lotes).flatMap(c => (LOTES[c] || {feats: []}).feats);
+  capaVuelo = L.layerGroup([L.geoJSON({type: 'FeatureCollection', features: feats}, {interactive: false, style: {color: '#0a66ff', weight: 2, fillColor: '#0a66ff', fillOpacity: .18}}),
+    L.polyline(R.pts.map(p => [p.lat, p.lng]), {color: '#fff', weight: 7, opacity: .9, interactive: false}), L.polyline(R.pts.map(p => [p.lat, p.lng]), {color: '#e6007e', weight: 3.5, interactive: false}),
+    ...R.marcas.map(m => L.circleMarker([m.lat, m.lng], {radius: 7, color: '#fff', weight: 2.5, fillColor: '#d4a017', fillOpacity: 1, interactive: false}))]).addTo(map);
+  if (R.pts.length > 1) map.fitBounds(L.latLngBounds(R.pts.map(p => [p.lat, p.lng])), margenes(90, 40));
+  toast('Ruta del vuelo', {accion: 'Quitar', ms: 10000, alAccion: () => { if (capaVuelo) { map.removeLayer(capaVuelo); capaVuelo = null; } }});
+}
+async function borrarVuelo(id) { if (!await preguntar('¿Borrar este vuelo?', '', 'Borrar', 'Cancelar')) return; VUELOS = VUELOS.filter(x => x.id !== id); await kvSet('vuelos', VUELOS); renderVisita(); }
+function imagenVuelo(R) {
+  const d = datosVuelo(R), W = 1080, H = 1320, c = document.createElement('canvas'), ctx = c.getContext('2d'); c.width = W; c.height = H;
+  const pts = R.pts; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; const ext = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
+  pts.forEach(p => ext(p.lng, p.lat)); d.lotes.forEach(cd => LOTES[cd].feats.forEach(f => { ext(f.bbox[0], f.bbox[1]); ext(f.bbox[2], f.bbox[3]); }));
+  if (x0 === Infinity) { ext(-85.84, 11.48); ext(-85.83, 11.49); }
+  const k = Math.cos((y0 + y1) / 2 * Math.PI / 180), mw = Math.max((x1 - x0) * k, 1e-5), mh = Math.max(y1 - y0, 1e-5), top = 430, alto = H - top - 90, es = Math.min((W - 120) / mw, alto / mh);
+  const ox = (W - mw * es) / 2, oy = top + (alto - mh * es) / 2, X = x => ox + (x - x0) * k * es, Y = y => oy + (y1 - y) * es;
+  ctx.fillStyle = '#f4f7f5'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#0b7f3a'); g.addColorStop(1, '#005baa'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, 210);
+  ctx.fillStyle = '#fff'; ctx.font = '700 34px Arial'; ctx.fillText('CASUR Maps · Vuelo de reconocimiento', 60, 70);
+  ctx.font = '900 54px Arial'; ctx.fillText(new Date(R.inicio).toLocaleDateString('es-NI', {day: 'numeric', month: 'long', year: 'numeric'}), 60, 140);
+  ctx.font = '600 28px Arial'; ctx.fillText(`${new Date(R.inicio).toLocaleTimeString('es-NI', {hour: '2-digit', minute: '2-digit'})} a ${new Date(R.fin || Date.now()).toLocaleTimeString('es-NI', {hour: '2-digit', minute: '2-digit'})}${R.tecnico ? ' · ' + R.tecnico : ''}`, 60, 186);
+  [['DURACIÓN', fmtDur(d.dur)], ['DISTANCIA', fmtDist(R.dist || 0)], ['LOTES', `${d.lotes.length} · ${nfHa.format(d.ha)} ha`], ['ALTURA MÁX.', R.altMax !== null ? nf0.format(R.altMax) + ' m' : '—']].forEach((b, i) => {
+    const x = 40 + i * 252; ctx.fillStyle = '#fff'; ctx.fillRect(x, 240, 236, 100); ctx.fillStyle = '#64748b'; ctx.font = '800 20px Arial'; ctx.fillText(b[0], x + 16, 274); ctx.fillStyle = '#0f172a'; ctx.font = '900 30px Arial'; ctx.fillText(b[1], x + 16, 318); });
+  ctx.fillStyle = '#334155'; ctx.font = '600 24px Arial'; ctx.fillText(d.fincas.slice(0, 5).map(([f, n]) => `${f} ${n}`).join(' · ').slice(0, 80), 40, 390);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, top - 10, W, alto + 20); ctx.clip();
+  d.lotes.forEach(cd => LOTES[cd].feats.forEach(f => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates).forEach(pg => { ctx.beginPath(); pg.forEach(r => { r.forEach((q, i) => i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))); ctx.closePath(); }); ctx.fillStyle = 'rgba(10,102,255,.18)'; ctx.fill(); ctx.strokeStyle = '#7aa7e6'; ctx.lineWidth = 1.5; ctx.stroke(); })));
+  if (pts.length > 1) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(X(p.lng), Y(p.lat)) : ctx.moveTo(X(p.lng), Y(p.lat))); ctx.strokeStyle = '#fff'; ctx.lineWidth = 10; ctx.lineJoin = 'round'; ctx.stroke(); ctx.strokeStyle = '#e6007e'; ctx.lineWidth = 5; ctx.stroke(); }
+  R.marcas.forEach(m => { ctx.beginPath(); ctx.arc(X(m.lng), Y(m.lat), 12, 0, 7); ctx.fillStyle = '#d4a017'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke(); });
+  ctx.restore();
+  ctx.fillStyle = '#64748b'; ctx.font = '600 24px Arial'; ctx.fillText(`Altura aproximada por GPS, sobre el punto de despegue${R.marcas.length ? ` · ${R.marcas.length} marca(s) desde el aire` : ''}`, 40, H - 40);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', .9));
+}
+async function compartirVuelo(id) { const R = vueloPorId(id); if (!R) return; const b = await imagenVuelo(R); if (b) compartirImagen(b, `vuelo_${R.inicio.slice(0, 10)}.jpg`); }
+/* Marca desde el aire: queda en la Bitácora como «Seguimiento · Media» del lote de abajo (o del que se tocó en el mapa),
+   con la posición del helicóptero, la altura y la velocidad. Luego se le agrega nota o foto. */
+function marcarDesdeAire(cod) {
+  cod = cod || VUELO.lote || (VUELO.cerca && VUELO.cerca.cod) || '';
+  const f = GPS.fix, l = LOTES[cod];
+  if (!l) { toast('No hay un lote debajo. Toque un lote en el mapa y use «Marcar desde el aire».', {ms: 6000}); return; }
+  if (!f) { toast('Esperando señal GPS…'); return; }
+  const h = alturaVuelo(), kmh = f.v !== null ? Math.round(f.v * 3.6) : null, ahora = Date.now(), arr = obsTodas();
+  const o = {id: 'OBS-' + ahora, fecha_hora: new Date(ahora).toISOString(), codlote: cod, hacienda_productor: l.hac, tablon: '', categoria: 'Seguimiento', severidad: 'Media',
+    nota: `Desde el aire${h !== null ? ' · ' + nf0.format(h) + ' m' : ''}${kmh !== null ? ' · ' + kmh + ' km/h' : ''}${cod !== VUELO.lote ? ' · lote visto a distancia' : ''}`,
+    lat: f.lat, lng: f.lng, precision_m: f.acc, pos_fuente: 'vuelo', usuario: S.tecnico || 'CASUR Maps', photo_id: '', photo_name: '', photo_id2: ''};
+  arr.push(o); if (!obsGuardar(arr)) return;
+  if (VUELO_REG) { VUELO_REG.marcas.push({id: o.id, cod, lat: f.lat, lng: f.lng, t: ahora, h: h === null ? null : Math.round(h)}); kvSet('vuelo_activo', VUELO_REG); }
+  if (typeof refrescarVistas === 'function') refrescarVistas();
+  toast(`Marca en lote ${cod}.`, {tipo: 'bien', ms: 8000, accion: 'Deshacer', alAccion: () => { if (VUELO_REG) VUELO_REG.marcas = VUELO_REG.marcas.filter(m => m.id !== o.id); deshacerRapido(o.id); }, accion2: 'Nota / foto', alAccion2: () => abrirRegistro(cod, o.id)});
+  pintarVueloHud();
 }

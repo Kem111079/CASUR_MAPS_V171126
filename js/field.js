@@ -12,7 +12,7 @@ function obsFilaHtml(o) {
   const pend = esPendiente(o);
   return `<div class="obs sev-${esc(String(o.severidad || '').toLowerCase())}${o.resuelto ? ' resuelta' : ''}"><div class="obs-cab"><b>${esc(o.categoria)} · ${esc(o.severidad)}</b><small>${esc(fechaHora(o.fecha_hora))}${o.photo_id ? ' · ' + ico('camera') : ''}</small></div>
     <p>${esc(o.nota || 'Sin nota')}</p>${o.resuelto ? `<p class="pie">${ico('check')} Resuelto el ${esc(fechaHora(o.resuelto))}</p>` : ''}
-    <div class="obs-acc">${pend ? `<button type="button" class="ok" onclick="obsResolver('${esc(o.id)}',true)">${ico('check')} Resuelto</button>` : o.resuelto ? `<button type="button" onclick="obsReabrir('${esc(o.id)}')">${ico('rotate')} Reabrir</button>` : ''}<button type="button" onclick="abrirRegistro('${esc(o.codlote)}','${esc(o.id)}')">${ico('edit')} Editar</button>${o.pos_fuente === 'gps' ? `<button type="button" onclick="compartirRegistro('${esc(o.id)}')">${ico('share')} Compartir</button>` : ''}<button type="button" onclick="obsBorrar('${esc(o.id)}')">${ico('trash')}</button></div></div>`;
+    <div class="obs-acc">${pend ? `<button type="button" class="ok" onclick="obsResolver('${esc(o.id)}',true)">${ico('check')} Resuelto</button>` : o.resuelto ? `<button type="button" onclick="obsReabrir('${esc(o.id)}')">${ico('rotate')} Reabrir</button>` : ''}<button type="button" onclick="abrirRegistro('${esc(o.codlote)}','${esc(o.id)}')">${ico('edit')} Editar</button>${conPosicion(o) ? `<button type="button" onclick="compartirRegistro('${esc(o.id)}')">${ico('share')} Compartir</button>` : ''}<button type="button" onclick="obsBorrar('${esc(o.id)}')">${ico('trash')}</button></div></div>`;
 }
 function obsResolver(id, resuelto) {
   const arr = obsTodas(), o = arr.find(x => x.id === id); if (!o) return;
@@ -147,6 +147,7 @@ function elegirEntreLotes(cat, gpsCod, manCod, dist, seguir) {
 /* ── Formulario único de registro (antes: "observación" y "hallazgo" por separado) ── */
 let reg = null, _dictado = null;
 /* pre: {cat, sev} para un registro nuevo que llega con categoría o severidad ya elegidas (registro rápido en Alta). */
+const conPosicion = o => o && (o.pos_fuente === 'gps' || o.pos_fuente === 'vuelo');
 async function abrirRegistro(cod, id = '', pre = null) {
   cod = codKey(cod); const l = LOTES[cod]; if (!l) { toast('Seleccione primero un lote.'); return; }
   const o = id ? obsTodas().find(x => x.id === id) : null;
@@ -161,7 +162,7 @@ async function abrirRegistro(cod, id = '', pre = null) {
   abrirHoja((o ? 'Editar registro · ' : 'Registrar en ') + 'lote ' + cod, `
     <p class="pie" id="regHac">${esc(l.hac)}${selFeat && selFeat._cod === cod && selFeat.properties.Tablon ? ' · tablón ' + esc(selFeat.properties.Tablon) : ''}</p>
     ${bor ? `<div id="regBorrador" class="nota est-neutro">${ico('rotate')} Se recuperó lo que había escrito sin guardar. <button type="button" class="enlace" onclick="descartarBorrador()">Empezar de nuevo</button></div>` : ''}
-    ${o ? `<div class="nota est-neutro">${o.pos_fuente === 'gps' ? ico('pin') + ' Se conserva la posición GPS original del registro.' : 'Registro anterior sin posición GPS: se puede editar, pero no compartir como hallazgo.'}</div>` : '<div id="regGps" class="nota est-neutro">Comprobando GPS…</div>'}
+    ${o ? `<div class="nota est-neutro">${o.pos_fuente === 'vuelo' ? ico('heli') + ' Marca desde el aire: se conserva la posición del helicóptero.' : o.pos_fuente === 'gps' ? ico('pin') + ' Se conserva la posición GPS original del registro.' : 'Registro anterior sin posición GPS: se puede editar, pero no compartir como hallazgo.'}</div>` : '<div id="regGps" class="nota est-neutro">Comprobando GPS…</div>'}
     <div class="campo">Categoría${o ? '' : ' <small class="req">(elija una)</small>'}<div class="rapidos cats" id="regCat" role="radiogroup" aria-label="Categoría">${cats.map(c => `<button type="button" role="radio" data-v="${esc(c)}">${ico(ICONO_CAT[c] || 'dots')}${esc(c)}</button>`).join('')}</div><p id="regCatErr" class="campo-error" role="alert" hidden></p></div>
     <div class="campo">Severidad<div class="segmento" id="regSev">${['Baja', 'Media', 'Alta'].map(s => `<button type="button" data-v="${s}">${s}</button>`).join('')}</div><span id="regSevBaja" class="ayuda" hidden>Baja = informativo: no queda como pendiente.</span><span id="regSevNota" class="ayuda" hidden>${ico('camera')} Severidad alta: agregue al menos una foto.</span></div>
     <label class="campo">Nota<textarea id="regNota" rows="3" placeholder="Qué se observó…">${esc(o ? o.nota : '')}</textarea></label>
@@ -169,7 +170,7 @@ async function abrirRegistro(cod, id = '', pre = null) {
     <div class="fotos">${[0, 1].map(i => `<label class="foto" id="regFotoL${i}"><input type="file" accept="image/*" capture="environment" data-i="${i}"><span>${ico('camera')} Foto ${i + 1}</span></label>`).join('')}</div>
     <p id="regFotoErr" class="campo-error" role="alert" hidden></p>
     <label class="campo">Técnico<input id="regTec" type="text" value="${esc((o && o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : '') || S.tecnico)}" placeholder="Su nombre (se guarda para la próxima vez)"></label>
-    <div class="acciones"><button type="button" class="btn pri reg-guardar" onclick="guardarRegistro(false)">Guardar</button>${!o || o.pos_fuente === 'gps' ? '<button type="button" class="btn sec reg-guardar" onclick="guardarRegistro(true)">Guardar y compartir</button>' : ''}</div>`, 'alta');
+    <div class="acciones"><button type="button" class="btn pri reg-guardar" onclick="guardarRegistro(false)">Guardar</button>${!o || conPosicion(o) ? '<button type="button" class="btn sec reg-guardar" onclick="guardarRegistro(true)">Guardar y compartir</button>' : ''}</div>`, 'alta');
   reg.ini = {cat: reg.cat, sev: reg.sev, nota: $('regNota').value.trim()}; // para saber si hay cambios sin guardar
   if (bor) {
     $('regNota').value = bor.nota; if (bor.tec) $('regTec').value = bor.tec;
@@ -419,13 +420,13 @@ async function imagenRegistro(o) {
     y += hFoto;
   }
   ctx.fillStyle = '#64748b'; ctx.font = '600 24px Arial';
-  ctx.fillText(`${new Date(o.fecha_hora).toLocaleString('es-NI')}  ·  ${o.lat !== '' ? Number(o.lat).toFixed(6) + ', ' + Number(o.lng).toFixed(6) : 'sin coordenadas'}${o.pos_fuente === 'gps' ? ' · registrado en sitio, GPS ±' + o.precision_m + ' m' : ''}`, 80, y + 44);
+  ctx.fillText(`${new Date(o.fecha_hora).toLocaleString('es-NI')}  ·  ${o.lat !== '' ? Number(o.lat).toFixed(6) + ', ' + Number(o.lng).toFixed(6) : 'sin coordenadas'}${o.pos_fuente === 'gps' ? ' · registrado en sitio, GPS ±' + o.precision_m + ' m' : o.pos_fuente === 'vuelo' ? ' · desde el aire, GPS ±' + o.precision_m + ' m' : ''}`, 80, y + 44);
   return new Promise(res => c.toBlob(res, 'image/jpeg', 0.9));
 }
 /* Se comparte solo la imagen del hallazgo, sin texto ni enlaces. */
 async function compartirRegistro(id) {
   const o = obsTodas().find(x => x.id === id); if (!o) return;
-  if (o.pos_fuente !== 'gps') { toast('Este registro no tiene posición GPS: no se puede compartir como hallazgo.', {tipo: 'mal'}); return; }
+  if (!conPosicion(o)) { toast('Este registro no tiene posición GPS: no se puede compartir como hallazgo.', {tipo: 'mal'}); return; }
   const blob = await imagenRegistro(o).catch(() => null);
   if (!blob) { toast('No se pudo generar la imagen.', {tipo: 'mal'}); return; }
   await compartirImagen(blob, `hallazgo_lote_${o.codlote}_${o.fecha_hora.slice(0, 10)}.jpg`);
@@ -834,6 +835,8 @@ function renderVisita() {
     <div id="planRes" class="lista-lotes"></div>
     ${lista}
     <h3>Visitas anteriores</h3>${previas || '<p class="vacio">Sin visitas guardadas.</p>'}
+    ${typeof VUELOS !== 'undefined' && VUELOS.length ? `<h3>Vuelos</h3>${VUELOS.slice(-10).reverse().map(x => { const d = datosVuelo(x); return `<div class="bloque"><b>${ico('heli')} ${esc(new Date(x.inicio).toLocaleString('es-NI', {dateStyle: 'medium', timeStyle: 'short'}))}</b><p>${fmtDur(d.dur)} · ${fmtDist(x.dist || 0)} · ${d.lotes.length} lotes sobrevolados · ${x.marcas.length} marca${x.marcas.length === 1 ? '' : 's'}</p>
+      <div class="obs-acc"><button type="button" onclick="cierreVuelo(vueloPorId('${x.id}'))">${ico('file')} Resumen</button><button type="button" onclick="verRutaVuelo(vueloPorId('${x.id}'))">${ico('map')} Ruta</button><button type="button" onclick="borrarVuelo('${x.id}')">${ico('trash')}</button></div></div>`; }).join('')}` : ''}
     <div class="barra-accion">${v ? `<button type="button" class="btn peligro grande" onclick="pedirFinalizarVisita()">${ico('stop')} Finalizar visita</button>` : `<button type="button" class="btn pri grande" onclick="iniciarVisita()">${ico('play')} Iniciar visita</button>`}</div>`;
   $('planQ').addEventListener('input', e => planBuscar(e.target.value));
   $('planRes').addEventListener('click', planClick);
@@ -1190,7 +1193,7 @@ async function iniciar() {
     pintarGpsBtn(); pintarLista(); actualizarRed(); pintarInsignia(); pintarRegistros();
     $('btnPanorama').addEventListener('click', alternarPanorama);
     $('loader').hidden = true; map.invalidateSize();
-    await cargarVisitas();
+    await cargarVisitas(); await cargarVuelos();
     const lote = new URLSearchParams(location.search).get('lote'), conEnlace = lote && LOTES[codKey(lote)];
     if (conEnlace) seleccionarLote(lote, {zoom: true});
     // Tras aplicar una actualización: vuelve a la pestaña (o al lote) donde estaba y confirma la versión.
@@ -1266,7 +1269,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 
 /* Novedades de la versión, en lenguaje sencillo (se muestran al actualizar y desde Ajustes). */
 const NOVEDADES = [
-  ['Modo vuelo', 'Para helicóptero: altura, velocidad, rumbo y el lote debajo; mapa que se adelanta al rumbo. Active «Preparar vuelo» antes de despegar.'],
+  ['Modo vuelo', 'Para helicóptero: altura, velocidad, rumbo y el lote debajo; mapa que se adelanta al rumbo. Active «Preparar vuelo» antes de despegar. Graba el recorrido, marca lotes desde el aire y al aterrizar da el resumen.'],
   ['Leyenda más clara', '«Sin dato» se separa en «Fuera de molienda» (Semilla, Sin caña…) y la falta real de dato; los % suman 100 % sobre molienda.'],
   ['Resumen por bloques', 'Panorama, Zafra, Fincas y Renovación en pestañas: cada vista cabe en pantalla, sin tanto desplazamiento.'],
   ['Resumen ejecutivo', '«Cómo vamos»: toneladas, TCH frente a 25/26, avance de zafra por mes y ranking por zona y finca.'],

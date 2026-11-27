@@ -1,5 +1,11 @@
 # Cambios
 
+## V271126L · 27-nov-2026 · Modo vuelo: grabación y marcas desde el aire
+- **Grabación del vuelo:** al activar el Modo vuelo se graba el recorrido con altura y velocidad, y los lotes sobrevolados. Si la app se cierra, el vuelo se retoma al abrirla (con la misma altura de referencia). Los saltos imposibles del GPS no entran a la ruta.
+- **«Aterrizar»** cierra el vuelo con un resumen: duración, distancia, lotes y hectáreas sobrevolados por finca, altura máxima y promedio, y las marcas. Imagen del vuelo para compartir y «Ver ruta» en el mapa.
+- **Vuelos** en la pestaña Visita: resumen, ruta y borrar.
+- **Marcar** (botón dorado del panel): deja en la Bitácora un «Seguimiento · Media» del lote de abajo con la posición del helicóptero, altura y velocidad; luego se le agrega nota o foto. Tocando un lote en el mapa, la tarjeta ofrece «Marcar desde el aire» para lotes vistos a distancia.
+
 ## V271126K · 27-nov-2026 · Modo vuelo (helicóptero), primera entrega
 - **Modo vuelo** desde Capas y herramientas. La app lo sugiere sola a más de 80 km/h si además sube más de 60 m (o a más de 120 km/h).
 - **Panel de vuelo:** altura aproximada sobre el punto de despegue (altitud GPS), velocidad, rumbo y el lote que está debajo con finca, TCH estimado, número de corte y color del semáforo. Sin confirmación de 8 s ni tarjetas que tapen el mapa.

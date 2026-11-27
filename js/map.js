@@ -633,7 +633,7 @@ function renderCard() {
       ${cifrasLote(l, edad)}
     </div>
     <div class="acciones">
-      <button type="button" class="btn pri" onclick="abrirRegistro(selCod)">${ico('plus')} Registrar hallazgo</button>
+      ${typeof VUELO !== 'undefined' && VUELO.on ? `<button type="button" class="btn pri" onclick="marcarDesdeAire(selCod)">${ico('heli')} Marcar desde el aire</button>` : `<button type="button" class="btn pri" onclick="abrirRegistro(selCod)">${ico('plus')} Registrar hallazgo</button>`}
       <button type="button" class="btn ter" onclick="cardAlternar()">${cardFull ? 'Menos ' + ico('chevDown') : 'Más ' + ico('chevUp')}</button>
     </div>
     <div class="solo-full">
@@ -777,7 +777,7 @@ function abrirCapas() {
     <label class="interruptor"><input type="checkbox" id="opReg" ${S.verRegistros ? 'checked' : ''}><span>Mostrar en el mapa los hallazgos pendientes</span></label>
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">${ico('ruler')} Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">${ico('hexagon')} Medir área</button></div>
-    <div class="acciones"><button type="button" class="btn sec" onclick="activarVuelo(!VUELO.on)">${ico('heli')} ${VUELO.on ? 'Salir del modo vuelo' : 'Modo vuelo'}</button><button type="button" class="btn ter" onclick="prepararVuelo()">${ico('download')} Preparar vuelo (mapa sin señal)</button></div>
+    <div class="acciones"><button type="button" class="btn sec" onclick="VUELO.on ? pedirSalirVuelo() : activarVuelo(true)">${ico('heli')} ${VUELO.on ? 'Salir del modo vuelo' : 'Modo vuelo'}</button><button type="button" class="btn ter" onclick="prepararVuelo()">${ico('download')} Preparar vuelo (mapa sin señal)</button></div>
     <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();soltarSeguimiento();map.fitBounds(capaLotes.getBounds(),margenes(20,20,10))">${ico('map')} Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">${ico('download')} Guardar esta zona sin señal</button></div>`);
   capaPorToque('opBase'); capaPorToque('opColor');
   $('opBase').addEventListener('change', e => { const prev = S.base, val = e.target.value; setBase(val); cerrarSiToque(); avisoCambio('Mapa base: ' + BASES_TXT[val], () => { setBase(prev); marcarOpcion('base', prev); }); });
