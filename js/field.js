@@ -1197,11 +1197,12 @@ function ejecutivoHtml() {
   const rankFila = (x, max, onclick) => `<button type="button" class="rank-fila" onclick="${onclick}"><span class="rank-nom">${esc(rotulo(x.k))}<small>${nf0.format(x.area)} ha · ${nfT.format(x.ton)} t${x.val ? ` · <span class="rank-val-aviso">${ico('alert')} ${x.val} a validar</span>` : ''}</small></span><span class="rank-barra"><i style="width:${(x.est / max * 100).toFixed(1)}%"></i>${x.prev ? `<s style="left:${(x.prev / max * 100).toFixed(1)}%" title="25/26: ${nfTch.format(x.prev)} t/ha"></s>` : ''}</span><span class="rank-val">${nfTch.format(x.est)}${x.prev ? `<small class="${x.est - x.prev > 0.05 ? 'sube' : x.est - x.prev < -0.05 ? 'baja' : ''}">${signo(x.est - x.prev)}</small>` : ''}</span></button>`;
   const fs = e.fincas.slice().sort((a, b) => b.est - a.est), maxF = Math.max(...fs.map(f => Math.max(f.est || 0, f.prev || 0)), 1);
   const fincaFila = f => rankFila(f, maxF, `abrirFinca('${esc(f.k).replace(/'/g, '&#39;')}')`);
+  const todos = Object.values(LOTES).filter(l => l.nPoly), w0 = SEMANAS_PROX[0];
   const preg = [
-    ['bajo40', ico('alert'), '¿Cuáles están bajo 40 t/ha?'],
-    ['prox', ico('calendar'), '¿Qué se corta la próxima semana?'],
-    ['renov', ico('sprout'), '¿Qué lotes se renuevan?'],
-    ['vencidos', ico('clock'), '¿Qué cortes están vencidos?']];
+    ['bajo40', ico('alert'), 'Lotes TCH < 40', todos.filter(l => esMolienda(l) && l.tchEst > 0 && l.tchEst < 40).length],
+    ['prox', ico('calendar'), 'Corte de la próxima semana', w0 ? todos.filter(l => !l.cosechado && l.semProg && l.semProg.clave === w0.clave).length : 0],
+    ['renov', ico('sprout'), 'Lotes a renovar', todos.filter(l => l.renovar === true).length],
+    ['vencidos', ico('clock'), 'Lotes con fecha vencida de corte', todos.filter(corteVencido).length]];
   return `<section class="ejec" aria-labelledby="ejecTit">
     <h2 id="ejecTit">Cómo vamos · zafra 26/27</h2>
     <p class="frase">Se estiman <b>${nfT.format(g.toneladas || e.ton)} t</b> en ${nfHa.format(g.area_ha || e.area)} ha de molienda, con <b>${fmtTch(g.tch_ponderado || e.tch)} t/ha</b>.${d !== null ? ` En los mismos lotes, el TCH estimado ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : 'se mantiene'} ${deltaHtml(d, e.prev)} frente a la zafra 25/26.` : ''}</p>
@@ -1222,8 +1223,8 @@ function ejecutivoHtml() {
     <div class="rank">${fs.slice(0, 5).map(fincaFila).join('')}</div>
     <div class="rank menor">${fs.slice(-5).reverse().map(fincaFila).join('')}</div>
     <p class="pie">Fincas con 30 ha o más de molienda. «A validar»: lotes con TCH estimado posiblemente provisional, que bajan el promedio de la finca. Toque una finca para ver sus lotes.</p>
-    <h3>Preguntas rápidas</h3>
-    <div class="preguntas">${preg.map(p => `<button type="button" onclick="preguntaRapida('${p[0]}')">${p[1]}<span>${p[2]}</span>${ico('chevRight')}</button>`).join('')}</div>
+    <h3>Ver en el mapa</h3>
+    <div class="preguntas">${preg.map(p => `<button type="button" onclick="preguntaRapida('${p[0]}')">${p[1]}<span>${p[2]}</span><b class="cuenta${p[3] ? '' : ' cero'}">${nf0.format(p[3])}</b>${ico('chevRight')}</button>`).join('')}</div>
   </section>`;
 }
 /* Pregunta rápida: pone la capa, filtra la clase, encuadra esos lotes en el mapa y ofrece la lista. */
