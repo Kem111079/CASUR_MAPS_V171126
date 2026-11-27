@@ -1,5 +1,12 @@
 # Cambios
 
+## V271126K · 27-nov-2026 · Modo vuelo (helicóptero), primera entrega
+- **Modo vuelo** desde Capas y herramientas. La app lo sugiere sola a más de 80 km/h si además sube más de 60 m (o a más de 120 km/h).
+- **Panel de vuelo:** altura aproximada sobre el punto de despegue (altitud GPS), velocidad, rumbo y el lote que está debajo con finca, TCH estimado, número de corte y color del semáforo. Sin confirmación de 8 s ni tarjetas que tapen el mapa.
+- **Mapa:** se aleja según la velocidad (16 → 14) y la altura, gira con el rumbo y deja la posición en el tercio inferior para ver lo que viene. En vuelo se aceptan velocidades de hasta 350 km/h.
+- **Preparar vuelo:** guarda el mapa base de toda la zona de lotes hasta acercamiento 14 (unos 1,200 cuadros) para volar sin señal. Los lotes ya están siempre en el teléfono.
+- En vuelo la pantalla queda encendida y no vibra.
+
 ## V271126J · 27-nov-2026 · Administración de datos con PIN
 - «Administración de datos» (plantilla de Excel, subida, archivos y volver a descargar) queda oculta tras un PIN de 6 dígitos. En el código solo se guarda una huella del PIN, no el número.
 - Al acertar, queda desbloqueada 30 días en ese equipo; «Bloquear administración» la cierra antes. Tras 5 intentos fallidos se bloquea 5 minutos.

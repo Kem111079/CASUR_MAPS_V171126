@@ -395,7 +395,7 @@ function puntoPantalla() {
 /* Parte visible del mapa en pantalla (con un margen) y elementos de la interfaz que tapan etiquetas. */
 function visibleEtq() { const r = $('vistaMapa').getBoundingClientRect(); return [r.left + 4, r.top + 4, r.right - 4, r.bottom - 4]; }
 function obstaculosEtq() {
-  const sel = ['#arriba', '#chips>*:not([hidden])', '#leyenda:not(.oculta)', '#card:not(.oculta)', '.fab', '#medirBar:not([hidden])', '#atrib'];
+  const sel = ['#arriba', '#vueloHud:not([hidden])', '#chips>*:not([hidden])', '#leyenda:not(.oculta)', '#card:not(.oculta)', '.fab', '#medirBar:not([hidden])', '#atrib'];
   const out = [];
   sel.forEach(q => document.querySelectorAll(q).forEach(el => { if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return; const r = el.getBoundingClientRect(); if (r.width && r.height) out.push([r.left - 3, r.top - 3, r.right + 3, r.bottom + 3]); }));
   return out;
@@ -777,6 +777,7 @@ function abrirCapas() {
     <label class="interruptor"><input type="checkbox" id="opReg" ${S.verRegistros ? 'checked' : ''}><span>Mostrar en el mapa los hallazgos pendientes</span></label>
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">${ico('ruler')} Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">${ico('hexagon')} Medir área</button></div>
+    <div class="acciones"><button type="button" class="btn sec" onclick="activarVuelo(!VUELO.on)">${ico('heli')} ${VUELO.on ? 'Salir del modo vuelo' : 'Modo vuelo'}</button><button type="button" class="btn ter" onclick="prepararVuelo()">${ico('download')} Preparar vuelo (mapa sin señal)</button></div>
     <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();soltarSeguimiento();map.fitBounds(capaLotes.getBounds(),margenes(20,20,10))">${ico('map')} Ver todos los lotes</button><button type="button" class="btn ter" onclick="guardarZonaOffline()">${ico('download')} Guardar esta zona sin señal</button></div>`);
   capaPorToque('opBase'); capaPorToque('opColor');
   $('opBase').addEventListener('change', e => { const prev = S.base, val = e.target.value; setBase(val); cerrarSiToque(); avisoCambio('Mapa base: ' + BASES_TXT[val], () => { setBase(prev); marcarOpcion('base', prev); }); });

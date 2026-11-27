@@ -30,7 +30,7 @@ const GIRO = {
   suave: {vMin: 1.7, base: 13, banda: 12, cada: 2000, accMax: 20, dur: '1s', centrar: 4},
   normal: {vMin: 0.8, base: 5, banda: 5, cada: 900, accMax: 35, dur: '.6s', centrar: 0}
 };
-const giroCfg = () => GIRO[S.giro] || GIRO.suave;
+const giroCfg = () => VUELO.on ? GIRO_VUELO : GIRO[S.giro] || GIRO.suave;
 function aplicarGiroCss() { $('map').style.setProperty('--giro-dur', giroCfg().dur); }
 function orientar(forzar = false) {
   if (S.giro === 'sin' || GPS.watch === null) { girarMapa(0); return; }
@@ -135,7 +135,8 @@ function alPosicion(pos) {
   let v = Number.isFinite(c.speed) && c.speed !== null ? c.speed : null;
   // Sin velocidad del equipo se estima con la lectura anterior, solo si ambas son precisas; un salto no se muestra como velocidad.
   if (v === null && prev && acc <= ACC_MAX && prev.acc <= ACC_MAX) v = haversineM(prev.lng, prev.lat, lng, lat) / Math.max((t - prev.t) / 1000, 0.5);
-  if (v !== null && v > VEL_MAX) v = null;
+  const vCruda = v !== null && v <= VEL_MAX_VUELO ? v : null; // para detectar un vuelo aunque en tierra se descarte como salto
+  if (v !== null && v > (VUELO.on ? VEL_MAX_VUELO : VEL_MAX)) v = null;
   if (acc <= ACC_MAX) GPS.utilT = Date.now();
   GPS.bloqueado = false;
   let h = Number.isFinite(c.heading) && c.heading !== null && c.heading >= 0 ? c.heading : null;
@@ -158,6 +159,8 @@ function alPosicion(pos) {
   } else { GPS.marcador.setLatLng([lat, lng]); GPS.marcador.setIcon(gpsIcono()); GPS.circulo.setLatLng([lat, lng]); GPS.circulo.setRadius(acc); }
   // Solo la primera lectura acerca el mapa; después se respeta el zoom elegido (por ejemplo, la vista de alrededores).
   // El mapa se recentra solo al avanzar unos metros, con desplazamiento suave: quieto, no tiembla con el ruido del GPS.
+  vueloLectura(c, vCruda);
+  if (VUELO.on) { if (GPS.siguiendo) vueloSeguir(lat, lng, v, primera); orientar(); vueloLote(lng, lat); pintarVueloHud(); pintarGpsChip(); pintarGpsBtn(); return; }
   if (GPS.siguiendo) {
     if (primera) { map.setView([lat, lng], Math.max(map.getZoom(), 17)); GPS.centro = aqui; }
     else if (!GPS.centro || haversineM(GPS.centro.lng, GPS.centro.lat, lng, lat) >= G.centrar) { map.panTo([lat, lng], {animate: true, duration: .9, easeLinearity: .6}); GPS.centro = aqui; }
@@ -459,7 +462,7 @@ function pintarLista() {
 
 /* ── Pantalla encendida durante la visita ── */
 let _wake = null;
-async function pedirPantalla() { if (!S.pantalla || !VISITA || !('wakeLock' in navigator) || _wake) return; try { _wake = await navigator.wakeLock.request('screen'); _wake.addEventListener('release', () => { _wake = null; }); } catch (_) {} }
+async function pedirPantalla() { if (!S.pantalla || !(VISITA || VUELO.on) || !('wakeLock' in navigator) || _wake) return; try { _wake = await navigator.wakeLock.request('screen'); _wake.addEventListener('release', () => { _wake = null; }); } catch (_) {} }
 function soltarPantalla() { if (_wake) { _wake.release().catch(() => {}); _wake = null; } }
 // Al volver a primer plano el GPS tarda unos segundos en dar lecturas: se da ese margen antes de avisar «sin señal».
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (GPS.watch !== null) GPS.inicioT = Date.now(); pedirPantalla(); } else if (VISITA) kvSet('visita_activa', VISITA); });
@@ -489,4 +492,92 @@ async function guardarZonaOffline() {
   await Promise.all(Array.from({length: 6}, trabajador));
   aviso && aviso.remove();
   toast(`Zona guardada: ${ok} de ${urls.length} cuadros hasta zoom ${zMax}.`, {tipo: ok ? 'bien' : 'mal'});
+}
+
+
+/* ── Modo vuelo (helicóptero) ──
+   Altura aproximada sobre el punto de despegue (altitud GPS menos la de referencia tomada en tierra), velocidad y rumbo;
+   el lote que está debajo sin confirmación ni tarjetas; mapa que se aleja según la velocidad y deja ver lo que viene. */
+const VEL_MAX_VUELO = 350 / 3.6;
+const GIRO_VUELO = {vMin: 5, base: 40, banda: 6, cada: 1200, accMax: 30, dur: '1s', centrar: 0};
+const VUELO = {on: false, base: null, alts: [], alt: null, altAcc: null, lote: '', rapidoT: 0, sugerido: false, zoomT: 0};
+/* Cada lectura: guarda la altitud de referencia mientras está en tierra (quieto o lento) y sugiere el modo al detectar vuelo. */
+function vueloLectura(c, v) {
+  const alt = Number.isFinite(c.altitude) && c.altitude !== null ? c.altitude : null;
+  VUELO.alt = alt; VUELO.altAcc = Number.isFinite(c.altitudeAccuracy) ? c.altitudeAccuracy : null;
+  if (alt !== null && !VUELO.on && (v === null || v < 3) && (c.accuracy || 99) <= 30) { VUELO.alts.push(alt); if (VUELO.alts.length > 15) VUELO.alts.shift(); VUELO.base = mediana(VUELO.alts); }
+  if (VUELO.on || VUELO.sugerido) return;
+  const sube = alt !== null && VUELO.base !== null && alt - VUELO.base > 60;
+  if (v !== null && v > 22 && (sube || v > 33)) { if (!VUELO.rapidoT) VUELO.rapidoT = Date.now(); else if (Date.now() - VUELO.rapidoT > 15000) { VUELO.sugerido = true; toast('Va a más de 80 km/h. ¿Está en vuelo?', {accion: 'Modo vuelo', ms: 12000, alAccion: () => activarVuelo(true)}); } }
+  else VUELO.rapidoT = 0;
+}
+const mediana = a => { const b = a.slice().sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+function alturaVuelo() { return VUELO.alt === null ? null : VUELO.base !== null ? VUELO.alt - VUELO.base : null; }
+function activarVuelo(on) {
+  VUELO.on = on; document.body.classList.toggle('vuelo', on); cerrarHoja();
+  if (on) {
+    mostrarTab('mapa'); if (selCod) cerrarCard(); if (typeof quitarModoFinca === 'function') quitarModoFinca();
+    if (VUELO.base === null && VUELO.alt !== null) VUELO.base = VUELO.alt; // sin referencia previa: se toma la altitud actual
+    if (GPS.watch === null) iniciarGps(true); else { GPS.siguiendo = true; }
+    GPS.ancla = null; VUELO.zoomT = 0; VUELO.lote = ''; aplicarGiroCss(); pedirPantalla(); leyPlegar(true);
+    toast('Modo vuelo activo. Altura aproximada (GPS), sobre el punto de despegue.', {tipo: 'bien', ms: 5000});
+  } else { soltarPantalla(); pedirPantalla(); aplicarGiroCss(); GPS.ancla = null; toast('Modo vuelo desactivado.'); }
+  pintarVueloHud(); etiquetasDebounce();
+}
+/* Zoom según la velocidad y la altura; el punto propio queda en el tercio inferior para ver lo que viene adelante. */
+function zoomVuelo(v) {
+  const kmh = v === null ? null : v * 3.6, h = alturaVuelo();
+  let z = kmh === null ? map.getZoom() : kmh < 40 ? 16 : kmh < 90 ? 15 : kmh < 150 ? 14.5 : 14;
+  if (h !== null && h > 400) z -= 0.5;
+  return Math.max(12, Math.min(17, z));
+}
+function vueloSeguir(lat, lng, v, primera) {
+  let z = map.getZoom(); const zt = zoomVuelo(v);
+  if (primera || (Math.abs(zt - z) >= 0.5 && Date.now() - VUELO.zoomT > 8000)) { z = zt; VUELO.zoomT = Date.now(); }
+  const curso = Number.isFinite(GPS.curso) ? GPS.curso : Number.isFinite(GPS.rumbo) ? GPS.rumbo : null;
+  let centro = L.latLng(lat, lng);
+  if (curso !== null && v !== null && v > 5) {
+    const H = $('vistaMapa').clientHeight, adelante = H * 0.25, r = curso * Math.PI / 180, P = map.project(centro, z);
+    centro = map.unproject(L.point(P.x + Math.sin(r) * adelante, P.y - Math.cos(r) * adelante), z);
+  }
+  map.setView(centro, z, {animate: true, duration: .9, easeLinearity: .6});
+}
+/* Lote que está debajo (dentro del polígono); si no, el más cercano a menos de 150 m. */
+function vueloLote(lng, lat) {
+  const c = cercanos(lng, lat, 150), dentro = c.find(x => x.inside);
+  VUELO.lote = dentro ? dentro.cod : ''; VUELO.cerca = !dentro && c.length ? c.sort((a, b) => a.d - b.d)[0] : null;
+}
+const CARDINAL = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+function pintarVueloHud() {
+  let el = $('vueloHud');
+  if (!VUELO.on) { if (el) el.hidden = true; return; }
+  if (!el) { el = document.createElement('div'); el.id = 'vueloHud'; el.className = 'vuelo-hud'; el.setAttribute('role', 'status'); $('vistaMapa').appendChild(el); }
+  el.hidden = false;
+  const f = GPS.fix, v = f && f.v !== null ? f.v * 3.6 : null, h = alturaVuelo(), rumbo = Number.isFinite(GPS.rumbo) ? GPS.rumbo : Number.isFinite(GPS.curso) ? GPS.curso : null;
+  const l = VUELO.lote ? LOTES[VUELO.lote] : null, sem = l ? semaforoLote(l) : null;
+  const dato = (b, s) => `<div><b>${b}</b><small>${s}</small></div>`;
+  el.innerHTML = `<div class="vh-cab"><span>${ico('heli')} Modo vuelo</span><button type="button" onclick="activarVuelo(false)">Salir</button></div>
+    <div class="vh-datos">${dato(h !== null ? nf0.format(h) + ' m' : VUELO.alt !== null ? nf0.format(VUELO.alt) + ' m' : '—', h !== null ? 'altura aprox.' : VUELO.alt !== null ? 'sobre el mar' : 'altura sin dato')}${dato(v !== null ? nf0.format(v) : '—', 'km/h')}${dato(rumbo !== null ? nf0.format(rumbo) + '° ' + CARDINAL[Math.round(rumbo / 45) % 8] : '—', 'rumbo')}</div>
+    <div class="vh-lote est-${sem ? sem.cls : 'neutro'}">${l ? `<i></i><b>${esc(l.cod)}</b><span>${esc(l.hac)}${l.tchEst > 0 && esMolienda(l) ? ` · ${nfTch.format(l.tchEst)} t/ha` : l.clas ? ' · ' + esc(rotulo(l.clas)) : ''}${l.nc ? ' · ' + esc(ncCorto(l)) : ''}</span>`
+      : VUELO.cerca ? `<span>Fuera de lotes · ${esc(VUELO.cerca.cod)} a ${nf0.format(VUELO.cerca.d)} m</span>` : `<span>${f ? 'Fuera de lotes' : 'Buscando señal GPS…'}</span>`}</div>`;
+}
+/* Antes de despegar: guarda el mapa base de toda la zona de lotes (vista general hasta acercamiento medio) para tenerlo sin señal. */
+async function prepararVuelo() {
+  cerrarHoja();
+  const capa = baseLayers[S.base];
+  if (!capa || !capa._url) { toast('Elija "Calles" o "Satélite" como mapa base para guardarlo.'); return; }
+  if (!navigator.serviceWorker || !navigator.serviceWorker.controller) { toast('Instale o recargue la app una vez con señal para poder guardar mapas.', {tipo: 'mal'}); return; }
+  const b = capaLotes.getBounds().pad(0.08), tx = (lng, z) => Math.floor((lng + 180) / 360 * 2 ** z), ty = (lat, z) => Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * 2 ** z);
+  const urls = []; let zMax = 10;
+  for (let z = 10; z <= Math.min(15, capa.options.maxNativeZoom || 18); z++) {
+    const nivel = [];
+    for (let x = tx(b.getWest(), z); x <= tx(b.getEast(), z); x++) for (let y = ty(b.getNorth(), z); y <= ty(b.getSouth(), z); y++) nivel.push(L.Util.template(capa._url, {s: capa._getSubdomain({x, y}), x, y, z, r: ''}));
+    if (urls.length + nivel.length > 2200) break;
+    urls.push(...nivel); zMax = z;
+  }
+  const aviso = toast(`Preparando vuelo: 0 / ${urls.length}`, {fijo: true}); let ok = 0, i = 0;
+  const trabajador = async () => { while (i < urls.length) { const u = urls[i++]; try { const r = await fetch(u, {mode: 'cors'}); if (r.ok) ok++; } catch (_) {} if (aviso && i % 10 === 0) aviso.firstChild.textContent = `Preparando vuelo: ${ok} / ${urls.length}`; } };
+  await Promise.all(Array.from({length: 6}, trabajador));
+  aviso && aviso.remove();
+  toast(ok ? `Mapa guardado para el vuelo: ${ok} cuadros hasta acercamiento ${zMax}. Los lotes ya están en el teléfono.` : 'No se pudo guardar el mapa (¿sin señal?).', {tipo: ok ? 'bien' : 'mal', ms: 7000});
 }

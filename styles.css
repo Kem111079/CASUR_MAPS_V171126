@@ -658,3 +658,20 @@ body[data-tab=mapa] .toast{max-width:none}
 .ley-sep{border:0;border-top:1px dashed var(--linea);margin:4px 6px}
 .cifras.c2{grid-template-columns:repeat(2,minmax(0,1fr))}.cifras.c2>div{padding:10px 8px}
 .aj-admin.cerrada{border-style:dashed}.aj-admin.cerrada h3 .ico{color:var(--texto2)}.pin-form input{font-size:28px;letter-spacing:.5em;text-align:center}
+
+/* ── Modo vuelo ── */
+body.vuelo #arriba,body.vuelo #chips,body.vuelo .fab.panorama{display:none}
+.vuelo-hud{position:absolute;z-index:905;top:calc(8px + var(--sat));left:8px;right:8px;max-width:560px;margin:0 auto;background:rgba(10,20,32,.88);color:#fff;border-radius:18px;padding:8px 12px 10px;box-shadow:0 6px 20px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.vuelo-hud[hidden]{display:none}
+.vh-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800;font-size:14px;letter-spacing:.02em}
+.vh-cab span{display:inline-flex;align-items:center;gap:6px;color:#9cc8ff}.vh-cab .ico{width:20px;height:20px}
+.vh-cab button{min-height:40px;padding:0 16px;border-radius:999px;border:0;background:#fff;color:#0a1420;font-weight:900}
+.vh-datos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:6px 0 8px;text-align:center}
+.vh-datos b{display:block;font-size:30px;line-height:1.05;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vh-datos small{font-size:12px;color:#c8d3de;font-weight:700}
+.vh-lote{--sc:#9aa3ad;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border-left:6px solid var(--sc);border-radius:12px;padding:8px 10px;min-height:48px;font-size:15px}
+.vh-lote.est-bien{--sc:#4fd18a}.vh-lote.est-medio{--sc:#ffcf6b}.vh-lote.est-mal{--sc:#ff6b61}
+.vh-lote i{width:12px;height:12px;border-radius:50%;background:var(--sc);flex:none}
+.vh-lote b{font-size:24px;font-weight:900}.vh-lote span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e6edf3}
+@media (max-width:379px){.vh-datos b{font-size:24px}.vh-lote b{font-size:20px}}
+.vh-lote b{color:#fff}
