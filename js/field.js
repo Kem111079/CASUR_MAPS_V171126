@@ -1230,6 +1230,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 
 /* Novedades de la versión, en lenguaje sencillo (se muestran al actualizar y desde Ajustes). */
 const NOVEDADES = [
+  ['Leyenda más clara', '«Sin dato» se separa en «Fuera de molienda» (Semilla, Sin caña…) y la falta real de dato; los % suman 100 % sobre molienda.'],
   ['Resumen por bloques', 'Panorama, Zafra, Fincas y Renovación en pestañas: cada vista cabe en pantalla, sin tanto desplazamiento.'],
   ['Resumen ejecutivo', '«Cómo vamos»: toneladas, TCH frente a 25/26, avance de zafra por mes y ranking por zona y finca.'],
   ['Ver en el mapa', 'Lotes TCH < 40, corte de la próxima semana, lotes a renovar y fechas vencidas, con lista y CSV.'],
@@ -1340,14 +1341,17 @@ function avisoFiltro() {
 }
 function ordenFiltro(ls) {
   const T = TEMAS[S.colorear] || {};
+  if (temaFiltro === FUERA) return ls.slice().sort((a, b) => String(a.clas).localeCompare(String(b.clas), 'es') || a.hac.localeCompare(b.hac, 'es') || a.cod.localeCompare(b.cod, 'es', {numeric: true}));
   return T.val ? ls.slice().sort((a, b) => (T.val(a) ?? 1e9) - (T.val(b) ?? 1e9)) : ls.slice().sort((a, b) => (a.fProg || '9').localeCompare(b.fProg || '9') || a.hac.localeCompare(b.hac, 'es') || a.cod.localeCompare(b.cod, 'es', {numeric: true}));
 }
 function verListaFiltro() {
   const T = TEMAS[S.colorear] || {}, ls = ordenFiltro(lotesFiltro()); if (!ls.length) return;
   document.querySelectorAll('#toasts .toast:not(.fijo)').forEach(t => t.remove());
   const area = ls.reduce((s, l) => s + (l.areaShape || 0), 0), ton = ls.reduce((s, l) => s + (l.tonEst || 0), 0), tch = pond(ls.filter(esMolienda), l => l.tchEst);
-  abrirHoja(`${rotulo(temaFiltro)}${T.u && T.cortes ? ' ' + T.u : ''} · ${T.t}`, `
-    <div class="cifras c4">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área', conUnidad(nfHa.format(area), ' ha'))}${cifra('Toneladas est.', conUnidad(nfT.format(ton), ' t'))}${tch ? cifra('TCH estimado 26/27', nfTch.format(tch), 'c-est') : cifraNd('TCH estimado 26/27', 'Sin dato', '', 'c-est')}</div>
+  const fila = temaLeyenda.find(x => x.txt === temaFiltro) || {}, gris = !fila.color;
+  abrirHoja(`${rotulo(temaFiltro)}${T.u && T.cortes && !gris ? ' ' + T.u : ''} · ${T.t}`, `
+    ${gris ? `<div class="cifras c2">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área', conUnidad(nfHa.format(area), ' ha'))}</div>${fila.det ? `<p class="pie">${esc(fila.det)}</p>` : ''}`
+      : `<div class="cifras c4">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área', conUnidad(nfHa.format(area), ' ha'))}${cifra('Toneladas est.', conUnidad(nfT.format(ton), ' t'))}${tch ? cifra('TCH estimado 26/27', nfTch.format(tch), 'c-est') : cifraNd('TCH estimado 26/27', 'Sin dato', '', 'c-est')}</div>`}
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();encuadrarFiltro()">${ico('zoomIn')} Ver en el mapa</button><button type="button" class="btn ter" onclick="csvFiltro()">${ico('download')} Exportar CSV</button></div>
     <div class="lista-lotes">${ls.map(l => `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${resumenTchLote(l)}${l.fProg && !l.cosechado ? ' · corte ' + fechaCorta(l.fProg) : ''}</span></button>${llegarHtml(l.cod)}</div>`).join('')}</div>`);
 }

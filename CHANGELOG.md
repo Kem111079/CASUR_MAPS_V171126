@@ -1,5 +1,10 @@
 # Cambios
 
+## V271126I · 27-nov-2026 · «Sin dato» separado en todas las capas
+- Los lotes sin valor se separan en **Fuera de molienda** (gris liso; con su desglose: Semilla, Sin caña, Baja rent., Invest.) y la falta de dato propia de cada capa (gris rayado): Sin aforo, Sin fecha de corte, Sin grupo de corte, Sin propuesta, Sin fecha programada.
+- Los % de la leyenda se calculan solo sobre las clases con color (en TCH, sobre el área de molienda): suman 100 %. Las filas grises muestran lotes y ha.
+- La lista de una fila gris muestra lotes, área y desglose (sin toneladas ni TCH) y ordena por clasificación.
+
 ## V271126H · 27-nov-2026 · Resumen con textos mínimos
 - Se quitan la frase de Panorama y las notas explicativas de Zafra, Fincas y Renovación (cómo se calcula, qué significa cada columna). Las definiciones quedan solo al dejar el dedo sobre el encabezado de cada tabla.
 - Títulos cortos: «TCH 26/27 vs 25/26», «TCH por zona» con leyenda mínima, «Δ vs plantillas», «Δ vs máx. histórico».

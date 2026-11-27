@@ -652,3 +652,8 @@ body[data-tab=mapa] .toast{max-width:none}
 .aviso-val{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
 .aviso-val>span{flex:1;min-width:0}
 .aviso-val .enlace{margin-left:auto;border:0;background:var(--sup);color:var(--medio);font-weight:900;border-radius:999px;padding:6px 14px;min-height:36px}
+/* Leyenda: lotes fuera de molienda (no llevan el dato) y sin dato (falta información) */
+.ley-color.fuera{background:#c3c9d0;border-color:rgba(0,0,0,.2)}
+.ley-det{display:block;font-size:calc(11.5px * var(--esc));color:var(--texto2);line-height:1.25;margin-top:1px}
+.ley-sep{border:0;border-top:1px dashed var(--linea);margin:4px 6px}
+.cifras.c2{grid-template-columns:repeat(2,minmax(0,1fr))}.cifras.c2>div{padding:10px 8px}
