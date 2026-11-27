@@ -1,5 +1,11 @@
 # Cambios
 
+## V271126N · 27-nov-2026 · Exportaciones en Excel
+- Las exportaciones pasan de CSV a **Excel (.xlsx)** con formato: título y fecha de generación, encabezado en azul CASUR, filas alternas, filtros, encabezado fijo al desplazar, anchos de columna, números con miles y decimales, fechas reales y fila de totales.
+- **Bitácora:** hoja «Registros» (con enlace al mapa) y hoja «Por finca» (pendientes, alta, media, informativos, resueltos, días abiertos). El ZIP con fotos incluye el Excel.
+- **Lista de lotes** (Ver en el mapa / leyenda): variedad, riego, corte, TCH 25/26, estimado, Δ, toneladas, cosecha y semáforo; totales con TCH ponderado.
+- **Ruta de visita:** hora, lote, finca y coordenadas.
+
 ## V271126M · 27-nov-2026 · Ajustes del Modo vuelo tras la primera prueba
 - **Imagen del recorrido con contexto:** se dibujan los lotes de alrededor en gris; los recorridos o sobrevolados en azul y los «a la vista» en celeste, con su código.
 - **Lotes a la vista:** además de los que el recorrido cruza por dentro, se cuentan los lotes a 100 m o menos del recorrido (también en vuelos ya guardados).

@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V271126M';
+const APP_VERSION = 'V271126N';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -285,6 +285,67 @@ function crearZip(archivos) { // [{nombre, datos: Uint8Array, fecha?: Date}]
   const cd = cat(central);
   return new Blob([...partes, cd, cat([u32(0x06054b50), u16(0), u16(0), u16(archivos.length), u16(archivos.length), u32(cd.length), u32(off), u16(0)])], {type: 'application/zip'});
 }
+/* ── Excel (.xlsx) sin librerías: hojas con título, encabezado de color, filas alternas, filtros, panel fijo,
+   anchos de columna, números con formato y fila de totales. hojas = [{nombre, titulo, sub, cols: [{t, w, f}], filas, total}]
+   f (formato): 'txt' · 'int' (#,##0) · 'd1' (#,##0.0) · 'd2' (#,##0.00) · 'd6' (coordenadas) · 'fecha' · 'fh' (fecha y hora) · 'link'. ── */
+const XL_FMT = {txt: 0, int: 1, d1: 2, d2: 3, d6: 4, fecha: 5, fh: 6, link: 7};
+function xlSerial(d) { return (d.getTime() - d.getTimezoneOffset() * 60000) / 86400000 + 25569; }
+function xlCol(i) { let s = ''; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = (i - m - 1) / 26; } return s; }
+const xlEsc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+function crearXlsx(hojas) {
+  const enc = new TextEncoder(), ahora = new Date();
+  // Estilos: 1 título · 2 subtítulo · 3 encabezado · 4-11 celdas · 12-19 celdas alternas · 20-27 totales
+  const numFmts = '<numFmts count="5"><numFmt numFmtId="164" formatCode="0.0"/><numFmt numFmtId="165" formatCode="0.000000"/><numFmt numFmtId="166" formatCode="dd/mm/yyyy"/><numFmt numFmtId="167" formatCode="dd/mm/yyyy hh:mm"/><numFmt numFmtId="168" formatCode="#,##0.0"/></numFmts>';
+  const fmtId = [0, 3, 168, 4, 165, 166, 167, 0];
+  const fonts = '<fonts count="6"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="15"/><color rgb="FF002F5F"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF5B6773"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><u/><sz val="11"/><color rgb="FF0A66FF"/><name val="Calibri"/></font></fonts>';
+  const fills = '<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF002F5F"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F6F9"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE8F2"/></patternFill></fill></fills>';
+  const borders = '<borders count="3"><border/><border><bottom style="thin"><color rgb="FFD5DDE4"/></bottom></border><border><top style="medium"><color rgb="FF002F5F"/></top><bottom style="medium"><color rgb="FF002F5F"/></bottom></border></borders>';
+  const xf = [], add = x => xf.push(x);
+  add('<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>');
+  add('<xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/>');
+  add('<xf numFmtId="0" fontId="2" fillId="0" borderId="0" applyFont="1"/>');
+  add('<xf numFmtId="0" fontId="3" fillId="2" borderId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>');
+  [0, 3].forEach(fill => fmtId.forEach((id, k) => add(`<xf numFmtId="${id}" fontId="${k === 7 ? 5 : 0}" fillId="${fill}" borderId="1" applyNumberFormat="1" applyBorder="1" applyFill="1" applyAlignment="1"><alignment vertical="top"${k === 0 ? ' wrapText="1"' : ''}/></xf>`)));
+  fmtId.forEach(id => add(`<xf numFmtId="${id}" fontId="4" fillId="4" borderId="2" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>`));
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${numFmts}${fonts}${fills}${borders}<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xf.length}">${xf.join('')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const estilo = (f, alt) => 4 + (alt ? 8 : 0) + (XL_FMT[f] ?? 0), estiloTot = f => 20 + (XL_FMT[f] ?? 0);
+  const celda = (ref, v, s, f) => {
+    if (v === null || v === undefined || v === '') return `<c r="${ref}" s="${s}"/>`;
+    if (f === 'link') { const [url, txt] = Array.isArray(v) ? v : [v, 'Abrir']; return `<c r="${ref}" s="${s}" t="str"><f>HYPERLINK("${xlEsc(url)}","${xlEsc(txt)}")</f><v>${xlEsc(txt)}</v></c>`; }
+    if (v instanceof Date) return isNaN(v) ? `<c r="${ref}" s="${s}"/>` : `<c r="${ref}" s="${s}"><v>${xlSerial(v)}</v></c>`;
+    if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}" s="${s}"><v>${v}</v></c>`;
+    return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xlEsc(v)}</t></is></c>`;
+  };
+  const hojaXml = h => {
+    const nC = h.cols.length, last = xlCol(nC - 1), filas = [];
+    filas.push(`<row r="1" ht="22" customHeight="1">${celda('A1', h.titulo || h.nombre, 1)}</row>`);
+    filas.push(`<row r="2">${celda('A2', h.sub || '', 2)}</row>`);
+    filas.push(`<row r="4" ht="32" customHeight="1">${h.cols.map((c, i) => celda(xlCol(i) + 4, c.t, 3)).join('')}</row>`);
+    h.filas.forEach((f, j) => { const r = 5 + j; filas.push(`<row r="${r}">${h.cols.map((c, i) => celda(xlCol(i) + r, f[i], estilo(c.f, j % 2), c.f)).join('')}</row>`); });
+    const fin = 4 + h.filas.length;
+    if (h.total) {
+      const r = fin + 1;
+      filas.push(`<row r="${r}">${h.cols.map((c, i) => {
+        const t = h.total[i], ref = xlCol(i) + r;
+        if (t === 'sum' && h.filas.length) return `<c r="${ref}" s="${estiloTot(c.f)}"><f>SUBTOTAL(9,${xlCol(i)}5:${xlCol(i)}${fin})</f></c>`;
+        if (t && typeof t === 'object' && t.f) return `<c r="${ref}" s="${estiloTot(c.f)}"><f>${xlEsc(t.f.replace(/\{r\}/g, r).replace(/\{fin\}/g, fin))}</f></c>`;
+        return celda(ref, t ?? '', estiloTot(c.f));
+      }).join('')}</row>`);
+    }
+    const cols = `<cols>${h.cols.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.w || 12}" customWidth="1"/>`).join('')}</cols>`;
+    const vista = '<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews>';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>${vista}<sheetFormatPr defaultRowHeight="15"/>${cols}<sheetData>${filas.join('')}</sheetData>${h.filas.length ? `<autoFilter ref="A4:${last}${fin}"/>` : ''}<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>`;
+  };
+  const nombreHoja = n => String(n).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
+  const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${hojas.map((h, i) => `<sheet name="${xlEsc(nombreHoja(h.nombre))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets><definedNames>${hojas.map((h, i) => h.filas.length ? `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xlEsc(nombreHoja(h.nombre))}'!$A$4:$${xlCol(h.cols.length - 1)}$${4 + h.filas.length}</definedName>` : '').join('')}</definedNames></workbook>`;
+  const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${hojas.map((h, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${hojas.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const tipos = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${hojas.map((h, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`;
+  const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  const archivos = [['[Content_Types].xml', tipos], ['_rels/.rels', rels], ['xl/workbook.xml', wb], ['xl/_rels/workbook.xml.rels', wbRels], ['xl/styles.xml', styles], ...hojas.map((h, i) => [`xl/worksheets/sheet${i + 1}.xml`, hojaXml(h)])];
+  const zip = crearZip(archivos.map(([nombre, txt]) => ({nombre, datos: enc.encode(txt), fecha: ahora})));
+  return new Blob([zip], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+const subXlsx = extra => `CASUR Maps · generado ${new Date().toLocaleString('es-NI', {dateStyle: 'medium', timeStyle: 'short'})}${S.tecnico ? ' · ' + S.tecnico : ''}${extra ? ' · ' + extra : ''}`;
 function dataUrlBytes(d) { const b = atob(String(d).split(',')[1] || ''); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
 
 /* ── Carga de datos: primero la copia local, la red solo cuando cambia la versión ── */
