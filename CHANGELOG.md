@@ -1,5 +1,10 @@
 # Cambios
 
+## V271126H · 27-nov-2026 · Resumen con textos mínimos
+- Se quitan la frase de Panorama y las notas explicativas de Zafra, Fincas y Renovación (cómo se calcula, qué significa cada columna). Las definiciones quedan solo al dejar el dedo sobre el encabezado de cada tabla.
+- Títulos cortos: «TCH 26/27 vs 25/26», «TCH por zona» con leyenda mínima, «Δ vs plantillas», «Δ vs máx. histórico».
+- Lotes a validar en una línea: «20 a validar · +8,600 t · sin ellos +21.6 t/ha · Ver».
+
 ## V271126G · 27-nov-2026 · Resumen por bloques
 - **Resumen en 4 pestañas internas:** Panorama · Zafra · Fincas · Renovación. Cada una muestra solo su bloque y la app recuerda la última.
 - **Panorama** cabe en una pantalla: frase ejecutiva, 4 cifras clave (toneladas, TCH 26/27 frente a 25/26, área y % cosechado) y los accesos «Ver en el mapa».

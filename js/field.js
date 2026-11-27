@@ -914,14 +914,14 @@ function verMas(v) { masVista = v; try { localStorage.setItem('casur_mas_vista',
 function aforoHtml() {
   const filas = ((RESUMEN.resumen || {})[aforoGrupo] || []);
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
-  return `<header><h2>Aforo 26/27 por ${aforoGrupo === 'zona' ? 'zona' : 'finca'}</h2><p>Datos al ${fechaCorta(META.datos_al || META.generated_at)} · TCH en t/ha, ponderado por área</p></header>
+  return `<header><h2>Aforo 26/27 por ${aforoGrupo === 'zona' ? 'zona' : 'finca'}</h2><p>al ${fechaCorta(META.datos_al || META.generated_at)}</p></header>
     <label class="campo">Buscar finca o lote<input id="aforoQ" type="search" placeholder="Nombre de la finca o código del lote" autocomplete="off" autocapitalize="characters" enterkeyhint="search"></label>
     <div id="aforoRes" class="lista-lotes"></div>
     <details class="aforo-det"${aforoAbierta ? ' open' : ''}><summary>${ico('file')} Tabla del aforo <small>${nf0.format(filas.length)} ${aforoGrupo === 'hacienda' ? 'fincas' : 'filas'} · área, toneladas y TCH</small></summary>
     <label class="campo">Agrupar por${sel('aforoGrupo', AFORO_GRUPOS, aforoGrupo)}</label>
     <div class="tabla"><table><thead><tr><th>${(AFORO_GRUPOS.find(o => o[0] === aforoGrupo) || AFORO_GRUPOS[0])[1]}</th><th title="Área de molienda (ha)">Área (ha)</th><th title="Toneladas estimadas 26/27">Ton.</th><th title="TCH estimado 26/27 (t/ha)">TCH est.</th><th title="TCH optimista (t/ha)">TCH opt.</th></tr></thead><tbody id="aforoFilas">${filasAforo(aforoTodas ? filas : filas.slice(0, AFORO_TOP))}</tbody></table></div>
     ${filas.length > AFORO_TOP ? `<button type="button" class="btn ter ancho" id="aforoMas" aria-expanded="${aforoTodas}">${aforoTodas ? `${ico('chevUp')} Ver solo las ${AFORO_TOP} primeras` : `${ico('chevDown')} Ver las ${nf0.format(filas.length)} ${aforoGrupo === 'hacienda' ? 'fincas' : 'filas'}`}</button>` : ''}
-    <p class="pie">${filas.length > AFORO_TOP && !aforoTodas ? `Las ${AFORO_TOP} de más toneladas. ` : ''}Área de molienda en ha. TCH est. = TCH estimado 26/27 · TCH opt. = TCH optimista (t/ha, ponderados por área).</p></details>`;
+    </details>`;
 }
 function renderMas() {
   const P = ejecutivoPartes(), ancho = masAncho();
@@ -1022,8 +1022,7 @@ function renderAjustes() {
 /* Aviso de los lotes con TCH estimado a validar: se cuentan en los totales y se dice cuánto aportan. */
 function avisoValidar(v, enZona = false) {
   if (!v.n) return '';
-  return `<div class="nota est-medio">${ico('alert')} ${enZona ? 'Esta zona incluye' : 'Incluye'} <b>${v.n} ${v.n === 1 ? 'lote' : 'lotes'} (${nfHa.format(v.area)} ha) con TCH estimado a validar</b> (≤ ${EST_VALIDAR_MAX} t/ha con un histórico mayor de ${EST_VALIDAR_REF} t/ha): aportan ${signo(v.tonEsp, nfT)} t a la ganancia esperada.${v.dEspSin !== null ? ` Sin ellos, la ganancia esperada sería ${signo(v.dEspSin)} t/ha.` : ''} Se mantienen en los totales hasta confirmarlos con el aforo.</div>` +
-    (enZona ? '' : `<button type="button" class="btn ter ancho" onclick="verLotesValidar()">${ico('alert')} Ver los ${v.n} lotes a validar</button>`);
+  return `<div class="nota est-medio aviso-val">${ico('alert')}<span><b>${v.n} a validar</b> · ${signo(v.tonEsp, nfT)} t${v.dEspSin !== null ? ` · sin ellos ${signo(v.dEspSin)} t/ha` : ''}</span>${enZona ? '' : ` <button type="button" class="enlace" onclick="verLotesValidar()">Ver</button>`}</div>`;
 }
 function renovacionHtml() {
   const r = resumenRenovacion(); if (!r.n) return '';
@@ -1033,16 +1032,14 @@ function renovacionHtml() {
   return `<h3>Renovación propuesta</h3>
     <div class="cifras c4">${cifra('Lotes', nf0.format(r.n))}${cifra('Hectáreas', nfHa.format(r.area))}${cifra('TCH estimado 26/27', nfTch.format(r.est))}${cifra('Ganancia esperada', conUnidad(signo(r.dEsp), ' t/ha'), 'c-est')}</div>
     ${avisoValidar(r.validar)}
-    <h4>Qué se espera al renovar</h4>
+    <h4>Δ vs plantillas</h4>
     <div class="tabla compacta"><table><thead><tr><th>Zona</th><th>ha</th><th title="TCH estimado 26/27 (t/ha)">TCH est.</th><th class="col-plant" title="TCH estimado de las plantillas de la zona (t/ha)">Plantillas</th><th title="Ganancia en t/ha">Δ t/ha</th><th title="Ganancia en toneladas">Δ ton.</th></tr></thead>
       <tbody class="renov-filas">${r.filas.map(f => { const nv = f.lotes.filter(estValidar).length; return `<tr data-zona="${esc(f.zona)}" tabindex="0" role="button"><td>${esc(f.zona)}${nv ? ` <small class="marca-validar" title="${nv} lote(s) con TCH estimado a validar">${nv} a validar</small>` : ''}</td><td>${nfHa.format(f.area)}</td><td>${nfTch.format(f.est)}</td><td class="col-plant">${t(f.plant)}</td><td><b>${d(f.dEsp)}</b></td><td>${f.plant === null ? '—' : signo(f.tonEsp, nfT)}</td></tr>`; }).join('')}
       <tr class="total"><td>Total</td><td>${nfHa.format(r.area)}</td><td>${nfTch.format(r.est)}</td><td class="col-plant"></td><td><b>${signo(r.dEsp)}</b></td><td>${signo(r.tonEsp, nfT)}</td></tr></tbody></table></div>
-    <p class="pie">TCH est. = TCH estimado 26/27 del lote. Plantillas = TCH estimado de las plantillas de la misma zona (si la columna no se ve, toque la zona). Δ = ganancia: plantillas menos el estimado (— = la zona no tiene plantillas de referencia).</p>
-    <h4>Histórico de esos lotes (máximo alcanzado)</h4>
+    <h4>Δ vs máx. histórico</h4>
     <div class="tabla compacta"><table><thead><tr><th>Zona</th><th class="col-n">Lotes</th><th title="Promedio histórico (t/ha)">Prom.</th><th title="Máximo histórico (t/ha)">Máximo</th><th title="Ganancia en t/ha">Δ t/ha</th><th title="Ganancia en toneladas">Δ ton.</th></tr></thead>
       <tbody class="renov-filas">${r.filas.map(f => `<tr data-zona="${esc(f.zona)}" tabindex="0" role="button"><td>${esc(f.zona)}</td><td class="col-n">${f.n}</td><td>${t(f.prom)}</td><td>${t(f.max)}</td><td><b>${d(f.dTecho)}</b></td><td>${f.max === null ? '—' : signo(f.tonTecho, nfT)}</td></tr>`).join('')}
       <tr class="total"><td>Total</td><td class="col-n">${r.n}</td><td></td><td></td><td><b>${signo(r.dTecho)}</b></td><td>${signo(r.tonTecho, nfT)}</td></tr></tbody></table></div>
-    <p class="pie">Prom. y Máximo = TCH histórico de cada lote (todas sus zafras). Δ = máximo histórico menos el TCH estimado 26/27. Todo en t/ha, ponderado por área. Toque una zona para ver sus lotes.</p>
     <button type="button" class="btn sec ancho" onclick="verRenovacionMapa()">${ico('map')} Ver lotes a renovar en el mapa</button>`;
 }
 /* Grupo de corte en palabras, con los mismos nombres de la capa Plantillas y socas. */
@@ -1058,7 +1055,7 @@ function filaRenovHtml(l) {
 function verLotesValidar() {
   const v = resumenRenovacion().validar; if (!v.n) return;
   const orden = v.lotes.slice().sort((a, b) => (a.zona || '').localeCompare(b.zona || '', 'es', {numeric: true}) || a.cod.localeCompare(b.cod, 'es', {numeric: true}));
-  abrirHoja('TCH estimado a validar', `<p class="pie">Lotes a renovar con TCH estimado 26/27 de ${EST_VALIDAR_MAX} t/ha o menos y un histórico mayor de ${EST_VALIDAR_REF} t/ha. Pueden ser valores provisionales del aforo: confírmelos antes de presentar la ganancia esperada.</p>
+  abrirHoja('TCH estimado a validar', `<p class="pie">TCH est. ≤ ${EST_VALIDAR_MAX} con histórico > ${EST_VALIDAR_REF} t/ha</p>
     <div class="cifras c4">${cifra('Lotes', nf0.format(v.n))}${cifra('Área', conUnidad(nfHa.format(v.area), ' ha'))}${cifra('Aportan', conUnidad(signo(v.tonEsp, nfT), ' t'))}${v.dEspSin !== null ? cifra('Ganancia sin ellos', conUnidad(signo(v.dEspSin), ' t/ha'), 'c-est') : ''}</div>
     <div class="lista-lotes">${orden.map(filaRenovHtml).join('')}</div>`, 'alta');
 }
@@ -1077,7 +1074,7 @@ function abrirRenovZona(zona) {
   abrirHoja(`Renovación · ${zona}`, `
     <div class="cifras c4">${cifra('Lotes', nf0.format(f.n))}${cifra('Área', conUnidad(nfHa.format(f.area), ' ha'))}${cifra('TCH estimado 26/27', nfTch.format(f.est))}${f.dEsp === null ? cifraNd('Ganancia esperada', 'Sin dato', 'sin plantillas en la zona', 'c-est') : cifra('Ganancia esperada', conUnidad(signo(f.dEsp), ' t/ha'), 'c-est')}</div>
     ${avisoValidar(vz, true)}
-    <p class="pie">Plantillas de la zona: ${f.plant === null ? 'sin plantillas de referencia' : nfTch.format(f.plant) + ' t/ha'} · máximo histórico ${f.max === null ? 'sin dato' : nfTch.format(f.max) + ' t/ha'}. Ordenados por toneladas que se ganarían.</p>
+    <p class="pie">Plantillas ${f.plant === null ? '—' : nfTch.format(f.plant)} · Máx. ${f.max === null ? '—' : nfTch.format(f.max)} t/ha</p>
     <div class="lista-lotes">${orden.map(filaRenovHtml).join('')}</div>`, 'alta');
 }
 function filasAforo(filas) {
@@ -1290,7 +1287,6 @@ function ejecutivoPartes() {
   const kpi = `<div class="cifras c4 kpi-pan">${cifra('Toneladas estimadas', conUnidad(nfT.format(g.toneladas || e.ton), ' t'))}${cifra('TCH estimado 26/27', fmtTch(g.tch_ponderado || e.tch), 'c-est', d !== null ? `<small class="kpi-d ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : ''}">${signo(d)} vs 25/26</small>` : '')}${cifra('Área molienda', conUnidad(nfHa.format(g.area_ha || e.area), ' ha'))}${cifra('Cosechado', nf0.format(pctCos) + ' %', '', `<small class="kpi-d">${nfHa.format(e.aCos)} ha</small>`)}</div>`;
   return {
     panorama: `<section class="ejec" aria-labelledby="ejecTit"><h2 id="ejecTit">Cómo vamos · zafra 26/27</h2>
-    <p class="frase">Se estiman <b>${nfT.format(g.toneladas || e.ton)} t</b> en ${nfHa.format(g.area_ha || e.area)} ha de molienda, con <b>${fmtTch(g.tch_ponderado || e.tch)} t/ha</b>.${d !== null ? ` En los mismos lotes, el TCH estimado ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : 'se mantiene'} ${deltaHtml(d, e.prev)} frente a la zafra 25/26.` : ''}</p>
     ${kpi}
     <h3>Ver en el mapa</h3>
     <div class="preguntas">${preg.map(p => `<button type="button" onclick="preguntaRapida('${p[0]}')">${p[1]}<span>${p[2]}</span><b class="cuenta${p[3] ? '' : ' cero'}">${nf0.format(p[3])}</b>${ico('chevRight')}</button>`).join('')}</div>
@@ -1300,22 +1296,20 @@ function ejecutivoPartes() {
     <div class="avance" role="img" aria-label="Cosechado ${nf0.format(pctCos)} %; programado a hoy ${nf0.format(pctProg)} %"><i class="prog" style="width:${Math.min(100, pctProg).toFixed(1)}%"></i><i class="cos" style="width:${Math.min(100, pctCos).toFixed(1)}%"></i></div>
     <p class="avance-txt"><b>${nf0.format(pctCos)} % cosechado</b> (${nfHa.format(e.aCos)} de ${nfHa.format(e.area)} ha)${e.aProgHoy > e.aCos ? ` · programado a hoy: ${nf0.format(pctProg)} %` : ''}${e.aCosReal ? ` · TCH real cosechado ${nfTch.format(e.tCosReal / e.aCosReal)} t/ha` : ''}</p>
     ${e.meses.length ? `<div class="meses">${e.meses.map(m => `<div class="${m.k === e.mesHoy ? 'hoy' : m.k < e.mesHoy ? 'pasado' : ''}" title="${nfHa.format(m.area)} ha · ${nfT.format(m.ton)} t"><em>${nf0.format(m.area)}</em><span><i style="height:${(m.area / maxMes * 100).toFixed(1)}%"></i>${m.cos ? `<i class="cos" style="height:${(m.cos / maxMes * 100).toFixed(1)}%"></i>` : ''}</span><b>${MES_CORTO[m.mes]}</b></div>`).join('')}</div>
-    <p class="pie">Hectáreas programadas por mes de cosecha${e.aCos ? '; en verde, lo cosechado' : ''}.${e.sinFecha ? ` ${nfHa.format(e.sinFecha)} ha sin fecha programada.` : ''}</p>` : ''}
+    ${e.sinFecha ? `<p class="pie">${nfHa.format(e.sinFecha)} ha sin fecha</p>` : ''}` : ''}
     ${SEMANAS_PROX.map((w, i) => { const ls = e.lProx.filter(l => l.semProg.clave === w.clave); return ls.length ? `<button type="button" class="btn sec ancho sem-btn" onclick="preguntaRapida('prox', ${i})">${ico('calendar')} <span>Sem. ${w.sem} · ${rangoSemana(w)}: <b>${nf0.format(ls.length)} lotes</b> · ${nfHa.format(ls.reduce((s, l) => s + l.areaAforo, 0))} ha · ${nfT.format(ls.reduce((s, l) => s + (l.tonEst || 0), 0))} t</span></button>` : ''; }).join('')}
     <button type="button" class="btn sec ancho" onclick="abrirTablero(true)">${ico('board')} Tablero de hoy</button>
   </section>`,
-    ranking: `<section class="ejec"><h2>Zonas y fincas</h2><h3>TCH estimado frente a 25/26</h3>
+    ranking: `<section class="ejec"><h2>Zonas y fincas</h2><h3>TCH 26/27 vs 25/26</h3>
     ${d !== null ? `<div class="comp" role="img" aria-label="TCH 25/26 ${nfTch.format(e.prev)} t/ha; TCH estimado 26/27 ${nfTch.format(e.est)} t/ha">
       <div><span>Zafra 25/26</span><i style="width:${(e.prev / maxT * 100).toFixed(1)}%"></i><b>${nfTch.format(e.prev)}</b></div>
       <div class="est"><span>Estimado 26/27</span><i style="width:${(e.est / maxT * 100).toFixed(1)}%"></i><b>${nfTch.format(e.est)}</b></div></div>
-    <p class="pie">t/ha ponderado por área. Comparado en ${nf0.format(e.comp.length)} lotes de molienda con dato en ambas zafras (${nfHa.format(e.aC)} ha, ${nf0.format(e.aC / e.area * 100)} % del área).</p>` : ''}
-    <h3>TCH estimado por zona</h3>
+` : ''}
+    <h3 class="h-ley">TCH por zona <span><i></i>26/27 <s></s>25/26</span></h3>
     <div class="rank">${e.zonas.map(z => rankFila(z, maxZ, `verZonaMapa('${esc(z.k).replace(/'/g, '&#39;')}')`)).join('')}</div>
-    <p class="pie">Barra: TCH estimado 26/27 · raya: zafra 25/26 · número pequeño: diferencia en t/ha. Toque una zona para verla en el mapa.</p>
-    <h3>Fincas con mayor y menor TCH</h3>
+    <h3>Fincas: mayor y menor TCH <small>(≥ 30 ha)</small></h3>
     <div class="rank">${fs.slice(0, 5).map(fincaFila).join('')}</div>
     <div class="rank menor">${fs.slice(-5).reverse().map(fincaFila).join('')}</div>
-    <p class="pie">Fincas con 30 ha o más de molienda. «A validar»: lotes con TCH estimado posiblemente provisional, que bajan el promedio de la finca. Toque una finca para ver sus lotes.</p>
   </section>`};
 }
 /* Pregunta rápida: pone la capa, filtra la clase, encuadra esos lotes en el mapa y ofrece la lista. */
