@@ -715,7 +715,27 @@ function resumenTchLote(l) {
   const est = esSinCana(l) ? 'sin caña' : l.tchEst > 0 ? `TCH estimado ${nfTch.format(l.tchEst)}${estValidar(l) ? ' (a validar)' : ''}` : (m.txt === 'No aplica' ? `no aplica: ${m.det}` : m.txt === 'Sin aforo' ? 'sin aforo 26/27' : 'sin estimado').toLowerCase();
   return `${fmtHaLote(l.area)} · TCH ${ant} · ${est}`;
 }
-function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) { soltarSeguimiento(); map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); } }
+function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) { soltarSeguimiento(); if (selCod && LOTES[selCod] && LOTES[selCod].hac !== nombre) cerrarCard(); modoFinca(nombre); map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); } }
+/* Modo finca: los lotes de la finca quedan resaltados (contorno dorado con halo) y un aviso arriba resume la finca.
+   Tocar el aviso abre la ficha; su ✕ quita el resaltado. */
+let capaFinca = null, fincaModo = '';
+function modoFinca(nombre) {
+  quitarModoFinca(); const f = FINCAS[nombre]; if (!f) return;
+  fincaModo = nombre;
+  const feats = f.lotes.flatMap(c => (LOTES[c] || {feats: []}).feats);
+  capaFinca = L.layerGroup([
+    L.geoJSON({type: 'FeatureCollection', features: feats}, {interactive: false, style: {color: '#1c2733', weight: 7, opacity: .45, fill: false}}),
+    L.geoJSON({type: 'FeatureCollection', features: feats}, {interactive: false, style: {color: '#ffd400', weight: 3, opacity: 1, fill: false}})]).addTo(map);
+  const ls = f.lotes.map(c => LOTES[c]), mol = ls.filter(l => l.conAforo && esMolienda(l) && l.tchEst > 0), area = mol.reduce((s, l) => s + (l.areaAforo || 0), 0), ton = mol.reduce((s, l) => s + (l.tonEst || 0), 0);
+  let el = $('chipFinca');
+  if (!el) { el = document.createElement('div'); el.id = 'chipFinca'; el.className = 'chip-finca'; $('chips').appendChild(el); }
+  el.hidden = false;
+  el.innerHTML = `<button type="button" class="cf-info" aria-label="Ver la ficha de la finca ${esc(nombre)}"><b>${ico('home')} ${esc(nombre)}</b><small>${ls.length} lotes${area ? ` · ${nfHa.format(area)} ha · ${nfTch.format(ton / area)} t/ha` : ''}</small></button><button type="button" class="cf-x" aria-label="Quitar el resaltado de la finca">${ico('x')}</button>`;
+  el.querySelector('.cf-info').onclick = () => abrirFinca(nombre);
+  el.querySelector('.cf-x').onclick = quitarModoFinca;
+  etiquetasDebounce();
+}
+function quitarModoFinca() { if (capaFinca) { map.removeLayer(capaFinca); capaFinca = null; } fincaModo = ''; const el = $('chipFinca'); if (el) { el.hidden = true; el.innerHTML = ''; } etiquetasDebounce(); }
 
 /* ── Hoja de capas y herramientas ──
    Elegir capa o mapa base aplica el cambio, cierra la hoja (si se eligió con un toque) y ofrece Deshacer durante 4 s.

@@ -1,5 +1,10 @@
 # Cambios
 
+## V271126F · 27-nov-2026 · Fase 2, entrega 5: Ajustes claros y modo finca
+- **Ajustes en tarjetas y sin términos técnicos:** Estado de la app (datos, fechas de corte, versión), Mis preferencias, Ubicación y recorridos. Lo de quien actualiza los datos (plantilla, archivos, espacio, volver a descargar) queda plegado en «Administración de datos».
+- **Novedades:** al actualizarse la app aparece «CASUR Maps se actualizó · Novedades», con la lista de cambios en lenguaje sencillo. También desde Ajustes.
+- **Modo finca:** al ver una finca en el mapa, sus lotes quedan resaltados en dorado y arriba aparece su resumen (lotes, ha, TCH); tocarlo abre la ficha y la ✕ quita el resaltado.
+
 ## V271126E · 27-nov-2026 · Fase 2, entrega 4: campo
 - **Visita:** el aviso del mapa dice «Grabando» con un punto rojo que late, para saber con certeza que se está grabando la ruta.
 - **Cierre de visita:** cumplimiento de la lista del día (porcentaje, barra y lotes que faltaron).
