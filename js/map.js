@@ -299,10 +299,11 @@ function pintarLeyenda() {
     (leyPlegada && filtro ? `<button type="button" class="ley-quitar" aria-label="Quitar filtro y ver todos los lotes">${ico('x')}</button>` : '') +
     `<div class="ley-cuerpo" id="leyCuerpo">` +
     temaLeyenda.map(x => { const p = x.ha / total * 100, on = temaFiltro === x.txt; return `<button type="button" class="${on ? 'activo' : temaFiltro !== null ? 'apagado' : ''}${x.color ? '' : ' neutro'}" data-clase="${esc(x.txt)}" aria-pressed="${on}" style="--p:${Math.min(100, p).toFixed(1)}%${x.color ? ';--c:' + x.color : ''}">${muestra(x.color)}<span class="ley-txt"><b>${esc(rotulo(x.txt))}</b><small>${leyDetalle(x)}<span class="ley-pct"> · ${nbsp(pctTxt(p))}</span></small>${claseSel === x.txt ? '<small class="ley-este"><strong>este lote</strong></small>' : ''}</span><em>${pctTxt(p)}</em></button>`; }).join('') +
-    `<small class="ley-pista">${temaFiltro !== null ? 'Toque de nuevo para ver todo' : 'Toque una clase para resaltarla'}</small></div>`;
+    (filtro ? `<div class="ley-acc"><button type="button" data-acc="enc">${ico('zoomIn')} Encuadrar</button><button type="button" data-acc="lista">${ico('file')} Ver lista</button></div>` : '') +
+    `<small class="ley-pista">${temaFiltro !== null ? 'Toque de nuevo la clase para ver todo' : 'Toque una clase para resaltarla'}</small></div>`;
   el.querySelector('.ley-cab').onclick = leyAlternar;
   const q = el.querySelector('.ley-quitar'); if (q) q.onclick = () => filtrarClase(null);
-  el.querySelector('.ley-cuerpo').onclick = e => { const b = e.target.closest('button[data-clase]'); if (!b) return; filtrarClase(temaFiltro === b.dataset.clase ? null : b.dataset.clase); };
+  el.querySelector('.ley-cuerpo').onclick = e => { const a = e.target.closest('button[data-acc]'); if (a) { if (a.dataset.acc === 'enc') encuadrarFiltro(); else verListaFiltro(); return; } const b = e.target.closest('button[data-clase]'); if (!b) return; filtrarClase(temaFiltro === b.dataset.clase ? null : b.dataset.clase); };
   leyAncho();
   if (!estabaOculta && antes !== leyPlegada && el.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches)
     el.animate([{opacity: .3, transform: 'scale(.96)'}, {opacity: 1, transform: 'none'}], {duration: 250, easing: 'cubic-bezier(.2,.8,.2,1)'});

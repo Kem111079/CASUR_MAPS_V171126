@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V271126A';
+const APP_VERSION = 'V271126B';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -446,6 +446,7 @@ function construirLotes(geo, metricas, cortes, renov) {
       riego: m.riego || '', tenencia: m.tenencia || '', destino: m.destino || '', clas: m.clasificacion || '', nc: m.nc || '',
       areaAforo: num(m.area_total_ha), areaShape: 0, nPoly: 0,
       tchAnt: num(m.tch_ultima_zafra), fCorte: m.fecha_ultimo_corte || '', zafra: m.ultima_zafra_label || '',
+      tchPrev: m.ultima_zafra_label === '25/26' ? num(m.tch_ultima_zafra) : null, // TCH 25/26 para comparar, aunque llegue el corte real de 26/27
       fProg: m.fecha_cosecha_prog || '', grCorte: rv.gr_corte || '', renovar: typeof rv.renovar === 'boolean' ? rv.renovar : null, histProm: num(rv.hist_prom), histMax: num(rv.hist_max), histN: rv.hist_n || 0,
       tchEst: num(m.aforo_actTCH_2627), tonEst: num(m.aforo_toneladas_2627), tchOpt: num(m.aforo_tch_opt_2627), tonOpt: num(m.aforo_toneladas_opt_2627),
       conAforo: m.aforo_actTCH_2627 !== undefined, cosechado: false, feats: [], bbox: null

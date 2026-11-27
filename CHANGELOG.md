@@ -1,5 +1,11 @@
 # Cambios
 
+## V271126B · 27-nov-2026 · Fase 2, entrega 1: resumen ejecutivo
+- **Cómo vamos** al inicio de Resumen: frase ejecutiva, TCH estimado 26/27 frente a 25/26 en los mismos lotes, avance de zafra (cosechado y programado por mes) y lotes de las próximas 2 semanas de corte.
+- **Ranking:** TCH por zona con la marca de 25/26 y la diferencia; 5 fincas con mayor y 5 con menor TCH. Se marcan las que tienen datos a validar.
+- **Ver en el mapa:** Lotes TCH < 40, Corte de la próxima semana, Lotes a renovar y Lotes con fecha vencida de corte, cada uno con su número de lotes. Cada botón pone la capa, filtra, encuadra en el mapa y ofrece «Ver lista».
+- **Lista de la clase filtrada** (también desde la leyenda): lotes, área, toneladas y TCH, encuadrar en el mapa y exportar a CSV.
+
 ## V271126A · 27-nov-2026 · Fase 1 de la auditoría (uso gerencial)
 - **Capas:** la hoja se cierra sola al elegir una capa o un mapa base, con un aviso «Deshacer». Los interruptores no la cierran.
 - **Leyenda:** se pliega sola a los 30 s o al primer arrastre o zoom, y queda como una píldora con el nombre de la capa; un toque la abre. Con un filtro de clase no se pliega sola y la píldora lo muestra con una ✕ para quitarlo. Filas con número de lotes, hectáreas y %.

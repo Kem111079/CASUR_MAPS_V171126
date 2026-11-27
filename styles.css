@@ -481,3 +481,54 @@ body[data-tab=mapa] .toast{max-width:none}
 /* Marca «a validar» para TCH estimados posiblemente provisionales (se cuentan en los totales, pero se señalan). */
 .marca-validar{display:inline-block;font-style:normal;font-size:calc(11.5px * var(--esc));font-weight:800;color:var(--medio);background:var(--medio-f);border-radius:999px;padding:1px 7px;white-space:nowrap;vertical-align:1px}
 .tabla td .marca-validar{display:block;width:max-content;margin-top:3px}
+
+/* ── Resumen ejecutivo ── */
+.ejec{background:var(--sup);border:1px solid var(--linea);border-radius:18px;padding:14px 14px 10px;margin:10px 0 16px;box-shadow:var(--sombra)}
+.ejec h2{margin:0 0 6px;font-size:calc(19px * var(--esc))}
+.ejec h3{margin:18px 0 6px;font-size:calc(15px * var(--esc));color:var(--texto2);text-transform:none}
+.ejec .frase{font-size:calc(16.5px * var(--esc));line-height:1.4;margin:0 0 10px}
+.delta{white-space:nowrap}.delta.sube,.rank-val small.sube{color:var(--bien)}.delta.baja,.rank-val small.baja{color:var(--mal)}
+.comp{display:flex;flex-direction:column;gap:6px}
+.comp div{display:grid;grid-template-columns:minmax(0,7.5em) 1fr auto;align-items:center;gap:8px;font-size:calc(13.5px * var(--esc))}
+.comp div i{display:block;height:16px;border-radius:8px;background:var(--texto2);opacity:.45;min-width:4px}
+.comp div.est i{background:var(--azul);opacity:1}
+.comp div b{font-variant-numeric:tabular-nums;font-size:calc(16px * var(--esc));min-width:3.2em;text-align:right}
+.comp div:not(.est){grid-template-columns:minmax(0,7.5em) 1fr auto}
+.comp div i{justify-self:start}
+.avance{position:relative;height:18px;border-radius:9px;background:var(--linea);overflow:hidden}
+.avance i{position:absolute;left:0;top:0;bottom:0;border-radius:9px}
+.avance i.prog{background:color-mix(in srgb,var(--bien) 30%,transparent)}.avance i.cos{background:var(--bien)}
+.avance-txt{margin:6px 0 8px;font-size:calc(14px * var(--esc))}
+.meses{display:flex;gap:6px;align-items:flex-end;height:calc(120px * var(--esc));margin-top:6px}
+.meses>div{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;height:100%;gap:3px}
+.meses em{font-style:normal;font-size:calc(11.5px * var(--esc));color:var(--texto2);font-variant-numeric:tabular-nums}
+.meses span{flex:1;width:100%;max-width:44px;position:relative;display:flex;align-items:flex-end}
+.meses span i{position:absolute;left:0;right:0;bottom:0;border-radius:6px 6px 2px 2px;background:var(--azul);opacity:.75}
+.meses span i.cos{background:var(--bien);opacity:1}
+.meses .pasado span i:not(.cos){opacity:.35}.meses .hoy span i:not(.cos){opacity:1;box-shadow:0 0 0 2px var(--acento)}
+.meses b{font-size:calc(12px * var(--esc));text-transform:capitalize}.meses .hoy b{color:var(--acento)}
+.rank{display:flex;flex-direction:column;gap:2px}
+.rank.menor{margin-top:8px;padding-top:8px;border-top:1px dashed var(--linea)}
+.rank-fila{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(60px,1fr) auto;gap:8px;align-items:center;min-height:48px;border:0;background:transparent;color:var(--texto);text-align:left;padding:4px 2px;border-radius:10px;width:100%}
+.rank-fila:active{background:var(--linea)}
+.rank-nom{display:flex;flex-direction:column;font-weight:800;font-size:calc(14px * var(--esc));min-width:0;overflow-wrap:anywhere}
+.rank-nom small{font-weight:500;color:var(--texto2);font-size:calc(12px * var(--esc))}
+.rank-barra{position:relative;height:14px;border-radius:7px;background:color-mix(in srgb,var(--linea) 60%,transparent)}
+.rank-barra i{position:absolute;left:0;top:0;bottom:0;border-radius:7px;background:var(--azul)}
+.rank-barra s{position:absolute;top:-4px;bottom:-4px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--texto)}
+.rank-val{display:flex;flex-direction:column;align-items:flex-end;font-weight:800;font-variant-numeric:tabular-nums;font-size:calc(15px * var(--esc));min-width:3.3em}
+.rank-val small{font-size:calc(12px * var(--esc));font-weight:700}
+.preguntas{display:flex;flex-direction:column;gap:8px}
+.preguntas button{display:flex;align-items:center;gap:10px;min-height:52px;border:1px solid var(--linea);border-radius:14px;background:var(--fondo);color:var(--texto);font-weight:800;font-size:calc(15px * var(--esc));padding:8px 12px;text-align:left}
+.preguntas button span{flex:1}.preguntas button .ico{width:22px;height:22px;flex:none;color:var(--azul)}
+.preguntas button:active{background:var(--linea)}
+/* Acciones de la clase filtrada en la leyenda */
+.ley-acc{display:flex;gap:6px;padding:6px 8px 2px}
+.ley-acc button{flex:1;min-height:44px;border:0;border-radius:10px;background:var(--pri);color:var(--pri-t);font-weight:800;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:calc(13.5px * var(--esc))}
+.ley-acc button+button{background:var(--fondo);color:var(--texto);border:1px solid var(--linea)}
+.ley-acc .ico{width:18px;height:18px}
+.sem-btn{justify-content:flex-start;text-align:left;margin-top:6px;height:auto;min-height:48px;padding:8px 12px;line-height:1.3}
+.sem-btn span{font-weight:600}.sem-btn b{font-weight:800}
+.rank-val-aviso{color:var(--medio);font-weight:800;white-space:nowrap}.rank-val-aviso .ico{width:13px;height:13px;vertical-align:-2px}
+.preguntas .cuenta{flex:none;min-width:2.4em;text-align:center;padding:3px 9px;border-radius:999px;background:var(--info-f);color:var(--info);font-variant-numeric:tabular-nums;font-size:calc(14px * var(--esc))}
+.preguntas .cuenta.cero{background:var(--bien-f);color:var(--bien)}

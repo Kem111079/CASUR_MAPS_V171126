@@ -881,6 +881,7 @@ function renderMas() {
   const g = (RESUMEN.resumen || {}).global || {}, filas = ((RESUMEN.resumen || {})[aforoGrupo] || []);
   const sel = (id, ops, val) => `<select id="${id}">${ops.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
   $('tabMas').innerHTML = `<div class="marca"><img src="./assets/logo_casur.png" alt="CASUR"><div><b>CASUR Maps</b><span>Departamento de Negocios de Caña</span></div></div>
+    ${ejecutivoHtml()}
     <button type="button" class="btn sec ancho" onclick="abrirTablero(true)">${ico('board')} Tablero de hoy</button>
     <header><h2>Resumen aforo 26/27</h2><p>Datos al ${fechaCorta(META.datos_al || META.generated_at)} · TCH en t/ha, ponderado por área</p></header>
     <div class="cifras c4">${cifra('Área molienda', conUnidad(nfHa.format(g.area_ha || 0), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(g.toneladas || 0), ' t'))}${cifra('TCH estimado 26/27', fmtTch(g.tch_ponderado), 'c-est')}${cifra('TCH optimista', fmtTch(g.tch_opt_ponderado))}</div>
@@ -1159,3 +1160,116 @@ async function actualizarApp() {
   recargarApp();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, {once: true}); else iniciar();
+
+/* ── Resumen ejecutivo: cómo vamos frente a 25/26, avance de zafra, ranking y preguntas rápidas ── */
+const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const pond = (ls, f) => { let a = 0, s = 0; ls.forEach(l => { const v = f(l), ar = l.areaAforo || 0; if (v > 0 && ar > 0) { a += ar; s += v * ar; } }); return a ? s / a : null; };
+function datosEjecutivo() {
+  const mol = Object.values(LOTES).filter(l => esMolienda(l) && l.conAforo && l.tchEst > 0 && (l.areaAforo || 0) > 0);
+  const area = mol.reduce((s, l) => s + l.areaAforo, 0), ton = mol.reduce((s, l) => s + (l.tonEst || l.tchEst * l.areaAforo), 0);
+  const comp = mol.filter(l => l.tchPrev > 0), aC = comp.reduce((s, l) => s + l.areaAforo, 0);
+  const est = pond(comp, l => l.tchEst), prev = pond(comp, l => l.tchPrev);
+  // Avance: por mes de cosecha programada; cosechado = corte de la zafra en curso ya cargado.
+  const hoy = hoyLocal(), meses = new Map(); let aCos = 0, tCosReal = 0, aCosReal = 0, aProgHoy = 0, sinFecha = 0;
+  mol.forEach(l => {
+    if (l.cosechado) { aCos += l.areaAforo; if (l.tchAnt > 0) { aCosReal += l.areaAforo; tCosReal += l.tchAnt * l.areaAforo; } }
+    const d = parseISO(l.fProg); if (!d) { if (!l.cosechado) sinFecha += l.areaAforo; return; }
+    if (d <= hoy) aProgHoy += l.areaAforo;
+    const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'), m = meses.get(k) || {k, mes: d.getMonth(), anio: d.getFullYear(), area: 0, ton: 0, cos: 0};
+    m.area += l.areaAforo; m.ton += l.tonEst || 0; if (l.cosechado) m.cos += l.areaAforo; meses.set(k, m);
+  });
+  const prox = new Set(SEMANAS_PROX.map(w => w.clave)), lProx = mol.filter(l => !l.cosechado && l.semProg && prox.has(l.semProg.clave));
+  const grupo = key => { const g = new Map(); mol.forEach(l => { const k = l[key] || 'Sin dato'; (g.get(k) || g.set(k, []).get(k)).push(l); });
+    return [...g].map(([k, ls]) => ({k, n: ls.length, area: ls.reduce((s, l) => s + l.areaAforo, 0), ton: ls.reduce((s, l) => s + (l.tonEst || 0), 0), est: pond(ls, l => l.tchEst), prev: pond(ls.filter(l => l.tchPrev > 0), l => l.tchPrev), val: ls.filter(estValidar).length})); };
+  return {mol, area, ton, tch: area ? ton / area : null, comp, aC, est, prev, aCos, aCosReal, tCosReal, aProgHoy, sinFecha,
+    meses: [...meses.values()].sort((a, b) => a.k.localeCompare(b.k)), mesHoy: hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0'),
+    lProx, aProx: lProx.reduce((s, l) => s + l.areaAforo, 0), tProx: lProx.reduce((s, l) => s + (l.tonEst || 0), 0),
+    zonas: grupo('zona').filter(z => z.k !== 'Sin dato').sort((a, b) => b.est - a.est), fincas: grupo('hac').filter(f => f.area >= 30)};
+}
+const deltaHtml = (d, base, u = ' t/ha') => d === null || base === null ? '' : `<b class="delta ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : ''}">${signo(d)}${u} (${signo(d / base * 100, nf0)} %)</b>`;
+function ejecutivoHtml() {
+  const e = datosEjecutivo(); if (!e.mol.length) return '';
+  const g = (RESUMEN.resumen || {}).global || {};
+  const d = e.est !== null && e.prev !== null ? e.est - e.prev : null, maxT = Math.max(e.est || 0, e.prev || 0, 1);
+  const pctCos = e.area ? e.aCos / e.area * 100 : 0, pctProg = e.area ? e.aProgHoy / e.area * 100 : 0;
+  const maxMes = Math.max(...e.meses.map(m => m.area), 1);
+  const maxZ = Math.max(...e.zonas.map(z => Math.max(z.est || 0, z.prev || 0)), 1);
+  const rankFila = (x, max, onclick) => `<button type="button" class="rank-fila" onclick="${onclick}"><span class="rank-nom">${esc(rotulo(x.k))}<small>${nf0.format(x.area)} ha · ${nfT.format(x.ton)} t${x.val ? ` · <span class="rank-val-aviso">${ico('alert')} ${x.val} a validar</span>` : ''}</small></span><span class="rank-barra"><i style="width:${(x.est / max * 100).toFixed(1)}%"></i>${x.prev ? `<s style="left:${(x.prev / max * 100).toFixed(1)}%" title="25/26: ${nfTch.format(x.prev)} t/ha"></s>` : ''}</span><span class="rank-val">${nfTch.format(x.est)}${x.prev ? `<small class="${x.est - x.prev > 0.05 ? 'sube' : x.est - x.prev < -0.05 ? 'baja' : ''}">${signo(x.est - x.prev)}</small>` : ''}</span></button>`;
+  const fs = e.fincas.slice().sort((a, b) => b.est - a.est), maxF = Math.max(...fs.map(f => Math.max(f.est || 0, f.prev || 0)), 1);
+  const fincaFila = f => rankFila(f, maxF, `abrirFinca('${esc(f.k).replace(/'/g, '&#39;')}')`);
+  const todos = Object.values(LOTES).filter(l => l.nPoly), w0 = SEMANAS_PROX[0];
+  const preg = [
+    ['bajo40', ico('alert'), 'Lotes TCH < 40', todos.filter(l => esMolienda(l) && l.tchEst > 0 && l.tchEst < 40).length],
+    ['prox', ico('calendar'), 'Corte de la próxima semana', w0 ? todos.filter(l => !l.cosechado && l.semProg && l.semProg.clave === w0.clave).length : 0],
+    ['renov', ico('sprout'), 'Lotes a renovar', todos.filter(l => l.renovar === true).length],
+    ['vencidos', ico('clock'), 'Lotes con fecha vencida de corte', todos.filter(corteVencido).length]];
+  return `<section class="ejec" aria-labelledby="ejecTit">
+    <h2 id="ejecTit">Cómo vamos · zafra 26/27</h2>
+    <p class="frase">Se estiman <b>${nfT.format(g.toneladas || e.ton)} t</b> en ${nfHa.format(g.area_ha || e.area)} ha de molienda, con <b>${fmtTch(g.tch_ponderado || e.tch)} t/ha</b>.${d !== null ? ` En los mismos lotes, el TCH estimado ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : 'se mantiene'} ${deltaHtml(d, e.prev)} frente a la zafra 25/26.` : ''}</p>
+    ${d !== null ? `<div class="comp" role="img" aria-label="TCH 25/26 ${nfTch.format(e.prev)} t/ha; TCH estimado 26/27 ${nfTch.format(e.est)} t/ha">
+      <div><span>Zafra 25/26</span><i style="width:${(e.prev / maxT * 100).toFixed(1)}%"></i><b>${nfTch.format(e.prev)}</b></div>
+      <div class="est"><span>Estimado 26/27</span><i style="width:${(e.est / maxT * 100).toFixed(1)}%"></i><b>${nfTch.format(e.est)}</b></div></div>
+    <p class="pie">t/ha ponderado por área. Comparado en ${nf0.format(e.comp.length)} lotes de molienda con dato en ambas zafras (${nfHa.format(e.aC)} ha, ${nf0.format(e.aC / e.area * 100)} % del área).</p>` : ''}
+    <h3>Avance de zafra</h3>
+    <div class="avance" role="img" aria-label="Cosechado ${nf0.format(pctCos)} %; programado a hoy ${nf0.format(pctProg)} %"><i class="prog" style="width:${Math.min(100, pctProg).toFixed(1)}%"></i><i class="cos" style="width:${Math.min(100, pctCos).toFixed(1)}%"></i></div>
+    <p class="avance-txt"><b>${nf0.format(pctCos)} % cosechado</b> (${nfHa.format(e.aCos)} de ${nfHa.format(e.area)} ha)${e.aProgHoy > e.aCos ? ` · programado a hoy: ${nf0.format(pctProg)} %` : ''}${e.aCosReal ? ` · TCH real cosechado ${nfTch.format(e.tCosReal / e.aCosReal)} t/ha` : ''}</p>
+    ${e.meses.length ? `<div class="meses">${e.meses.map(m => `<div class="${m.k === e.mesHoy ? 'hoy' : m.k < e.mesHoy ? 'pasado' : ''}" title="${nfHa.format(m.area)} ha · ${nfT.format(m.ton)} t"><em>${nf0.format(m.area)}</em><span><i style="height:${(m.area / maxMes * 100).toFixed(1)}%"></i>${m.cos ? `<i class="cos" style="height:${(m.cos / maxMes * 100).toFixed(1)}%"></i>` : ''}</span><b>${MES_CORTO[m.mes]}</b></div>`).join('')}</div>
+    <p class="pie">Hectáreas programadas por mes de cosecha${e.aCos ? '; en verde, lo cosechado' : ''}.${e.sinFecha ? ` ${nfHa.format(e.sinFecha)} ha sin fecha programada.` : ''}</p>` : ''}
+    ${SEMANAS_PROX.map((w, i) => { const ls = e.lProx.filter(l => l.semProg.clave === w.clave); return ls.length ? `<button type="button" class="btn sec ancho sem-btn" onclick="preguntaRapida('prox', ${i})">${ico('calendar')} <span>Sem. ${w.sem} · ${rangoSemana(w)}: <b>${nf0.format(ls.length)} lotes</b> · ${nfHa.format(ls.reduce((s, l) => s + l.areaAforo, 0))} ha · ${nfT.format(ls.reduce((s, l) => s + (l.tonEst || 0), 0))} t</span></button>` : ''; }).join('')}
+    <h3>TCH estimado por zona</h3>
+    <div class="rank">${e.zonas.map(z => rankFila(z, maxZ, `verZonaMapa('${esc(z.k).replace(/'/g, '&#39;')}')`)).join('')}</div>
+    <p class="pie">Barra: TCH estimado 26/27 · raya: zafra 25/26 · número pequeño: diferencia en t/ha. Toque una zona para verla en el mapa.</p>
+    <h3>Fincas con mayor y menor TCH</h3>
+    <div class="rank">${fs.slice(0, 5).map(fincaFila).join('')}</div>
+    <div class="rank menor">${fs.slice(-5).reverse().map(fincaFila).join('')}</div>
+    <p class="pie">Fincas con 30 ha o más de molienda. «A validar»: lotes con TCH estimado posiblemente provisional, que bajan el promedio de la finca. Toque una finca para ver sus lotes.</p>
+    <h3>Ver en el mapa</h3>
+    <div class="preguntas">${preg.map(p => `<button type="button" onclick="preguntaRapida('${p[0]}')">${p[1]}<span>${p[2]}</span><b class="cuenta${p[3] ? '' : ' cero'}">${nf0.format(p[3])}</b>${ico('chevRight')}</button>`).join('')}</div>
+  </section>`;
+}
+/* Pregunta rápida: pone la capa, filtra la clase, encuadra esos lotes en el mapa y ofrece la lista. */
+function preguntaRapida(q, sem = 0) {
+  const P = {bajo40: ['tchEst', '< 40', 'No hay lotes con TCH estimado bajo 40 t/ha.'], renov: ['renovacion', 'Renovar', 'No hay lotes propuestos para renovar.'],
+    vencidos: ['semana', 'Fecha vencida', 'No hay cortes vencidos: todas las fechas programadas están al día.'], prox: ['semana', null, 'No hay cortes programados en las próximas semanas.']}[q]; if (!P) return;
+  cerrarHoja(); mostrarTab('mapa'); setColorear(P[0]);
+  if (q === 'prox') { const a = temaLeyenda.filter(x => /^Sem\./.test(x.txt))[sem]; filtrarClase(a ? a.txt : null); }
+  else filtrarClase(temaLeyenda.some(x => x.txt === P[1]) ? P[1] : null);
+  if (temaFiltro === null) { toast(P[2], {tipo: 'bien'}); return; }
+  leyPlegar(true); encuadrarFiltro(); avisoFiltro();
+}
+function verZonaMapa(zona) { cerrarHoja(); mostrarTab('mapa'); setColorear('zona'); filtrarClase(temaLeyenda.some(x => x.txt === zona) ? zona : null); leyPlegar(true); encuadrarFiltro(); avisoFiltro(); }
+/* ── Lotes de la clase filtrada en la leyenda: encuadrar, lista y CSV ── */
+function lotesFiltro() {
+  if (temaFiltro === null) return [];
+  const T = TEMAS[S.colorear] || {}, sin = T.sin || 'Sin dato';
+  return Object.values(LOTES).filter(l => l.nPoly && (temaClase.get(l.cod) || sin) === temaFiltro);
+}
+function encuadrarFiltro() {
+  const ls = lotesFiltro().filter(l => l.bbox); if (!ls.length) return;
+  const bb = ls.reduce((b, l) => [Math.min(b[0], l.bbox[0]), Math.min(b[1], l.bbox[1]), Math.max(b[2], l.bbox[2]), Math.max(b[3], l.bbox[3])], ls[0].bbox.slice());
+  soltarSeguimiento(); if (selCod) cerrarCard(); map.fitBounds(boundsDe(bb), margenes(90, 60));
+}
+function avisoFiltro() {
+  const ls = lotesFiltro(); if (!ls.length) return;
+  toast(`${rotulo(temaFiltro)}: ${nf0.format(ls.length)} ${ls.length === 1 ? 'lote' : 'lotes'} · ${nfHa.format(ls.reduce((s, l) => s + (l.areaShape || 0), 0))} ha`, {accion: 'Ver lista', ms: 7000, alAccion: verListaFiltro});
+}
+function ordenFiltro(ls) {
+  const T = TEMAS[S.colorear] || {};
+  return T.val ? ls.slice().sort((a, b) => (T.val(a) ?? 1e9) - (T.val(b) ?? 1e9)) : ls.slice().sort((a, b) => (a.fProg || '9').localeCompare(b.fProg || '9') || a.hac.localeCompare(b.hac, 'es') || a.cod.localeCompare(b.cod, 'es', {numeric: true}));
+}
+function verListaFiltro() {
+  const T = TEMAS[S.colorear] || {}, ls = ordenFiltro(lotesFiltro()); if (!ls.length) return;
+  document.querySelectorAll('#toasts .toast:not(.fijo)').forEach(t => t.remove());
+  const area = ls.reduce((s, l) => s + (l.areaShape || 0), 0), ton = ls.reduce((s, l) => s + (l.tonEst || 0), 0), tch = pond(ls.filter(esMolienda), l => l.tchEst);
+  abrirHoja(`${rotulo(temaFiltro)}${T.u && T.cortes ? ' ' + T.u : ''} · ${T.t}`, `
+    <div class="cifras c4">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área', conUnidad(nfHa.format(area), ' ha'))}${cifra('Toneladas est.', conUnidad(nfT.format(ton), ' t'))}${tch ? cifra('TCH estimado 26/27', nfTch.format(tch), 'c-est') : cifraNd('TCH estimado 26/27', 'Sin dato', '', 'c-est')}</div>
+    <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();encuadrarFiltro()">${ico('zoomIn')} Ver en el mapa</button><button type="button" class="btn ter" onclick="csvFiltro()">${ico('download')} Exportar CSV</button></div>
+    <div class="lista-lotes">${ls.map(l => `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${esc(l.hac)} · ${resumenTchLote(l)}${l.fProg && !l.cosechado ? ' · corte ' + fechaCorta(l.fProg) : ''}</span></button>${llegarHtml(l.cod)}</div>`).join('')}</div>`);
+}
+function csvFiltro() {
+  const ls = ordenFiltro(lotesFiltro()), T = TEMAS[S.colorear] || {};
+  const filas = ls.map(l => csvLinea([l.cod, l.hac, l.zona, l.variedad, rotulo(l.clas), nfTch.format(l.area || 0), l.tchPrev ?? '', l.tchEst ?? '', l.tonEst ?? '', l.fProg, rotulo(temaFiltro)]));
+  const nom = `lotes_${(T.t || 'capa').replace(/[^\wáéíóúñ]+/gi, '_')}_${String(temaFiltro).replace(/[^\w]+/g, '_')}_${(d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'))(hoyLocal())}.csv`.replace(/_+/g, '_');
+  descargarTexto(nom, '﻿' + [csvLinea(['lote', 'finca', 'zona', 'variedad', 'clasificacion', 'area_ha', 'tch_25_26', 'tch_estimado_26_27', 'toneladas_estimadas', 'fecha_cosecha_prog', 'clase']), ...filas].join('\n'), 'text/csv;charset=utf-8');
+  toast(`CSV con ${nf0.format(ls.length)} lotes.`, {tipo: 'bien'});
+}
