@@ -1,5 +1,11 @@
 # Cambios
 
+## V271126G · 27-nov-2026 · Resumen por bloques
+- **Resumen en 4 pestañas internas:** Panorama · Zafra · Fincas · Renovación. Cada una muestra solo su bloque y la app recuerda la última.
+- **Panorama** cabe en una pantalla: frase ejecutiva, 4 cifras clave (toneladas, TCH 26/27 frente a 25/26, área y % cosechado) y los accesos «Ver en el mapa».
+- **Zafra:** avance de cosecha, hectáreas por mes, próximas semanas y Tablero de hoy. **Fincas:** TCH frente a 25/26, ranking por zona y finca, búsqueda y la tabla del aforo plegada.
+- En tableta horizontal, Panorama queda fijo a la izquierda y la pestaña elegida a la derecha.
+
 ## V271126F · 27-nov-2026 · Fase 2, entrega 5: Ajustes claros y modo finca
 - **Ajustes en tarjetas y sin términos técnicos:** Estado de la app (datos, fechas de corte, versión), Mis preferencias, Ubicación y recorridos. Lo de quien actualiza los datos (plantilla, archivos, espacio, volver a descargar) queda plegado en «Administración de datos».
 - **Novedades:** al actualizarse la app aparece «CASUR Maps se actualizó · Novedades», con la lista de cambios en lenguaje sencillo. También desde Ajustes.

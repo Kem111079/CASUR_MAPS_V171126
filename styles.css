@@ -625,3 +625,21 @@ body[data-tab=mapa] .toast{max-width:none}
 .novedades{display:flex;flex-direction:column;gap:10px;margin:4px 0 14px}
 .novedades div{display:flex;flex-direction:column;padding:10px 12px;border-radius:12px;background:var(--fondo);border:1px solid var(--linea)}
 .novedades b{font-size:calc(15px * var(--esc))}.novedades span{font-size:calc(14px * var(--esc));color:var(--texto2)}
+
+/* ── Resumen por bloques ── */
+.mas-tabs{position:sticky;top:calc(-16px - var(--sat));z-index:5;display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:4px;padding:6px;margin:0 -4px 10px;background:var(--fondo);border-radius:14px;box-shadow:0 6px 10px -8px rgba(0,0,0,.25)}
+.mas-tabs button{min-height:44px;border:1px solid var(--linea);border-radius:11px;background:var(--sup);color:var(--texto);font-weight:800;font-size:calc(13.5px * min(var(--esc),1.15));padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mas-tabs button.activo{background:var(--pri);color:var(--pri-t);border-color:var(--pri)}
+.mas-cuerpo{animation:entra .18s ease-out}
+.mas-cuerpo>.ejec:first-child{margin-top:0}
+.kpi-pan{margin:10px 0 4px}
+.kpi-d{display:block;font-size:calc(12px * var(--esc));font-weight:800;color:var(--texto2)}.kpi-d.sube{color:var(--bien)}.kpi-d.baja{color:var(--mal)}
+.mas-cuerpo .ejec+header{margin-top:20px}
+@media (max-width:379px){.mas-tabs button{font-size:12px}}
+@media (max-width:999px){.marca{margin-bottom:8px}.marca img{height:34px;padding:3px 6px}.marca b{font-size:calc(17px * var(--esc))}.marca span{font-size:calc(12px * var(--esc))}}
+.aforo-det{border:1px solid var(--linea);border-radius:14px;background:var(--sup);padding:4px 12px 10px;margin-top:12px}
+.aforo-det summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:48px;font-weight:800;font-size:calc(15.5px * var(--esc))}
+.aforo-det summary::-webkit-details-marker{display:none}
+.aforo-det summary .ico{width:20px;height:20px;color:var(--azul)}
+.aforo-det summary small{font-weight:500;color:var(--texto2);font-size:calc(12.5px * var(--esc))}
+.aforo-det summary::after{content:'▾';margin-left:auto;color:var(--texto2)}.aforo-det[open] summary::after{content:'▴'}
