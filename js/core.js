@@ -84,18 +84,58 @@ function llegarHtml(cod, lat, lng) {
   return `<a class="llegar" href="${urlLlegar(lat, lng)}" target="_blank" rel="noopener" aria-label="Cómo llegar al lote ${esc(cod)}">${ico('nav')}</a>`;
 }
 
-/* ── Avisos no bloqueantes (reemplazan a alert) ── */
+/* ── Avisos no bloqueantes (reemplazan a alert) ──
+   Snackbar abajo, sobre la barra de navegación o la tarjeta, sin tapar chips, botones flotantes ni la X de las hojas.
+   Se ve uno a la vez: un aviso nuevo reemplaza al pasajero que hubiera; los fijos (con acción pendiente o progreso)
+   quedan en cola detrás, con un contador «+N», y se cierran con ✕ o deslizándolos de lado.
+   opts: tipo ('bien' | 'mal'), accion + alAccion, ms, fijo, clave (un fijo con la misma clave no se repite: se actualiza). */
 function toast(msg, opts = {}) {
   const box = $('toasts'); if (!box) return;
+  colaAvisos(box);
+  if (opts.clave) { const ya = [...box.children].find(t => t.dataset.clave === opts.clave); if (ya) ya.remove(); }
   box.querySelectorAll('.toast:not(.fijo)').forEach(t => t.remove()); // un aviso a la vez: no tapar la pantalla
   const el = document.createElement('div');
   el.className = 'toast ' + (opts.tipo || '') + (opts.fijo ? ' fijo' : '');
-  el.innerHTML = `<span>${esc(msg)}</span>` + (opts.accion ? `<button type="button">${esc(opts.accion)}</button>` : '');
+  el.setAttribute('role', opts.tipo === 'mal' ? 'alert' : 'status');
+  if (opts.clave) el.dataset.clave = opts.clave;
+  el.innerHTML = `<span>${esc(msg)}</span>` + (opts.accion ? `<button type="button" class="t-acc">${esc(opts.accion)}</button>` : '') +
+    (opts.fijo ? `<button type="button" class="t-x" aria-label="Cerrar aviso">${ico('x')}</button>` : '');
   box.appendChild(el);
   const cerrar = () => el.remove();
-  if (opts.accion) el.querySelector('button').addEventListener('click', () => { cerrar(); opts.alAccion && opts.alAccion(); });
+  if (opts.accion) el.querySelector('.t-acc').addEventListener('click', () => { cerrar(); opts.alAccion && opts.alAccion(); });
+  if (opts.fijo) el.querySelector('.t-x').addEventListener('click', cerrar);
+  deslizarAviso(el, cerrar);
   if (!opts.fijo) setTimeout(cerrar, opts.ms || (opts.accion ? 7000 : 3200));
   return el;
+}
+/* Deslizar de lado (más de 70 px o un gesto rápido) descarta el aviso; si no, vuelve a su sitio. */
+function deslizarAviso(el, cerrar) {
+  let x0 = null, t0 = 0, dx = 0;
+  el.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; x0 = e.clientX; t0 = Date.now(); dx = 0; el.style.transition = 'none'; try { el.setPointerCapture(e.pointerId); } catch (_) {} });
+  el.addEventListener('pointermove', e => { if (x0 === null) return; dx = e.clientX - x0; el.style.transform = `translateX(${dx}px)`; el.style.opacity = String(Math.max(.2, 1 - Math.abs(dx) / 220)); });
+  const fin = () => {
+    if (x0 === null) return; x0 = null; el.style.transition = '';
+    if (Math.abs(dx) > 70 || (Math.abs(dx) > 30 && Date.now() - t0 < 250)) { el.style.transform = `translateX(${dx > 0 ? 120 : -120}%)`; el.style.opacity = '0'; setTimeout(cerrar, 160); }
+    else { el.style.transform = ''; el.style.opacity = ''; }
+  };
+  el.addEventListener('pointerup', fin); el.addEventListener('pointercancel', fin);
+}
+/* Cola: solo el último aviso se ve; el contador dice cuántos fijos esperan detrás. --aviso-h deja sitio a la leyenda. */
+let _colaObs = null;
+function colaAvisos(box) {
+  if (_colaObs) return;
+  const pintar = () => {
+    const ts = [...box.children].filter(t => t.classList.contains('toast')), ult = ts[ts.length - 1];
+    ts.forEach(t => { t.hidden = t !== ult; const c = t.querySelector('.t-mas'); if (c && t !== ult) c.remove(); });
+    if (ult) {
+      let c = ult.querySelector('.t-mas');
+      if (ts.length > 1) { if (!c) { c = document.createElement('em'); c.className = 't-mas'; ult.insertBefore(c, ult.children[1] || null); } c.textContent = '+' + (ts.length - 1); c.title = (ts.length - 1) + ' aviso(s) más'; }
+      else if (c) c.remove();
+    }
+    document.body.classList.toggle('con-aviso', !!ult);
+    document.body.style.setProperty('--aviso-h', ult ? Math.round(ult.getBoundingClientRect().height) + 'px' : '0px');
+  };
+  _colaObs = new MutationObserver(pintar); _colaObs.observe(box, {childList: true});
 }
 function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} } }
 
@@ -263,7 +303,31 @@ async function cargarDatos() {
 }
 function datosListos() { // al abrir, los datos nuevos se aplican solos; si el usuario ya está trabajando, se le avisa
   if (typeof recargaSegura === 'function' && typeof ocupado === 'function' && Date.now() - _abiertaEn < 25000 && !ocupado() && recargaSegura()) return;
-  toast('Datos nuevos listos.', {accion: 'Aplicar', fijo: true, tipo: 'bien', alAccion: () => location.reload()});
+  avisoActualizacion();
+}
+/* Un solo aviso para app nueva y datos nuevos: si llegan los dos, no se repite. */
+function avisoActualizacion() { toast('Actualización lista', {accion: 'Aplicar', fijo: true, tipo: 'bien', clave: 'actualizacion', alAccion: recargarApp}); }
+/* Toda recarga por actualización pasa por aquí: guarda la pestaña, el lote abierto y la versión y fecha de datos de antes,
+   para volver al mismo sitio y confirmar el resultado al arrancar (avisoTrasActualizar). */
+const TRAS_ACT_KEY = 'casur_tras_actualizar';
+function recargarApp() {
+  try {
+    const tab = document.body.dataset.tab || 'mapa', cod = typeof selCod !== 'undefined' && $('card') && !$('card').classList.contains('oculta') ? selCod : '';
+    sessionStorage.setItem(TRAS_ACT_KEY, JSON.stringify({tab, cod, ver: APP_VERSION, datos: (typeof META !== 'undefined' && META && META.generated_at) || '', t: Date.now()}));
+  } catch (_) {}
+  location.reload();
+}
+function avisoTrasActualizar() {
+  let a = null; try { a = JSON.parse(sessionStorage.getItem(TRAS_ACT_KEY)); sessionStorage.removeItem(TRAS_ACT_KEY); } catch (_) {}
+  if (!a || Date.now() - (a.t || 0) > 120000) return null;
+  let cod = '';
+  if (a.tab && a.tab !== 'mapa' && document.querySelector(`#nav button[data-tab="${a.tab}"]`)) mostrarTab(a.tab);
+  else if (a.cod && LOTES[a.cod] && !selCod) { cod = a.cod; seleccionarLote(cod, {zoom: true}); }
+  const datos = !!META.generated_at && META.generated_at !== a.datos, fecha = fechaCorta(META.datos_al || META.generated_at);
+  const txt = a.ver !== APP_VERSION ? `App actualizada a ${APP_VERSION}` + (datos ? ` · datos al ${fecha}` : '')
+    : datos ? `Datos actualizados al ${fecha}` : `Todo al día: versión ${APP_VERSION} · datos al ${fecha}`;
+  toast(txt, {tipo: 'bien', ms: 6000});
+  return {cod};
 }
 async function buscarActualizacion(cache, metaLocal, manual = false, faltan = []) {
   if (!navigator.onLine) { if (manual) toast('Sin señal: se usan los datos guardados.'); return; }
@@ -279,7 +343,7 @@ async function buscarActualizacion(cache, metaLocal, manual = false, faltan = []
     const aviso = toast(manual ? 'Descargando los datos publicados…' : 'Descargando datos nuevos…', {fijo: true});
     await descargarDatos(cache, meta);
     aviso && aviso.remove();
-    if (manual) location.reload(); else datosListos();
+    if (manual) recargarApp(); else datosListos();
   } catch (e) { if (manual) toast('No se pudo descargar: ' + (e.message || e), {tipo: 'mal'}); }
 }
 async function cargarHistorico() {

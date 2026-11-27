@@ -240,9 +240,12 @@ function soltarPantalla() { if (_wake) { _wake.release().catch(() => {}); _wake 
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pedirPantalla(); else if (VISITA) kvSet('visita_activa', VISITA); });
 
 /* ── Conectividad y mapas sin señal ── */
+/* Dos estados distintos: «Sin internet» (el teléfono no tiene conexión; los lotes y registros siguen funcionando con lo guardado)
+   y «Mapa de fondo no disponible» (hay conexión, pero los cuadros de Calles o Satélite no cargan). Un cuadro que carga reinicia la cuenta. */
 function actualizarRed() {
-  const off = !navigator.onLine || tileErrores > 8, el = $('chipRed');
-  if (el) el.hidden = !off;
+  const el = $('chipRed'); if (!el) return;
+  const txt = !navigator.onLine ? 'Sin internet' : tileErrores > 8 ? 'Mapa de fondo no disponible' : '';
+  el.hidden = !txt; if (txt && el.textContent !== txt) el.textContent = txt;
 }
 window.addEventListener('online', () => { tileErrores = 0; actualizarRed(); });
 window.addEventListener('offline', actualizarRed);

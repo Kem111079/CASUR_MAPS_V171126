@@ -371,14 +371,38 @@ svg.hist{width:100%;height:auto;display:block}
 #nav button{transition:color .15s}#nav svg{transition:transform .15s}#nav button.activo svg{transform:translateY(-2px)}
 #nav button.activo{color:var(--pri)}#nav button.activo span{font-weight:900}
 
-/* Avisos */
-#toasts{position:fixed;z-index:2500;left:10px;right:10px;top:calc(124px + var(--sat));display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
-.toast{pointer-events:auto;display:flex;align-items:center;gap:12px;max-width:560px;background:#16202a;color:#fff;border-radius:14px;padding:12px 16px;font-weight:600;font-size:calc(15px * var(--esc));box-shadow:var(--sombra)}
-body:not([data-tab=mapa]) #toasts{top:calc(64px + var(--sat))}
+/* Avisos: snackbar abajo, sobre la barra de navegación (o la tarjeta), sin tapar chips, botones flotantes ni la X de las hojas.
+   En el mapa ocupan la franja izquierda, por encima del botón de capas y a la izquierda de la columna de botones (GPS, brújula, alrededores). */
+#toasts{position:fixed;z-index:2500;left:12px;right:12px;bottom:calc(var(--nav) + var(--sab) + 12px);display:flex;flex-direction:column;align-items:center;pointer-events:none}
+body[data-tab=bitacora]:has(#tabBitacora .barra-accion) #toasts,body[data-tab=visita]:has(#tabVisita .barra-accion) #toasts{bottom:calc(var(--nav) + var(--sab) + 84px)}
+body[data-tab=mapa] #toasts{right:80px;bottom:calc(var(--nav) + var(--sab) + 82px);align-items:stretch}
+body[data-tab=mapa].con-card #toasts{bottom:calc(var(--nav) + var(--sab) + var(--card-h,230px) + 78px)}
+body[data-tab=mapa].con-card.card-full #toasts{right:12px;bottom:calc(var(--nav) + var(--sab) + 12px);align-items:center}
+body[data-tab=mapa]:has(#medirBar:not([hidden])) #toasts{right:12px;bottom:calc(var(--nav) + var(--sab) + var(--medir-h,64px) + 26px);align-items:center}
+body:has(#hoja.abierta) #toasts{left:12px;right:12px;bottom:calc(var(--sab) + 12px);align-items:center}
+/* Sin tarjeta, la leyenda sube mientras se ve un aviso, para no quedar debajo. */
+body.con-aviso[data-tab=mapa]:not(.con-card) .leyenda{bottom:calc(84px + var(--aviso-h,0px) + 8px);max-height:min(40vh,100% - 248px - var(--aviso-h,0px))}
+.toast{pointer-events:auto;display:flex;align-items:center;gap:8px;width:100%;max-width:480px;min-height:52px;background:#16202a;color:#fff;border-radius:14px;padding:6px 6px 6px 16px;font-weight:600;font-size:calc(15px * var(--esc));line-height:1.3;box-shadow:0 6px 24px rgba(0,0,0,.32);touch-action:pan-y;user-select:none;-webkit-user-select:none;transition:transform .16s,opacity .16s}
+body[data-tab=mapa] .toast{max-width:none}
+.toast>span{flex:1 1 auto;min-width:0;padding:6px 0}
 .toast{animation:aviso .22s cubic-bezier(.2,.8,.2,1)}
-@keyframes aviso{from{opacity:0;transform:translateY(-10px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes aviso{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
 .toast.bien{background:#0a6b31}.toast.mal{background:#a3140f}
-.toast button{border:0;background:#fff;color:#16202a;border-radius:10px;min-height:40px;padding:0 14px;font-weight:800;flex:none}
+.toast button{border:0;background:#fff;color:#16202a;border-radius:10px;min-height:44px;padding:0 14px;font-weight:800;flex:none}
+.toast .t-x{background:transparent;color:#fff;width:44px;padding:0;display:grid;place-items:center;opacity:.85}
+.toast .t-x .ico{width:22px;height:22px}
+.toast .t-mas{flex:none;font-style:normal;font-size:calc(12.5px * var(--esc));font-weight:800;background:rgba(255,255,255,.22);border-radius:999px;padding:2px 8px}
+@media (min-width:900px){
+  body[data-tab=mapa] #toasts{left:76px;right:84px;bottom:calc(var(--nav) + var(--sab) + 18px);align-items:center}
+  body[data-tab=mapa].con-card #toasts,body[data-tab=mapa].con-card.card-full #toasts{left:518px;right:84px;bottom:calc(var(--nav) + var(--sab) + 18px)}
+  body[data-tab=mapa] .toast{max-width:480px}
+  body.con-aviso[data-tab=mapa]:not(.con-card) .leyenda{bottom:84px;max-height:min(40vh,100% - 240px)}
+}
+/* Errores del formulario, junto al campo */
+.campo-error{display:flex;gap:6px;align-items:flex-start;margin:8px 0 0;padding:8px 10px;border-radius:10px;background:var(--mal-f);color:var(--mal);font-weight:700;font-size:calc(14px * var(--esc))}
+#regSevNota{color:var(--medio)}
+.foto.requerida{border-color:#d9a521}
+.foto.falta{border-color:var(--mal);background-color:var(--mal-f);color:var(--mal)}
 
 @media (min-width:900px){
   .card{left:16px;right:auto;bottom:16px;width:420px;border-radius:22px;border-bottom:1px solid var(--linea);max-height:calc(100% - 100px);overflow:auto}

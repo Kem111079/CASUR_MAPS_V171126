@@ -82,12 +82,12 @@ async function abrirRegistro(cod, id = '') {
     ${bor ? `<div id="regBorrador" class="nota est-neutro">${ico('rotate')} Se recuperó lo que había escrito sin guardar. <button type="button" class="enlace" onclick="descartarBorrador()">Empezar de nuevo</button></div>` : ''}
     ${o ? `<div class="nota est-neutro">${o.pos_fuente === 'gps' ? ico('pin') + ' Se conserva la posición GPS original del registro.' : 'Registro anterior sin posición GPS: se puede editar, pero no compartir como hallazgo.'}</div>` : '<div id="regGps" class="nota est-neutro">Comprobando GPS…</div>'}
     <label class="campo">Categoría<select id="regCat">${CATEGORIAS.map(c => `<option ${o && o.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
-    <div class="campo">Severidad<div class="segmento" id="regSev">${['Baja', 'Media', 'Alta'].map(s => `<button type="button" data-v="${s}" class="${reg.sev === s ? 'activo' : ''}">${s}</button>`).join('')}</div></div>
+    <div class="campo">Severidad<div class="segmento" id="regSev">${['Baja', 'Media', 'Alta'].map(s => `<button type="button" data-v="${s}" class="${reg.sev === s ? 'activo' : ''}">${s}</button>`).join('')}</div><span id="regSevNota" class="ayuda" hidden>${ico('camera')} Severidad alta: agregue al menos una foto.</span></div>
     <label class="campo">Nota<textarea id="regNota" rows="3" placeholder="Qué se observó…">${esc(o ? o.nota : '')}</textarea></label>
     <button type="button" class="btn ter ancho" id="regVoz">${ico('mic')} Dictar nota</button>
     <div class="fotos">${[0, 1].map(i => `<label class="foto" id="regFotoL${i}"><input type="file" accept="image/*" capture="environment" data-i="${i}"><span>${ico('camera')} Foto ${i + 1}</span></label>`).join('')}</div>
+    <p id="regFotoErr" class="campo-error" role="alert" hidden></p>
     <label class="campo">Técnico<input id="regTec" type="text" value="${esc((o && o.usuario && o.usuario !== 'CASUR Maps' ? o.usuario : '') || S.tecnico)}" placeholder="Su nombre (se guarda para la próxima vez)"></label>
-    <p class="pie">En severidad alta la foto es obligatoria.</p>
     <div class="acciones"><button type="button" class="btn pri reg-guardar" onclick="guardarRegistro(false)">Guardar</button>${!o || o.pos_fuente === 'gps' ? '<button type="button" class="btn sec reg-guardar" onclick="guardarRegistro(true)">Guardar y compartir</button>' : ''}</div>`, 'alta');
   reg.ini = {cat: $('regCat').value, sev: reg.sev, nota: $('regNota').value.trim()}; // para saber si hay cambios sin guardar
   if (bor) {
@@ -95,11 +95,12 @@ async function abrirRegistro(cod, id = '') {
     reg.sev = bor.sev; $('regSev').querySelectorAll('button').forEach(x => x.classList.toggle('activo', x.dataset.v === bor.sev));
     reg.fotos = bor.fotos.slice(); reg.fotos.forEach((f, i) => { if (f) pintarFotoReg(i, f); });
   }
+  pintarRequisitoFoto();
   if (!o) { if (GPS.watch === null) iniciarGps(false); vigilarGpsRegistro(); }
-  $('regSev').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; reg.sev = b.dataset.v; $('regSev').querySelectorAll('button').forEach(x => x.classList.toggle('activo', x === b)); });
+  $('regSev').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; reg.sev = b.dataset.v; $('regSev').querySelectorAll('button').forEach(x => x.classList.toggle('activo', x === b)); pintarRequisitoFoto(); });
   $('hojaBody').querySelectorAll('.foto input').forEach(inp => inp.addEventListener('change', async () => {
     const f = inp.files && inp.files[0], i = Number(inp.dataset.i); if (!f) return;
-    try { reg.fotos[i] = await comprimirFoto(f); pintarFotoReg(i, reg.fotos[i]); } catch (e) { toast(e.message, {tipo: 'mal'}); }
+    try { reg.fotos[i] = await comprimirFoto(f); pintarFotoReg(i, reg.fotos[i]); pintarRequisitoFoto(); } catch (e) { errorCampo('regFotoErr', e.message); }
   }));
   $('regVoz').addEventListener('click', alternarDictado);
   if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) $('regVoz').innerHTML = ico('mic') + ' Use el micrófono del teclado para dictar';
@@ -120,6 +121,21 @@ function olvidarBorrador() { if (_borrador && reg && _borrador.cod === reg.cod &
 function descartarBorrador() { const r = reg; olvidarBorrador(); if (r) abrirRegistro(r.cod, r.id); }
 function soltarRegistro() { detenerDictado(); clearInterval(_regGpsT); reg = null; } // al cerrar la hoja, el formulario deja de estar en curso
 function pintarFotoReg(i, url) { const l = $('regFotoL' + i); if (l) { l.style.backgroundImage = `url(${url})`; l.classList.add('con-foto'); l.querySelector('span').innerHTML = ico('rotate') + ' Cambiar'; } }
+/* Errores del formulario en línea, junto al campo que hay que corregir (no en un aviso flotante que tape la cabecera). */
+const regTieneFoto = () => !!reg && (reg.fotos.some(Boolean) || reg.ids.some(Boolean));
+function pintarRequisitoFoto() {
+  if (!reg || !$('regSevNota')) return;
+  const falta = reg.sev === 'Alta' && !regTieneFoto();
+  $('regSevNota').hidden = !falta;
+  [0, 1].forEach(i => { const l = $('regFotoL' + i); if (l) { l.classList.toggle('requerida', falta); if (!falta) l.classList.remove('falta'); } });
+  if (!falta && $('regFotoErr')) $('regFotoErr').hidden = true;
+}
+function errorCampo(id, txt, marcar) {
+  const el = $(id); if (!el) { toast(txt, {tipo: 'mal', ms: 6000}); return; }
+  el.innerHTML = ico('alert') + ' ' + esc(txt); el.hidden = false;
+  (marcar || []).forEach(x => x && x.classList.add('falta'));
+  vibrar(80); (marcar && marcar[0] || el).scrollIntoView({block: 'center', behavior: 'smooth'});
+}
 function alternarDictado() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition, b = $('regVoz');
   if (!SR) { $('regNota').focus(); return; }
@@ -163,10 +179,14 @@ async function guardarRegistro(compartir) {
   const arr = obsTodas(), prev = reg.id ? arr.find(x => x.id === reg.id) : null, l = LOTES[reg.cod], ahora = new Date().toISOString();
   S.tecnico = $('regTec').value.trim(); guardarAjustes();
   const ids = reg.ids.slice();
-  if (reg.sev === 'Alta' && !reg.fotos[0] && !reg.fotos[1] && !ids[0] && !ids[1]) { toast('Severidad alta: agregue al menos una foto como evidencia.', {tipo: 'mal', ms: 5000}); return; }
+  if (reg.sev === 'Alta' && !reg.fotos[0] && !reg.fotos[1] && !ids[0] && !ids[1]) { errorCampo('regFotoErr', 'Falta la foto: en severidad alta tome al menos una para guardar.', [$('regFotoL0'), $('regFotoL1')]); return; }
   let pos;
   if (prev) pos = {lat: prev.lat, lng: prev.lng, acc: prev.precision_m, fuente: prev.pos_fuente || ''};
-  else { const g = gpsParaRegistro(reg.cod); if (!g.ok) { toast(g.txt, {tipo: 'mal', ms: 6000}); return; } pos = g.pos; }
+  else {
+    const g = gpsParaRegistro(reg.cod);
+    if (!g.ok) { const el = $('regGps'); if (el) { el.className = 'nota est-mal'; el.innerHTML = ico('alert') + ' ' + esc(g.txt); vibrar(80); el.scrollIntoView({block: 'center', behavior: 'smooth'}); } else toast(g.txt, {tipo: 'mal', ms: 6000}); return; }
+    pos = g.pos;
+  }
   for (let i = 0; i < 2; i++) if (reg.fotos[i]) {
     ids[i] = ids[i] || `FOTO-${Date.now()}-${i}`;
     try { await fotoPut({id: ids[i], codlote: reg.cod, created_at: ahora, lat: pos.lat, lng: pos.lng, precision_m: pos.acc, mime: 'image/jpeg', file_name: `${reg.cod}_${ids[i]}.jpg`, data_url: reg.fotos[i]}); }
@@ -747,14 +767,16 @@ async function iniciar() {
     await cargarVisitas();
     const lote = new URLSearchParams(location.search).get('lote'), conEnlace = lote && LOTES[codKey(lote)];
     if (conEnlace) seleccionarLote(lote, {zoom: true});
+    // Tras aplicar una actualización: vuelve a la pestaña (o al lote) donde estaba y confirma la versión.
+    const tras = conEnlace ? null : avisoTrasActualizar(), quieto = conEnlace || (tras && tras.cod);
     iniciarHistorial();
-    // GPS automático al abrir, con seguimiento. Si se abrió con un enlace a un lote, no se mueve el mapa de ese lote.
-    if (S.gpsAuto) iniciarGps(!conEnlace, true);
+    // GPS automático al abrir, con seguimiento. Si se abrió con un enlace a un lote (o se volvió a uno), no se mueve el mapa de ese lote.
+    if (S.gpsAuto) iniciarGps(!quieto, true);
     registrarSW();
     setTimeout(avisarInstalacion, 1500);
     // El tablero ya no se abre solo (salvo que se active en Ajustes); queda en Resumen > Tablero de hoy.
-    if (S.tableroAbrir && !conEnlace) setTimeout(() => abrirTablero(false), 700);
-    else { const venc = Object.values(LOTES).filter(corteVencido).length; if (venc) toast(`${venc} lote(s) con fecha de corte vencida. Actualice el programa o cargue los cortes.`, {tipo: 'mal', accion: 'Ver', ms: 12000, alAccion: () => { mostrarTab('mapa'); setColorear('semana'); }}); }
+    if (S.tableroAbrir && !conEnlace && !tras) setTimeout(() => abrirTablero(false), 700);
+    else if (!tras) { const venc = Object.values(LOTES).filter(corteVencido).length; if (venc) toast(`${venc} lote(s) con fecha de corte vencida. Actualice el programa o cargue los cortes.`, {tipo: 'mal', accion: 'Ver', ms: 12000, alAccion: () => { mostrarTab('mapa'); setColorear('semana'); }}); }
     if (navigator.onLine) setTimeout(() => cargarHistorico().catch(() => {}), 6000); // deja el histórico listo para usarlo sin señal
   } catch (e) {
     console.error(e);
@@ -763,15 +785,23 @@ async function iniciar() {
 }
 /* ── Actualización de la app ──
    La app abre desde su copia local. Cuando hay versión nueva:
-   · si se detecta al abrir (primeros 20 s, sin nada a medio hacer), se recarga sola;
-   · si llega más tarde, se avisa con un botón, para no interrumpir un registro o una visita;
+   · si se detecta al abrir (primeros 20 s, antes del primer toque y sin lote abierto), se recarga sola;
+   · si no, se avisa con «Actualización lista · Aplicar», para no interrumpir un registro, una visita ni el lote en pantalla;
+   · tras recargar se vuelve a la misma pestaña (o lote) y se confirma la versión (avisoTrasActualizar en core.js);
    · se vuelve a revisar cada vez que la app regresa a primer plano, y hay un botón manual en Resumen. */
 const _abiertaEn = Date.now();
 let _swReg = null, _swRevisado = 0;
-function ocupado() { return $('hoja').classList.contains('abierta') || !!reg || medir.modo || document.body.dataset.tab !== 'mapa'; }
+/* «Ocupado» = hay algo que una recarga borraría: hoja, registro, medición, otra pestaña, la tarjeta de un lote,
+   texto en el buscador o cualquier toque del usuario desde que abrió. Entonces no se recarga sola: se ofrece «Aplicar». */
+let _interactuo = false;
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { _interactuo = true; }, {once: true, capture: true, passive: true}));
+function ocupado() {
+  return _interactuo || $('hoja').classList.contains('abierta') || !!reg || !!medir.modo || document.body.dataset.tab !== 'mapa' ||
+    !$('card').classList.contains('oculta') || !!$('q').value.trim();
+}
 function recargaSegura() { // evita ciclos: como mucho una recarga automática por minuto
   try { const u = Number(sessionStorage.getItem('casur_recarga') || 0); if (Date.now() - u < 60000) return false; sessionStorage.setItem('casur_recarga', String(Date.now())); } catch (_) {}
-  location.reload(); return true;
+  recargarApp(); return true;
 }
 function registrarSW() {
   if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) return;
@@ -780,7 +810,7 @@ function registrarSW() {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!habia) return;
     if (Date.now() - _abiertaEn < 20000 && !ocupado() && recargaSegura()) return;
-    toast('Nueva versión de la app lista.', {accion: 'Recargar', fijo: true, alAccion: () => location.reload()});
+    avisoActualizacion();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !_swReg || !navigator.onLine || Date.now() - _swRevisado < 300000) return;
@@ -798,6 +828,6 @@ async function actualizarApp() {
   } catch (_) {}
   aviso && aviso.remove();
   try { sessionStorage.setItem('casur_recarga', String(Date.now())); } catch (_) {}
-  location.reload();
+  recargarApp();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, {once: true}); else iniciar();

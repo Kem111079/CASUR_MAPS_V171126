@@ -60,7 +60,7 @@ function initMap() {
     satelite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 20, maxNativeZoom: 18, crossOrigin: true, attribution: '© Esri'}),
     ninguno: L.layerGroup()
   };
-  Object.values(baseLayers).forEach(b => b.on && b.on('tileerror', () => { tileErrores++; actualizarRed(); }));
+  Object.values(baseLayers).forEach(b => b.on && b.on({tileerror: () => { tileErrores++; actualizarRed(); }, tileload: () => { if (tileErrores) { tileErrores = 0; actualizarRed(); } }}));
   setBase(S.base in baseLayers ? S.base : 'claro', false);
   prepararTema();
   nivelEstilo = nivelZoom(map.getZoom() || 0);
@@ -116,6 +116,7 @@ function guardarVista() { clearTimeout(_vistaT); _vistaT = setTimeout(() => { co
 function setBase(nombre, repintar = true) {
   if (baseActiva) map.removeLayer(baseActiva);
   baseActiva = baseLayers[nombre]; baseActiva.addTo(map); S.base = nombre; guardarAjustes();
+  tileErrores = 0; actualizarRed(); // la cuenta de cuadros fallidos es de la capa base que se ve
   document.body.dataset.base = nombre;
   if (repintar && capaLotes) { restilar(); actualizarEtiquetas(); }
 }
@@ -638,4 +639,5 @@ function medirPintar() {
     else { const m2 = areaM2(p), ha = m2 / 10000, per = d + haversineM(p[p.length - 1].lng, p[p.length - 1].lat, p[0].lng, p[0].lat); txt = `<b>${nf.format(ha)} ha</b> · ${nf.format(ha / 0.704225)} mz · perímetro ${fmtDist(per)}`; }
   } else txt = p.length < 2 ? `Marque al menos 2 puntos (${p.length})` : `<b>${fmtDist(d)}</b> · ${p.length} puntos`;
   $('medirTxt').innerHTML = txt;
+  document.body.style.setProperty('--medir-h', Math.round(bar.getBoundingClientRect().height) + 'px'); // los avisos van encima de la barra
 }
