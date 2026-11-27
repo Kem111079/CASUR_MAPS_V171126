@@ -675,3 +675,9 @@ body.vuelo #arriba,body.vuelo #chips,body.vuelo .fab.panorama{display:none}
 .vh-lote b{font-size:24px;font-weight:900}.vh-lote span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e6edf3}
 @media (max-width:379px){.vh-datos b{font-size:24px}.vh-lote b{font-size:20px}}
 .vh-lote b{color:#fff}
+.vh-rec{font-style:normal;font-size:12.5px;font-weight:700;color:#c8d3de;display:inline-flex;align-items:center;gap:2px;margin-left:auto;margin-right:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.vh-cab span{flex:none}
+.vh-lote span{flex:1}
+.vh-marcar{flex:none;margin-left:auto;min-height:44px;padding:0 14px;border:0;border-radius:12px;background:#d4a017;color:#1a1200;font-weight:900;display:inline-flex;align-items:center;gap:5px;font-size:15px}
+.vh-marcar .ico{width:18px;height:18px}
+@media (max-width:379px){.vh-rec{display:none}}
