@@ -357,7 +357,7 @@ function imagenVisita(v) {
   if (hayMapa) {
     const ox = 100 + ((W - 200) - mw * esc2) / 2, X = x => ox + (x - x0) * k * esc2, Y = yy => y + 20 + (y1 - yy) * esc2;
     feats.forEach(f => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates).forEach(p => { ctx.beginPath(); p.forEach(r => { r.forEach((q, i) => i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))); ctx.closePath(); }); ctx.fillStyle = '#e8f6ee'; ctx.fill('evenodd'); ctx.strokeStyle = '#0b7f3a'; ctx.lineWidth = 2; ctx.stroke(); }));
-    if (pts.length > 1) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(X(p.lng), Y(p.lat)) : ctx.moveTo(X(p.lng), Y(p.lat))); ctx.strokeStyle = '#0a66ff'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.stroke(); }
+    if (pts.length > 1) { ctx.beginPath(); segmentosRuta(pts).forEach(s => s.forEach((q, i) => i ? ctx.lineTo(X(q[1]), Y(q[0])) : ctx.moveTo(X(q[1]), Y(q[0])))); ctx.strokeStyle = '#0a66ff'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.stroke(); }
     d.pend.forEach(o => { if (o.lat === '') return; ctx.beginPath(); ctx.arc(X(Number(o.lng)), Y(Number(o.lat)), 11, 0, 7); ctx.fillStyle = o.severidad === 'Alta' ? '#d7191c' : '#d9a521'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); });
     ctx.font = '800 20px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#0b3a66';
     d.cods.forEach(cd => { const ce = centroideLote(LOTES[cd]); if (ce) ctx.fillText(cd, X(ce[1]), Y(ce[0]) + 7); }); ctx.textAlign = 'left';
@@ -513,21 +513,26 @@ async function vaciarBitacora() {
 let _visT = null;
 function renderVisita() {
   const v = VISITA, el = $('tabVisita'); clearInterval(_visT);
-  const lista = LISTA.length ? `<div class="lista-lotes">${LISTA.map((x, i) => `<div class="fila-lista ${x.hecho ? 'hecho' : ''}"><button type="button" class="chk" onclick="listaMarcar('${esc(x.cod)}',${!x.hecho})">${x.hecho ? ico('check') : i + 1}</button><button type="button" class="ir" onclick="seleccionarLote('${esc(x.cod)}',{zoom:true})"><b>${esc(x.cod)}</b><span>${esc((LOTES[x.cod] || {}).hac || '')}</span></button>${llegarHtml(x.cod)}<button type="button" class="quitar" onclick="listaToggle('${esc(x.cod)}')" aria-label="Quitar">${ico('x')}</button></div>`).join('')}</div><button type="button" class="btn ter ancho" onclick="listaVaciar()">Vaciar lista</button>`
+  const lista = LISTA.length ? `<div class="lista-lotes">${LISTA.map((x, i) => `<div class="fila-lista ${x.hecho ? 'hecho' : ''}"><button type="button" class="chk" onclick="listaMarcar('${esc(x.cod)}',${!x.hecho})">${x.hecho ? ico('check') : i + 1}</button><button type="button" class="ir" onclick="seleccionarLote('${esc(x.cod)}',{zoom:true})"><b>${esc(x.cod)}</b><span>${esc((LOTES[x.cod] || {}).hac || '')}</span></button>${llegarHtml(x.cod)}<button type="button" class="quitar" onclick="listaToggle('${esc(x.cod)}')" aria-label="Quitar">${ico('x')}</button></div>`).join('')}</div>`
     : '<p class="vacio">Agregue lotes desde su tarjeta con "Lista del día". Aparecen numerados en el mapa y se marcan solos al visitarlos.</p>';
+  // Lista armada otro día: se ofrece pasar los pendientes, reutilizarla entera o vaciarla (con Deshacer).
+  const lh = LISTA.filter(x => x.hecho).length, lp = LISTA.length - lh;
+  const vieja = listaVieja() ? `<div class="nota est-info lista-vieja"><b>Lista ${esc(listaFechaTxt())}: ${lh} de ${LISTA.length} lote${LISTA.length === 1 ? '' : 's'} hecho${LISTA.length === 1 ? '' : 's'}.</b><span>¿Qué hacer con ella hoy?${v ? '' : ' Si inicia una visita sin elegir, toda la lista vuelve a quedar por visitar.'}</span><div class="acciones">${lh && lp ? `<button type="button" class="btn sec" onclick="listaUsarHoy('pendientes')">Pasar ${lp} pendiente${lp === 1 ? '' : 's'} a hoy</button>` : ''}<button type="button" class="btn sec" onclick="listaUsarHoy('toda')">${lh ? 'Reutilizar toda' : 'Usarla hoy'}</button><button type="button" class="btn ter" onclick="listaVaciar()">Vaciar</button></div></div>` : '';
+  const sinGps = v && gpsVisitaMal(estadoGpsVisita()) ? `<div class="nota est-mal aviso-sin-gps"><b>${ico('alert')} Visita en curso sin GPS</b><span>No se está grabando la ruta, la distancia ni los lotes.</span><button type="button" class="btn pri" onclick="reactivarGpsVisita()">${ico('pin')} Reactivar GPS</button></div>` : '';
   const previas = VISITAS.slice(-10).reverse().map(x => `<div class="bloque"><b>${esc(new Date(x.inicio).toLocaleString('es-NI', {dateStyle: 'medium', timeStyle: 'short'}))}</b><p>${fmtDur(new Date(x.fin || x.inicio) - new Date(x.inicio))} · ${fmtDist(x.dist || 0)} · ${lotesVisitados(x).length} lote(s)</p>
       <div class="obs-acc"><button type="button" onclick="reporteVisita(visitaPorId('${x.id}'))">${ico('file')} Reporte</button><button type="button" onclick="verRuta(visitaPorId('${x.id}'))">${ico('map')} Ruta</button><button type="button" onclick="csvVisita(visitaPorId('${x.id}'))">CSV</button><button type="button" onclick="borrarVisita('${x.id}')">${ico('trash')}</button></div></div>`).join('');
   el.innerHTML = `<header><h2>Visita de campo</h2><p>Registra ruta, distancia y los lotes en los que realmente estuvo.</p></header>
-    ${v ? `<div class="cifras c4 grande">${cifra('Tiempo', `<em id="visTiempo">${fmtDur(Date.now() - new Date(v.inicio))}</em>`)}${cifra('Distancia', fmtDist(v.dist))}${cifra('Lotes', lotesVisitados(v).length)}${cifra('GPS', GPS.fix ? '±' + GPS.fix.acc + ' m' : '—')}</div>
+    ${sinGps}${v ? `<div class="cifras c4 grande">${cifra('Tiempo', `<em id="visTiempo">${fmtDur(Date.now() - new Date(v.inicio))}</em>`)}${cifra('Distancia', fmtDist(v.dist))}${cifra('Lotes', lotesVisitados(v).length)}${cifra('GPS', GPS.fix && !sinGps ? '±' + GPS.fix.acc + ' m' : '—')}</div>
       ${lotesVisitados(v).length ? `<p class="pie">Visitados: ${lotesVisitados(v).map(esc).join(' · ')}</p>` : ''}
       <div class="acciones"><button type="button" class="btn sec" onclick="verRuta(VISITA)">${ico('map')} Ver ruta</button></div>`
       : '<p class="vacio">Sin visita en curso. Use el botón de abajo para iniciar.</p>'}
-    <h3>Lista del día</h3>
+    <div class="titulo-fila"><h3>Lista del día</h3>${LISTA.length ? `<button type="button" class="btn-texto" onclick="listaVaciar()">${ico('trash')} Vaciar lista</button>` : ''}</div>
+    ${vieja}
     <label class="campo">Planificar: agregar finca o lote<input id="planQ" type="search" placeholder="Nombre de finca, productor o código de lote" autocomplete="off" autocapitalize="characters"></label>
     <div id="planRes" class="lista-lotes"></div>
     ${lista}
     <h3>Visitas anteriores</h3>${previas || '<p class="vacio">Sin visitas guardadas.</p>'}
-    <div class="barra-accion">${v ? `<button type="button" class="btn peligro grande" onclick="finalizarVisita()">${ico('stop')} Finalizar visita</button>` : `<button type="button" class="btn pri grande" onclick="iniciarVisita()">${ico('play')} Iniciar visita</button>`}</div>`;
+    <div class="barra-accion">${v ? `<button type="button" class="btn peligro grande" onclick="pedirFinalizarVisita()">${ico('stop')} Finalizar visita</button>` : `<button type="button" class="btn pri grande" onclick="iniciarVisita()">${ico('play')} Iniciar visita</button>`}</div>`;
   $('planQ').addEventListener('input', e => planBuscar(e.target.value));
   $('planRes').addEventListener('click', planClick);
   if (v) _visT = setInterval(() => { const t = $('visTiempo'); if (t && VISITA) t.textContent = fmtDur(Date.now() - new Date(VISITA.inicio)); else clearInterval(_visT); }, 1000);
@@ -566,7 +571,7 @@ function svgRuta(v) {
   const X = x => (pad + (x - x0) * k * s).toFixed(1), Y = y => (pad + (y1 - y) * s).toFixed(1);
   const polys = feats.map(f => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates).map(p => `<path d="${p.map(r => 'M' + r.map(c => X(c[0]) + ' ' + Y(c[1])).join('L') + 'Z').join('')}" fill="#e8f6ee" stroke="#0b7f3a" stroke-width="1.2" fill-rule="evenodd"/>`).join('')).join('');
   const etq = cods.map(c => { const ce = centroideLote(LOTES[c]); return ce ? `<text x="${X(ce[1])}" y="${Y(ce[0])}" font-size="13" font-weight="700" text-anchor="middle" fill="#0b3a66">${esc(c)}</text>` : ''; }).join('');
-  const ruta = pts.length > 1 ? `<polyline points="${pts.map(p => X(p.lng) + ',' + Y(p.lat)).join(' ')}" fill="none" stroke="#0a66ff" stroke-width="3" stroke-linejoin="round"/><circle cx="${X(pts[0].lng)}" cy="${Y(pts[0].lat)}" r="6" fill="#0b7f3a"/><circle cx="${X(pts[pts.length - 1].lng)}" cy="${Y(pts[pts.length - 1].lat)}" r="6" fill="#b91c1c"/>` : '';
+  const ruta = pts.length > 1 ? `${segmentosRuta(pts).filter(s => s.length > 1).map(s => `<polyline points="${s.map(q => X(q[1]) + ',' + Y(q[0])).join(' ')}" fill="none" stroke="#0a66ff" stroke-width="3" stroke-linejoin="round"/>`).join('')}<circle cx="${X(pts[0].lng)}" cy="${Y(pts[0].lat)}" r="6" fill="#0b7f3a"/><circle cx="${X(pts[pts.length - 1].lng)}" cy="${Y(pts[pts.length - 1].lat)}" r="6" fill="#b91c1c"/>` : '';
   return `<svg viewBox="0 0 ${W} ${H.toFixed(0)}" style="width:100%;border:1px solid #dbe5dd;border-radius:12px;background:#fbfdfc">${polys}${ruta}${etq}</svg><p class="s">● verde: inicio · ● rojo: fin · línea azul: recorrido</p>`;
 }
 async function reporteVisita(v) {
@@ -771,7 +776,8 @@ async function iniciar() {
     const tras = conEnlace ? null : avisoTrasActualizar(), quieto = conEnlace || (tras && tras.cod);
     iniciarHistorial();
     // GPS automático al abrir, con seguimiento. Si se abrió con un enlace a un lote (o se volvió a uno), no se mueve el mapa de ese lote.
-    if (S.gpsAuto) iniciarGps(!quieto, true);
+    // Con una visita en curso el GPS se reactiva siempre, aunque el GPS automático esté apagado en Ajustes.
+    if (S.gpsAuto || VISITA) iniciarGps(!quieto, true);
     registrarSW();
     setTimeout(avisarInstalacion, 1500);
     // El tablero ya no se abre solo (salvo que se active en Ajustes); queda en Resumen > Tablero de hoy.

@@ -264,6 +264,22 @@ svg.hist{width:100%;height:auto;display:block}
 .chip-visita b{font-size:calc(14.5px * var(--esc))}.chip-visita small{font-size:calc(12px * var(--esc));opacity:.85}
 .chip-visita i{display:block;height:5px;border-radius:3px;background:color-mix(in srgb,currentColor 22%,transparent);margin-top:5px;overflow:hidden}
 .chip-visita u{display:block;height:100%;background:currentColor;border-radius:3px;transition:width .4s}
+/* Visita sin GPS: el chip pasa a rojo sólido y avisa que no se graba; al tocarlo se reactiva el GPS. */
+.chip-visita.sin-gps{background:var(--mal);color:#fff;animation:sin-gps 1.6s ease-in-out infinite}
+[data-tema=oscuro] .chip-visita.sin-gps{background:#a3140f}
+.chip-visita.sin-gps b{display:flex;align-items:center;gap:6px}.chip-visita.sin-gps .ico{width:18px;height:18px}
+@keyframes sin-gps{50%{box-shadow:0 0 0 5px color-mix(in srgb,#a3140f 35%,transparent)}}
+@media (prefers-reduced-motion:reduce){.chip-visita.sin-gps{animation:none}}
+.aviso-sin-gps{display:flex;flex-direction:column;gap:6px}.aviso-sin-gps b{display:flex;align-items:center;gap:6px;font-size:calc(16px * var(--esc))}.aviso-sin-gps .btn{margin-top:4px}
+/* Botón GPS con la ubicación bloqueada: rojo y tachado. */
+.fab.bloqueado{color:var(--mal);border-color:var(--mal)}
+.fab.bloqueado::after{content:'';position:absolute;left:50%;top:50%;width:34px;height:3px;border-radius:2px;background:currentColor;box-shadow:0 0 0 2px var(--sup);transform:translate(-50%,-50%) rotate(-45deg)}
+ol.pasos{margin:4px 0 8px;padding-left:22px;font-size:calc(15px * var(--esc));line-height:1.45}ol.pasos li{margin:6px 0}
+.titulo-fila{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:26px 0 10px}.titulo-fila h3{margin:0}
+.btn-texto{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:0;border-radius:12px;background:transparent;color:var(--texto2);font-weight:700;font-size:calc(14.5px * var(--esc))}
+.btn-texto .ico{width:18px;height:18px}
+.lista-vieja{display:flex;flex-direction:column;gap:4px}.lista-vieja b{font-size:calc(15.5px * var(--esc))}.lista-vieja span{font-weight:500}.lista-vieja .acciones{margin-top:8px;flex-wrap:wrap}
+.card-salio{margin:8px 0 0;display:flex;align-items:center;gap:6px}.card-salio .ico{width:18px;height:18px;flex:none}
 .tablero{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
 .tb{min-height:112px;border:2px solid var(--linea);border-radius:16px;background:var(--sup);color:var(--texto);text-align:left;padding:12px;display:flex;flex-direction:column;gap:2px}
 .tb .ico{width:24px;height:24px;color:var(--texto2)}.tb b{font-size:calc(32px * var(--esc));font-weight:900;line-height:1.1}.tb span{font-size:calc(13.5px * var(--esc));color:var(--texto2);font-weight:600}

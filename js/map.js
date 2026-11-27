@@ -398,6 +398,8 @@ function boundsDe(bb) { return L.latLngBounds([bb[1], bb[0]], [bb[3], bb[2]]); }
 function seleccionarLote(cod, o = {}) {
   cod = codKey(cod); const l = LOTES[cod];
   if (!l) { toast('No encontré el lote ' + cod, {tipo: 'mal'}); return false; }
+  // Una selección a mano deja de ser «la tarjeta del GPS»: el GPS ya no la reemplaza ni la cierra al salir del lote.
+  if (!o.gps && typeof GPS !== 'undefined') { GPS.autoSel = ''; GPS.salio = ''; }
   selCod = cod; selFeat = o.feat || l.principal; selToque = !!o.toque;
   selVista = o.modo || (o.toque ? S.selModo : 'lote');
   pintarSeleccion();
@@ -446,7 +448,10 @@ function menuLote(f) {
 function setSelModo(modo) { S.selModo = modo; guardarAjustes(); if (selCod) verComo(modo); } // preferencia de Capas: rige los próximos toques en el mapa
 function verComo(modo) { selVista = modo; pintarSeleccion(); renderCard(); } // botones Lote/Tablón de la tarjeta: solo esta selección
 function seleccionarTablon(i) { const f = DATA.features[i]; if (f) seleccionarLote(f._cod, {feat: f, modo: 'tablon', zoom: true}); }
-function cerrarCard() { clearTimeout(_vacioT); selCod = ''; selFeat = null; selToque = false; pintarSeleccion(); $('card').className = 'card oculta'; ajustarCard(); }
+function cerrarCard() {
+  // Si el usuario cierra la tarjeta que abrió el GPS, no se vuelve a abrir mientras siga en ese lote.
+  if (typeof GPS !== 'undefined') { if (selCod && selCod === GPS.autoSel) GPS.descartado = selCod; GPS.salio = ''; }
+  clearTimeout(_vacioT); selCod = ''; selFeat = null; selToque = false; pintarSeleccion(); $('card').className = 'card oculta'; ajustarCard(); }
 function ajustarCard() {
   const el = $('card'), vis = !el.classList.contains('oculta');
   document.body.classList.toggle('con-card', vis); document.body.classList.toggle('card-full', vis && cardFull); leyPorCard(vis);
@@ -488,6 +493,7 @@ function renderCard() {
     </div>
     <div class="fila-estado"><span class="chip est-${st.cls}">${esc(st.txt)}</span>${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
     ${corte.alerta}
+    ${typeof GPS !== 'undefined' && GPS.salio && GPS.salio === l.cod ? `<div class="nota est-medio card-salio">${ico('pin')} Ya no está en este lote según el GPS.</div>` : ''}
     <div class="cifras">
       ${cifra('TCH anterior', l.tchAnt > 0 ? nfTch.format(l.tchAnt) : '—', '', chispa(l.cod))}${cifra('Estimado', estim, 'c-est')}${cifra('Optimista', l.tchOpt > 0 ? fmtTch(l.tchOpt) : '—')}${cifra('Edad', edad === null ? '—' : conUnidad(nfTch.format(edad), ' m'))}
     </div>
