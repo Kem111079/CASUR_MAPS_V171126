@@ -946,24 +946,47 @@ function renderAjustes() {
   };
   const ayuda = (id, val) => ((AYUDAS[id].find(o => o[0] === val) || AYUDAS[id][0])[2]);
   const selA = (id, val) => sel(id, AYUDAS[id], val) + `<small class="ayuda" id="${id}Ayuda">${ayuda(id, val)}</small>`;
+  const meta = META || {}, fDatos = fechaCorta(meta.datos_al || meta.generated_at), vencidos = Object.values(LOTES).filter(corteVencido).length;
   $('tabAjustes').innerHTML = `<header><h2>Ajustes</h2></header>
-    <label class="campo">Técnico<input id="ajTec" type="text" value="${esc(S.tecnico)}" placeholder="Su nombre"></label>
-    <label class="campo">Uso del GPS${selA('ajGps', S.gpsPerfil)}</label>
-    <label class="campo">Pantalla${selA('ajTema', S.tema)}</label>
-    <label class="campo">Tamaño de letra${sel('ajLetra', [['normal', 'Normal'], ['grande', 'Grande'], ['muygrande', 'Muy grande']], S.letra || 'normal')}</label>
-    <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tableroAbrir ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
-    <label class="campo">Giro del mapa con GPS${selA('ajGiro', S.giro)}</label>
-    <label class="interruptor"><input type="checkbox" id="ajAuto" ${S.gpsAuto ? 'checked' : ''}><span>Activar el GPS al abrir la app</span></label>
-    <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Mantener la pantalla encendida durante la visita</span></label>
-    <label class="interruptor"><input type="checkbox" id="ajVib" ${S.vibrar ? 'checked' : ''}><span>Vibrar al entrar a un lote</span></label>
-    <h3>Datos</h3>
-    <div class="kvs"><div><span>Datos al</span><b>${fechaCorta(META.datos_al || META.generated_at)}</b></div><div><span>Cortes de zafra al</span><b>${META.cortes_al ? fechaCorta(META.cortes_al) : 'Sin cargar'}</b></div><div><span>Polígonos del mapa</span><b>${esc(META.fuente_shape || '—')}</b></div><div><span>Aforo</span><b>${esc(META.fuente_aforo_version || META.fuente_aforo || '—')}</b></div><div><span>Polígonos / lotes</span><b>${nf0.format(META.poligonos || 0)} / ${nf0.format(META.codlotes_shape || 0)}</b></div><div><span>Versión de la app</span><b>${APP_VERSION}</b></div><div><span>Espacio usado</span><b id="espacio">…</b></div></div>
-    ${META.cortes_al ? '' : '<div class="nota est-medio">Sin cortes de la zafra en curso: la edad y el TCH zafra anterior vienen de la zafra 25/26.</div>'}
-    <div class="nota est-neutro"><b>Para actualizar los datos:</b> descargue la plantilla, edítela en Excel y súbala a la carpeta <b>fuentes</b> del repositorio con el mismo nombre. En unos minutos los teléfonos reciben los datos nuevos.</div>
-    <div class="acciones"><a class="btn sec" href="./fuentes/Plantilla_CASUR_Maps.xlsx" download>${ico('download')} Descargar plantilla</a><a class="btn ter" href="https://github.com/Kem111079/CASUR_MAPS_V171126/upload/main/fuentes" target="_blank" rel="noopener">${ico('share')} Subir a GitHub</a></div>
-    <div class="acciones"><button type="button" class="btn pri" onclick="actualizarApp()">${ico('download')} Actualizar la app (versión ${APP_VERSION})</button></div>
-    <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Descargar datos de nuevo</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
-    ${instalarEvt ? '<div class="acciones"><button type="button" class="btn pri" onclick="instalarApp()">' + ico('download') + ' Instalar app</button></div>' : ''}`;
+    <section class="aj-tarjeta aj-estado" aria-labelledby="ajEstTit">
+      <h3 id="ajEstTit">${ico('check')} Estado de la app</h3>
+      <div class="aj-filas">
+        <div><span>Datos del aforo</span><b>al ${fDatos}</b></div>
+        <div><span>Fechas de corte</span><b>${vencidos ? `<em class="mal">${vencidos} vencida${vencidos === 1 ? '' : 's'}</em>` : 'al día'}</b></div>
+        <div><span>Cortes de la zafra en curso</span><b>${meta.cortes_al ? 'al ' + fechaCorta(meta.cortes_al) : 'aún no cargados'}</b></div>
+        <div><span>Versión de la app</span><b>${APP_VERSION}</b></div>
+      </div>
+      <div class="acciones"><button type="button" class="btn pri" onclick="actualizarApp()">${ico('download')} Buscar actualización</button><button type="button" class="btn ter" onclick="abrirNovedades()">${ico('star')} Novedades</button></div>
+      ${instalarEvt ? '<div class="acciones"><button type="button" class="btn sec" onclick="instalarApp()">' + ico('download') + ' Instalar en este teléfono</button></div>' : ''}
+    </section>
+    <section class="aj-tarjeta" aria-labelledby="ajPerTit">
+      <h3 id="ajPerTit">${ico('edit')} Mis preferencias</h3>
+      <label class="campo">Su nombre (aparece en hallazgos y visitas)<input id="ajTec" type="text" value="${esc(S.tecnico)}" placeholder="Nombre y apellido"></label>
+      <label class="campo">Tamaño de letra${sel('ajLetra', [['normal', 'Normal'], ['grande', 'Grande'], ['muygrande', 'Muy grande']], S.letra || 'normal')}</label>
+      <label class="campo">Colores de pantalla${selA('ajTema', S.tema)}</label>
+      <label class="interruptor"><input type="checkbox" id="ajTab" ${S.tableroAbrir ? 'checked' : ''}><span>Mostrar el tablero del día al abrir</span></label>
+    </section>
+    <section class="aj-tarjeta" aria-labelledby="ajGpsTit">
+      <h3 id="ajGpsTit">${ico('pin')} Ubicación y recorridos</h3>
+      <label class="campo">Cómo recorre el campo${selA('ajGps', S.gpsPerfil)}</label>
+      <label class="campo">Giro del mapa al avanzar${selA('ajGiro', S.giro)}</label>
+      <label class="interruptor"><input type="checkbox" id="ajAuto" ${S.gpsAuto ? 'checked' : ''}><span>Ubicarme al abrir la app</span></label>
+      <label class="interruptor"><input type="checkbox" id="ajPant" ${S.pantalla ? 'checked' : ''}><span>Pantalla siempre encendida durante la visita</span></label>
+      <label class="interruptor"><input type="checkbox" id="ajVib" ${S.vibrar ? 'checked' : ''}><span>Vibrar al entrar a un lote</span></label>
+    </section>
+    <details class="aj-tarjeta aj-admin">
+      <summary>${ico('lock')} Administración de datos <small>para quien actualiza la información</small></summary>
+      <div class="nota est-neutro"><b>Para actualizar los datos:</b> descargue la plantilla de Excel, actualícela y súbala a la carpeta <b>fuentes</b> con el mismo nombre. En unos minutos todos los teléfonos reciben los datos nuevos.</div>
+      <div class="acciones"><a class="btn sec" href="./fuentes/Plantilla_CASUR_Maps.xlsx" download>${ico('download')} Descargar plantilla</a><a class="btn ter" href="https://github.com/Kem111079/CASUR_MAPS_V171126/upload/main/fuentes" target="_blank" rel="noopener">${ico('share')} Subir plantilla</a></div>
+      <div class="aj-filas">
+        <div><span>Lotes en el mapa</span><b>${nf0.format(meta.codlotes_shape || Object.values(LOTES).filter(l => l.nPoly).length)} lotes · ${nf0.format(meta.poligonos || 0)} tablones</b></div>
+        <div><span>Archivo del mapa</span><b>${esc(meta.fuente_shape || '—')}</b></div>
+        <div><span>Archivo del aforo</span><b>${esc(meta.fuente_aforo_version || meta.fuente_aforo || '—')}</b></div>
+        <div><span>Espacio usado en el teléfono</span><b id="espacio">…</b></div>
+      </div>
+      ${meta.cortes_al ? '' : '<p class="pie">Mientras no se carguen cortes de la zafra en curso, la edad y el TCH de la zafra anterior vienen de la zafra 25/26.</p>'}
+      <div class="acciones"><button type="button" class="btn sec" onclick="revisarDatos()">${ico('rotate')} Volver a descargar los datos</button><button type="button" class="btn ter" onclick="borrarMapas()">Borrar mapas guardados</button></div>
+    </details>`;
   $('ajTec').addEventListener('change', e => { S.tecnico = e.target.value.trim(); guardarAjustes(); });
   $('ajGps').addEventListener('change', e => { S.gpsPerfil = e.target.value; guardarAjustes(); });
   $('ajTema').addEventListener('change', e => { S.tema = e.target.value; guardarAjustes(); aplicarTema(); capaLotes.setStyle(estiloFeat); pintarSeleccion(); });
@@ -1121,6 +1144,8 @@ async function iniciar() {
     if (conEnlace) seleccionarLote(lote, {zoom: true});
     // Tras aplicar una actualización: vuelve a la pestaña (o al lote) donde estaba y confirma la versión.
     const tras = conEnlace ? null : avisoTrasActualizar(), quieto = conEnlace || (tras && tras.cod);
+    let verVista = ''; try { verVista = localStorage.getItem('casur_ver_vista') || ''; localStorage.setItem('casur_ver_vista', APP_VERSION); } catch (_) {}
+    if (verVista && verVista !== APP_VERSION) setTimeout(() => toast(`CASUR Maps se actualizó a ${APP_VERSION}.`, {tipo: 'bien', accion: 'Novedades', ms: 9000, alAccion: abrirNovedades}), tras ? 6500 : 1200);
     iniciarHistorial();
     // GPS automático al abrir, con seguimiento. Si se abrió con un enlace a un lote (o se volvió a uno), no se mueve el mapa de ese lote.
     // Con una visita en curso el GPS se reactiva siempre, aunque el GPS automático esté apagado en Ajustes.
@@ -1188,6 +1213,19 @@ async function actualizarApp() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, {once: true}); else iniciar();
 
+/* Novedades de la versión, en lenguaje sencillo (se muestran al actualizar y desde Ajustes). */
+const NOVEDADES = [
+  ['Resumen ejecutivo', '«Cómo vamos»: toneladas, TCH frente a 25/26, avance de zafra por mes y ranking por zona y finca.'],
+  ['Ver en el mapa', 'Lotes TCH < 40, corte de la próxima semana, lotes a renovar y fechas vencidas, con lista y CSV.'],
+  ['Tarjeta del lote', 'Semáforo Bien / Atención / Crítico y franja con toneladas, cambio frente a 25/26 y días al corte.'],
+  ['Capas más rápidas', 'Cambie de capa desde la leyenda; el botón ⇄ vuelve a la anterior.'],
+  ['Finca en el mapa', 'Al ver una finca, sus lotes quedan resaltados con su resumen; la ✕ del aviso lo quita.'],
+  ['Tableta', 'Barra lateral y Resumen a dos columnas en el iPad horizontal.'],
+  ['Campo', 'Visita «Grabando», cumplimiento al cerrar, filtros en la Bitácora y medición para compartir.']];
+function abrirNovedades() {
+  abrirHoja(`Novedades · ${APP_VERSION}`, `<div class="novedades">${NOVEDADES.map(n => `<div><b>${esc(n[0])}</b><span>${esc(n[1])}</span></div>`).join('')}</div>
+    <button type="button" class="btn pri ancho" onclick="cerrarHoja()">Entendido</button>`);
+}
 /* ── Resumen ejecutivo: cómo vamos frente a 25/26, avance de zafra, ranking y preguntas rápidas ── */
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const pond = (ls, f) => { let a = 0, s = 0; ls.forEach(l => { const v = f(l), ar = l.areaAforo || 0; if (v > 0 && ar > 0) { a += ar; s += v * ar; } }); return a ? s / a : null; };

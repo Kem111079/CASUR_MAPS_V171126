@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V271126E';
+const APP_VERSION = 'V271126F';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',

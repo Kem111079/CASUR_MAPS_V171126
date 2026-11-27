@@ -598,3 +598,30 @@ body[data-tab=mapa] .toast{max-width:none}
 .chips-fil button.activo{background:var(--pri);color:var(--pri-t);border-color:var(--pri)}
 .bit-cuenta .enlace{border:0;background:none;color:var(--acento);font-weight:800;padding:6px 4px;font-size:inherit;text-decoration:underline}
 #medirBar #medirCompartir .ico{width:18px;height:18px}
+
+/* ── Modo finca ── */
+.chip-finca{display:flex;align-items:stretch;min-height:48px;border-radius:16px;box-shadow:var(--sombra);background:var(--sup);border:2px solid #d4a017;overflow:hidden;max-width:min(100%,360px)}
+.chip-finca[hidden]{display:none}
+.chip-finca .cf-info{flex:1;min-width:0;border:0;background:transparent;color:var(--texto);text-align:left;padding:5px 12px 6px;display:flex;flex-direction:column}
+.chip-finca .cf-info b{font-size:calc(14.5px * var(--esc));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:5px}
+.chip-finca .cf-info b .ico{width:17px;height:17px;flex:none;color:#a37a00}
+.chip-finca .cf-info small{font-size:calc(12px * var(--esc));color:var(--texto2)}
+.chip-finca .cf-x{flex:none;width:46px;border:0;border-left:1px solid var(--linea);background:transparent;color:var(--texto);display:grid;place-items:center}
+.chip-finca .cf-x .ico{width:20px;height:20px}
+/* ── Ajustes en tarjetas ── */
+.aj-tarjeta{background:var(--sup);border:1px solid var(--linea);border-radius:16px;padding:12px 14px 14px;margin:12px auto}
+.aj-tarjeta h3{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:calc(16px * var(--esc))}
+.aj-tarjeta h3 .ico{width:20px;height:20px;color:var(--azul)}
+.aj-estado{border-left:6px solid var(--bien)}
+.aj-filas{display:flex;flex-direction:column;margin:4px 0 6px}
+.aj-filas>div{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--linea);font-size:calc(14.5px * var(--esc))}
+.aj-filas>div:last-child{border-bottom:0}.aj-filas span{color:var(--texto2)}.aj-filas b{text-align:right;overflow-wrap:anywhere}
+.aj-filas em.mal{font-style:normal;color:var(--mal)}
+.aj-admin summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:44px;font-weight:800;font-size:calc(15.5px * var(--esc))}
+.aj-admin summary::-webkit-details-marker{display:none}
+.aj-admin summary .ico{width:20px;height:20px;color:var(--texto2)}
+.aj-admin summary small{font-weight:500;color:var(--texto2);font-size:calc(12.5px * var(--esc))}
+.aj-admin summary::after{content:'▾';margin-left:auto;color:var(--texto2)}.aj-admin[open] summary::after{content:'▴'}
+.novedades{display:flex;flex-direction:column;gap:10px;margin:4px 0 14px}
+.novedades div{display:flex;flex-direction:column;padding:10px 12px;border-radius:12px;background:var(--fondo);border:1px solid var(--linea)}
+.novedades b{font-size:calc(15px * var(--esc))}.novedades span{font-size:calc(14px * var(--esc));color:var(--texto2)}
