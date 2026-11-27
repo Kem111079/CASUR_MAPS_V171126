@@ -768,6 +768,36 @@ const medir = {modo: null, pts: []};
 function medirIniciar(modo) { medir.modo = modo; medir.pts = []; cerrarCard(); medirPintar(); histPedir(); toast(modo === 'area' ? 'Toque el mapa para marcar el contorno.' : 'Toque el mapa para marcar puntos.'); }
 function medirPunto(ll) { medir.pts.push(L.latLng(ll.lat, ll.lng)); medirPintar(); }
 function medirDeshacer() { medir.pts.pop(); medirPintar(); }
+/* Imagen de la medición para WhatsApp: la figura sobre los lotes que toca, con el resultado grande. */
+function imagenMedicion() {
+  const p = medir.pts, area = medir.modo === 'area', W = 1080, H = 1180, c = document.createElement('canvas'), ctx = c.getContext('2d'); c.width = W; c.height = H;
+  let d = 0; for (let i = 1; i < p.length; i++) d += haversineM(p[i - 1].lng, p[i - 1].lat, p[i].lng, p[i].lat);
+  const per = area ? d + haversineM(p[p.length - 1].lng, p[p.length - 1].lat, p[0].lng, p[0].lat) : d, ha = area ? areaM2(p) / 10000 : 0;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; p.forEach(q => { x0 = Math.min(x0, q.lng); x1 = Math.max(x1, q.lng); y0 = Math.min(y0, q.lat); y1 = Math.max(y1, q.lat); });
+  const padX = (x1 - x0) * .25 + 1e-4, padY = (y1 - y0) * .25 + 1e-4; x0 -= padX; x1 += padX; y0 -= padY; y1 += padY;
+  const k = Math.cos((y0 + y1) / 2 * Math.PI / 180), mw = (x1 - x0) * k, mh = y1 - y0, top = 300, alto = H - top - 120, es = Math.min((W - 120) / mw, alto / mh);
+  const ox = (W - mw * es) / 2, oy = top + (alto - mh * es) / 2, X = x => ox + (x - x0) * k * es, Y = y => oy + (y1 - y) * es;
+  ctx.fillStyle = '#f4f7f5'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#0b7f3a'); g.addColorStop(1, '#005baa'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, 250);
+  ctx.fillStyle = '#fff'; ctx.font = '700 34px Arial'; ctx.fillText(area ? 'CASUR Maps · Medición de área' : 'CASUR Maps · Medición de distancia', 60, 70);
+  ctx.font = '900 84px Arial'; ctx.fillText(area ? `${nf.format(ha)} ha` : fmtDist(d), 60, 165);
+  ctx.font = '600 32px Arial'; ctx.fillText(area ? `${nf.format(ha / 0.704225)} mz · perímetro ${fmtDist(per)}` : `${p.length} puntos`, 60, 220);
+  // lotes que caen en el recuadro, como referencia (recortados al área del dibujo, sin tapar el encabezado)
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 250, W, H - 250 - 90); ctx.clip();
+  ctx.lineWidth = 2; ctx.strokeStyle = '#9aa3ad'; ctx.fillStyle = 'rgba(61,107,153,.10)'; ctx.font = '800 24px Arial'; ctx.textAlign = 'center';
+  const etq = [];
+  DATA.features.forEach(f => { const b = f.bbox; if (!b || b[0] > x1 || b[2] < x0 || b[1] > y1 || b[3] < y0) return;
+    (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates).forEach(pg => { ctx.beginPath(); pg.forEach(r => { r.forEach((q, i) => i ? ctx.lineTo(X(q[0]), Y(q[1])) : ctx.moveTo(X(q[0]), Y(q[1]))); ctx.closePath(); }); ctx.fill(); ctx.stroke(); });
+    if (!etq.includes(f._cod)) { etq.push(f._cod); const ce = centroideLote(LOTES[f._cod]); if (ce && ce[1] > x0 && ce[1] < x1 && ce[0] > y0 && ce[0] < y1) { ctx.fillStyle = '#0b3a66'; ctx.fillText(f._cod, X(ce[1]), Y(ce[0]) + 8); ctx.fillStyle = 'rgba(61,107,153,.10)'; } } });
+  ctx.beginPath(); p.forEach((q, i) => i ? ctx.lineTo(X(q.lng), Y(q.lat)) : ctx.moveTo(X(q.lng), Y(q.lat))); if (area) { ctx.closePath(); ctx.fillStyle = 'rgba(230,0,126,.22)'; ctx.fill(); }
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 12; ctx.lineJoin = 'round'; ctx.stroke(); ctx.strokeStyle = '#e6007e'; ctx.lineWidth = 6; ctx.stroke();
+  p.forEach(q => { ctx.beginPath(); ctx.arc(X(q.lng), Y(q.lat), 10, 0, 7); ctx.fillStyle = '#e6007e'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke(); });
+  ctx.restore();
+  ctx.textAlign = 'left'; ctx.fillStyle = '#64748b'; ctx.font = '600 26px Arial';
+  ctx.fillText(new Date().toLocaleString('es-NI', {day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'}) + (S.tecnico ? ' · ' + S.tecnico : ''), 60, H - 50);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', .9));
+}
+async function medirCompartir() { const b = await imagenMedicion(); if (b) compartirImagen(b, `medicion_${medir.modo === 'area' ? 'area' : 'distancia'}.jpg`); }
 function medirCerrar() { medir.modo = null; medir.pts = []; capaMedir.clearLayers(); $('medirBar').hidden = true; histPedir(); }
 function areaM2(pts) {
   if (pts.length < 3) return 0;
@@ -788,5 +818,6 @@ function medirPintar() {
     else { const m2 = areaM2(p), ha = m2 / 10000, per = d + haversineM(p[p.length - 1].lng, p[p.length - 1].lat, p[0].lng, p[0].lat); txt = `<b>${nf.format(ha)} ha</b> · ${nf.format(ha / 0.704225)} mz · perímetro ${fmtDist(per)}`; }
   } else txt = p.length < 2 ? `Marque al menos 2 puntos (${p.length})` : `<b>${fmtDist(d)}</b> · ${p.length} puntos`;
   $('medirTxt').innerHTML = txt;
+  $('medirCompartir').hidden = !(medir.modo === 'area' ? p.length >= 3 : p.length >= 2);
   document.body.style.setProperty('--medir-h', Math.round(bar.getBoundingClientRect().height) + 'px'); // los avisos van encima de la barra
 }

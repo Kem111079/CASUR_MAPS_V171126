@@ -365,7 +365,7 @@ function pintarProgreso() {
   el.hidden = false; el.classList.toggle('sin-gps', !!sin);
   el.setAttribute('aria-label', sin ? 'Visita en curso sin GPS. Tocar para reactivar el GPS' : 'Visita en curso. Tocar para ver la visita');
   if (sin) { el.innerHTML = `<b>${ico('alert')} Visita en curso sin GPS</b><small>${sin === 'apagado' ? 'GPS apagado' : 'Sin señal precisa'} · no se graba · Tocar para reactivar</small>`; return; }
-  el.innerHTML = `<b>${ico('route')} Visita · ${total ? `${hechos} de ${total} lotes` : `${n} lote${n === 1 ? '' : 's'}`}</b><small>${fmtDur(Date.now() - new Date(VISITA.inicio))} · ${fmtDist(VISITA.dist)}</small>${total ? `<i><u style="width:${Math.round(hechos / total * 100)}%"></u></i>` : ''}`;
+  el.innerHTML = `<b><span class="rec" aria-hidden="true"></span>Grabando · ${total ? `${hechos} de ${total} lotes` : `${n} lote${n === 1 ? '' : 's'}`}</b><small>${fmtDur(Date.now() - new Date(VISITA.inicio))} · ${fmtDist(VISITA.dist)}</small>${total ? `<i><u style="width:${Math.round(hechos / total * 100)}%"></u></i>` : ''}`;
 }
 setInterval(() => { if (typeof VISITA !== 'undefined' && VISITA) pintarProgreso(); }, 30000);
 function chipVisitaToque() { if (gpsVisitaMal(estadoGpsVisita())) reactivarGpsVisita(); else mostrarTab('visita'); }

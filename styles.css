@@ -580,3 +580,21 @@ body[data-tab=mapa] .toast{max-width:none}
   body[data-tab=mapa].con-card #toasts,body[data-tab=mapa].con-card.card-full #toasts{left:calc(var(--rail) + 518px)}
   .hoja{left:var(--rail)}
 }
+
+/* ── Campo: visita grabando, cumplimiento, filtros de bitácora ── */
+.rec{display:inline-block;width:10px;height:10px;border-radius:50%;background:#e11d48;margin-right:6px;vertical-align:1px;box-shadow:0 0 0 0 rgba(225,29,72,.6);animation:rec 1.6s infinite}
+@keyframes rec{0%{box-shadow:0 0 0 0 rgba(225,29,72,.6)}70%{box-shadow:0 0 0 8px rgba(225,29,72,0)}100%{box-shadow:0 0 0 0 rgba(225,29,72,0)}}
+@media (prefers-reduced-motion:reduce){.rec{animation:none}}
+.cumple{--sc:var(--neutro);--sf:var(--neutro-f);background:var(--sf);border-left:6px solid var(--sc);border-radius:14px;padding:10px 12px;margin:10px 0}
+.cumple.est-bien{--sc:var(--bien);--sf:var(--bien-f)}.cumple.est-medio{--sc:var(--medio);--sf:var(--medio-f)}.cumple.est-mal{--sc:var(--mal);--sf:var(--mal-f)}
+.cumple>div{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.cumple b{font-size:calc(26px * var(--esc));color:var(--sc);font-weight:900}
+.cumple span{font-size:calc(14px * var(--esc))}
+.cumple i{display:block;height:8px;border-radius:4px;background:color-mix(in srgb,var(--sc) 20%,transparent);margin:8px 0 4px;overflow:hidden}.cumple i u{display:block;height:100%;background:var(--sc)}
+.cumple small{color:var(--texto2);font-size:calc(12.5px * var(--esc))}
+.bit-filtros{display:flex;flex-direction:column;gap:8px;margin:4px auto 8px}
+.bit-filtros input,.bit-filtros select{min-height:46px;border:1px solid var(--linea);border-radius:12px;padding:0 12px;background:var(--sup);color:var(--texto);font-size:calc(15px * var(--esc));width:100%}
+.chips-fil{display:flex;gap:6px;flex-wrap:wrap}
+.chips-fil button{min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--linea);background:var(--sup);color:var(--texto);font-weight:700;font-size:calc(13.5px * var(--esc))}
+.chips-fil button.activo{background:var(--pri);color:var(--pri-t);border-color:var(--pri)}
+.bit-cuenta .enlace{border:0;background:none;color:var(--acento);font-weight:800;padding:6px 4px;font-size:inherit;text-decoration:underline}
+#medirBar #medirCompartir .ico{width:18px;height:18px}
