@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V181126J';
+const APP_VERSION = 'V271126A';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -17,7 +17,15 @@ let DATA = null, META = {}, RESUMEN = {}, LOTES = {}, FINCAS = {}, HIST = null;
 const $ = id => document.getElementById(id);
 const nf = new Intl.NumberFormat('es-NI', {maximumFractionDigits: 2});
 const nf0 = new Intl.NumberFormat('es-NI', {maximumFractionDigits: 0});
-const nf1 = new Intl.NumberFormat('es-NI', {maximumFractionDigits: 1});
+/* Formateadores únicos de cifras (Resumen, tarjeta, finca y renovación):
+   TCH, t/ha y edad con 1 decimal fijo (61.6 · 79.0); ha y toneladas agregadas sin decimales (9,102 ha · 560,673 t);
+   área de un lote o tablón con 1 decimal fijo (12.4 ha); variaciones con signo (+16.5 · −3.0 · +812). */
+const nfTch = new Intl.NumberFormat('es-NI', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+const nfHa = nf0, nfT = nf0, nfHaLote = nfTch;
+const fmtTch = v => num(v) === null ? '—' : nfTch.format(Number(v));
+const fmtHaLote = v => num(v) === null ? '—' : nfHaLote.format(Number(v)) + ' ha';
+const signo = (v, f = nfTch) => { const t = f.format(Math.abs(v)); return (/[1-9]/.test(t) ? (v > 0 ? '+' : '−') : '') + t; };
+const conUnidad = (valor, u) => `${valor}<small>${u}</small>`; // unidad pequeña dentro de una cifra KPI
 const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[m]));
 const num = v => { if (v === null || v === undefined || v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 const fmtN = (v, suf = '', f = nf) => num(v) === null ? '—' : f.format(Number(v)) + suf;
@@ -76,18 +84,77 @@ function llegarHtml(cod, lat, lng) {
   return `<a class="llegar" href="${urlLlegar(lat, lng)}" target="_blank" rel="noopener" aria-label="Cómo llegar al lote ${esc(cod)}">${ico('nav')}</a>`;
 }
 
-/* ── Avisos no bloqueantes (reemplazan a alert) ── */
+/* ── Avisos no bloqueantes (reemplazan a alert) ──
+   Snackbar abajo, sobre la barra de navegación o la tarjeta, sin tapar chips, botones flotantes ni la X de las hojas.
+   Se ve uno a la vez: un aviso nuevo reemplaza al pasajero que hubiera; los fijos (con acción pendiente o progreso)
+   quedan en cola detrás, con un contador «+N», y se cierran con ✕ o deslizándolos de lado.
+   opts: tipo ('bien' | 'mal'), accion + alAccion, accion2 + alAccion2 (segundo botón), ms, fijo, clave (un aviso con la misma clave no se repite: se actualiza). */
 function toast(msg, opts = {}) {
   const box = $('toasts'); if (!box) return;
+  colaAvisos(box);
+  if (opts.clave) { const ya = [...box.children].find(t => t.dataset.clave === opts.clave); if (ya) ya.remove(); }
   box.querySelectorAll('.toast:not(.fijo)').forEach(t => t.remove()); // un aviso a la vez: no tapar la pantalla
   const el = document.createElement('div');
-  el.className = 'toast ' + (opts.tipo || '') + (opts.fijo ? ' fijo' : '');
-  el.innerHTML = `<span>${esc(msg)}</span>` + (opts.accion ? `<button type="button">${esc(opts.accion)}</button>` : '');
+  el.className = 'toast ' + (opts.tipo || '') + (opts.fijo ? ' fijo' : '') + (opts.accion && opts.accion2 ? ' dos-acc' : '');
+  el.setAttribute('role', opts.tipo === 'mal' ? 'alert' : 'status');
+  if (opts.clave) el.dataset.clave = opts.clave;
+  // Los botones van juntos (t-btns): si no caben junto al texto, bajan los dos a una segunda fila, a la derecha.
+  const btns = (opts.accion ? `<button type="button" class="t-acc">${esc(opts.accion)}</button>` : '') +
+    (opts.accion && opts.accion2 ? `<button type="button" class="t-acc2">${esc(opts.accion2)}</button>` : '') +
+    (opts.fijo ? `<button type="button" class="t-x" aria-label="Cerrar aviso">${ico('x')}</button>` : '');
+  el.innerHTML = `<span>${esc(msg)}</span>` + (btns ? `<span class="t-btns">${btns}</span>` : '');
   box.appendChild(el);
   const cerrar = () => el.remove();
-  if (opts.accion) el.querySelector('button').addEventListener('click', () => { cerrar(); opts.alAccion && opts.alAccion(); });
+  if (opts.accion) el.querySelector('.t-acc').addEventListener('click', () => { cerrar(); opts.alAccion && opts.alAccion(); });
+  if (opts.accion && opts.accion2) el.querySelector('.t-acc2').addEventListener('click', () => { cerrar(); opts.alAccion2 && opts.alAccion2(); });
+  if (opts.fijo) el.querySelector('.t-x').addEventListener('click', cerrar);
+  deslizarAviso(el, cerrar);
   if (!opts.fijo) setTimeout(cerrar, opts.ms || (opts.accion ? 7000 : 3200));
   return el;
+}
+/* Deslizar de lado (más de 70 px o un gesto rápido) descarta el aviso; si no, vuelve a su sitio. */
+function deslizarAviso(el, cerrar) {
+  let x0 = null, t0 = 0, dx = 0;
+  el.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; x0 = e.clientX; t0 = Date.now(); dx = 0; el.style.transition = 'none'; try { el.setPointerCapture(e.pointerId); } catch (_) {} });
+  el.addEventListener('pointermove', e => { if (x0 === null) return; dx = e.clientX - x0; el.style.transform = `translateX(${dx}px)`; el.style.opacity = String(Math.max(.2, 1 - Math.abs(dx) / 220)); });
+  const fin = () => {
+    if (x0 === null) return; x0 = null; el.style.transition = '';
+    if (Math.abs(dx) > 70 || (Math.abs(dx) > 30 && Date.now() - t0 < 250)) { el.style.transform = `translateX(${dx > 0 ? 120 : -120}%)`; el.style.opacity = '0'; setTimeout(cerrar, 160); }
+    else { el.style.transform = ''; el.style.opacity = ''; }
+  };
+  el.addEventListener('pointerup', fin); el.addEventListener('pointercancel', fin);
+}
+/* Cola: solo el último aviso se ve; el contador dice cuántos fijos esperan detrás. --aviso-h deja sitio a la leyenda. */
+let _colaObs = null;
+function colaAvisos(box) {
+  if (_colaObs) return;
+  const pintar = () => {
+    const ts = [...box.children].filter(t => t.classList.contains('toast')), ult = ts[ts.length - 1];
+    ts.forEach(t => { t.hidden = t !== ult; const c = t.querySelector('.t-mas'); if (c && t !== ult) c.remove(); });
+    if (ult) {
+      let c = ult.querySelector('.t-mas');
+      if (ts.length > 1) { if (!c) { c = document.createElement('em'); c.className = 't-mas'; ult.insertBefore(c, ult.children[1] || null); } c.textContent = '+' + (ts.length - 1); c.title = (ts.length - 1) + ' aviso(s) más'; }
+      else if (c) c.remove();
+    }
+    document.body.classList.toggle('con-aviso', !!ult);
+    ubicarAvisos();
+  };
+  _colaObs = new MutationObserver(pintar); _colaObs.observe(box, {childList: true});
+  window.addEventListener('resize', ubicarAvisos);
+}
+/* Con la tarjeta del lote abierta el aviso va sobre ella; si ahí ya no cabe bajo el buscador y los chips (teléfono
+   pequeño, letra grande o aviso largo), baja junto a la barra de navegación, como con la tarjeta completa. */
+function ubicarAvisos() {
+  const box = $('toasts'); if (!box) return;
+  const ult = [...box.children].filter(t => t.classList.contains('toast') && !t.hidden).pop(), b = document.body;
+  let bajo = false;
+  if (ult && b.dataset.tab === 'mapa' && b.classList.contains('con-card') && !b.classList.contains('card-full')) {
+    b.classList.remove('aviso-bajo');
+    const tope = Math.max($('arriba').getBoundingClientRect().bottom, $('chips').getBoundingClientRect().bottom);
+    bajo = ult.getBoundingClientRect().top < tope + 20; // 20 px: margen y la animación de entrada
+  }
+  b.classList.toggle('aviso-bajo', bajo);
+  b.style.setProperty('--aviso-h', ult ? Math.round(ult.getBoundingClientRect().height) + 'px' : '0px');
 }
 function vibrar(ms = 60) { if (S.vibrar && navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} } }
 
@@ -117,6 +184,21 @@ function confirmar(txt) {
   el.innerHTML = `<div><svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="23"/><path d="M15 27l8 8 15-17"/></svg><b>${esc(txt)}</b></div>`;
   document.body.appendChild(el); setTimeout(() => el.classList.add('fuera'), 900); setTimeout(() => el.remove(), 1250);
 }
+
+/* Pregunta con dos botones dentro de la app (confirm() del navegador se ve ajeno y bloquea la página).
+   Devuelve una promesa: true con «si», false con «no», el fondo, Escape o Atrás. El botón seguro queda enfocado. */
+let _pregunta = null;
+function preguntar(titulo, texto, si = 'Aceptar', no = 'Cancelar') {
+  cerrarPregunta(false);
+  return new Promise(res => {
+    const el = document.createElement('div'); el.className = 'pregunta-fondo';
+    el.innerHTML = `<div class="pregunta" role="alertdialog" aria-modal="true" aria-labelledby="pregTit"${texto ? ' aria-describedby="pregTxt"' : ''}><b id="pregTit">${esc(titulo)}</b>${texto ? `<p id="pregTxt">${esc(texto)}</p>` : ''}<div class="acciones"><button type="button" class="btn ter" data-r="0">${esc(no)}</button><button type="button" class="btn peligro" data-r="1">${esc(si)}</button></div></div>`;
+    el.addEventListener('click', e => { const b = e.target.closest('button'); if (b) cerrarPregunta(b.dataset.r === '1'); else if (e.target === el) cerrarPregunta(false); });
+    document.body.appendChild(el); _pregunta = {el, res};
+    el.querySelector('[data-r="0"]').focus({preventScroll: true});
+  });
+}
+function cerrarPregunta(v) { const p = _pregunta; if (!p) return false; _pregunta = null; p.el.remove(); p.res(v); return true; }
 
 /* ── IndexedDB: clave/valor para visitas y recorrido (sin el límite de ~5 MB de localStorage) ── */
 let _kvDb = null;
@@ -183,13 +265,18 @@ function crc32(u8) {
   let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = _crcT[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
   return (c ^ 0xFFFFFFFF) >>> 0;
 }
-function crearZip(archivos) { // [{nombre, datos: Uint8Array}]
+/* Fecha y hora locales en formato DOS (el que guarda el ZIP); sin fecha válida se usa la de ahora. */
+function fechaDos(f) {
+  const d = f instanceof Date && !isNaN(f) ? f : new Date(), y = Math.min(Math.max(d.getFullYear(), 1980), 2107);
+  return {hora: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dia: ((y - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()};
+}
+function crearZip(archivos) { // [{nombre, datos: Uint8Array, fecha?: Date}]
   const enc = new TextEncoder(), partes = [], central = []; let off = 0;
   const u16 = v => new Uint8Array([v & 255, v >>> 8 & 255]), u32 = v => new Uint8Array([v & 255, v >>> 8 & 255, v >>> 16 & 255, v >>> 24 & 255]);
   const cat = arr => { const t = new Uint8Array(arr.reduce((s, a) => s + a.length, 0)); let o = 0; arr.forEach(a => { t.set(a, o); o += a.length; }); return t; };
   archivos.forEach(f => {
-    const nom = enc.encode(f.nombre), crc = crc32(f.datos), n = f.datos.length;
-    const comun = [u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(n), u32(n), u16(nom.length), u16(0)];
+    const nom = enc.encode(f.nombre), crc = crc32(f.datos), n = f.datos.length, fd = fechaDos(f.fecha);
+    const comun = [u16(20), u16(0x0800), u16(0), u16(fd.hora), u16(fd.dia), u32(crc), u32(n), u32(n), u16(nom.length), u16(0)];
     const local = cat([u32(0x04034b50), ...comun, nom, f.datos]);
     central.push(cat([u32(0x02014b50), u16(20), ...comun, u16(0), u16(0), u16(0), u32(0), u32(off), nom]));
     partes.push(local); off += local.length;
@@ -240,7 +327,51 @@ async function cargarDatos() {
 }
 function datosListos() { // al abrir, los datos nuevos se aplican solos; si el usuario ya está trabajando, se le avisa
   if (typeof recargaSegura === 'function' && typeof ocupado === 'function' && Date.now() - _abiertaEn < 25000 && !ocupado() && recargaSegura()) return;
-  toast('Datos nuevos listos.', {accion: 'Aplicar', fijo: true, tipo: 'bien', alAccion: () => location.reload()});
+  avisoActualizacion();
+}
+/* Un solo aviso para app nueva y datos nuevos: si llegan los dos, no se repite. */
+/* Con una hoja abierta (el formulario de un hallazgo, por ejemplo) el aviso espera a que se cierre: abajo, su botón
+   «Aplicar» quedaría sobre los botones de la hoja y un toque equivocado recargaría la app. */
+let _actPendiente = false;
+function avisoActualizacion() {
+  if ($('hoja') && $('hoja').classList.contains('abierta')) { _actPendiente = true; return; }
+  _actPendiente = false;
+  toast('Actualización lista', {accion: 'Aplicar', fijo: true, tipo: 'bien', clave: 'actualizacion', alAccion: recargarApp});
+}
+function apartarAvisoActualizacion() { const t = document.querySelector('#toasts .toast[data-clave="actualizacion"]'); if (t) { t.remove(); _actPendiente = true; } }
+/* Al cerrar la hoja: si hay un aviso pasajero a la vista (p. ej. «Lo escrito quedó como borrador · Retomar»), se espera a
+   que termine para no reemplazarlo. */
+let _actT = 0;
+function avisoActualizacionPendiente() {
+  if (!_actPendiente) return;
+  clearTimeout(_actT);
+  const intento = () => { if (!_actPendiente) return; if (document.querySelector('#toasts .toast:not(.fijo)')) { _actT = setTimeout(intento, 1000); return; } avisoActualizacion(); };
+  _actT = setTimeout(intento, 400);
+}
+/* Toda recarga por actualización pasa por aquí: guarda la pestaña, el lote abierto y la versión y fecha de datos de antes,
+   para volver al mismo sitio y confirmar el resultado al arrancar (avisoTrasActualizar). */
+const TRAS_ACT_KEY = 'casur_tras_actualizar';
+async function recargarApp() {
+  // Nunca se pierde en silencio un hallazgo a medio escribir.
+  if (typeof registroSucio === 'function' && registroSucio() &&
+    !await preguntar('¿Aplicar la actualización?', 'Se perderá el hallazgo que está escribiendo. Guárdelo primero y aplique la actualización después.', 'Aplicar', 'Seguir escribiendo')) return;
+  try {
+    const tab = document.body.dataset.tab || 'mapa', cod = typeof selCod !== 'undefined' && $('card') && !$('card').classList.contains('oculta') ? selCod : '';
+    sessionStorage.setItem(TRAS_ACT_KEY, JSON.stringify({tab, cod, ver: APP_VERSION, datos: (typeof META !== 'undefined' && META && META.generated_at) || '', t: Date.now()}));
+  } catch (_) {}
+  location.reload();
+}
+function avisoTrasActualizar() {
+  let a = null; try { a = JSON.parse(sessionStorage.getItem(TRAS_ACT_KEY)); sessionStorage.removeItem(TRAS_ACT_KEY); } catch (_) {}
+  if (!a || Date.now() - (a.t || 0) > 120000) return null;
+  let cod = '';
+  if (a.tab && a.tab !== 'mapa' && document.querySelector(`#nav button[data-tab="${a.tab}"]`)) mostrarTab(a.tab);
+  else if (a.cod && LOTES[a.cod] && !selCod) { cod = a.cod; seleccionarLote(cod, {zoom: true}); }
+  const datos = !!META.generated_at && META.generated_at !== a.datos, fecha = fechaCorta(META.datos_al || META.generated_at);
+  const txt = a.ver !== APP_VERSION ? `App actualizada a ${APP_VERSION}` + (datos ? ` · datos al ${fecha}` : '')
+    : datos ? `Datos actualizados al ${fecha}` : `Todo al día: versión ${APP_VERSION} · datos al ${fecha}`;
+  toast(txt, {tipo: 'bien', ms: 6000});
+  return {cod};
 }
 async function buscarActualizacion(cache, metaLocal, manual = false, faltan = []) {
   if (!navigator.onLine) { if (manual) toast('Sin señal: se usan los datos guardados.'); return; }
@@ -256,18 +387,51 @@ async function buscarActualizacion(cache, metaLocal, manual = false, faltan = []
     const aviso = toast(manual ? 'Descargando los datos publicados…' : 'Descargando datos nuevos…', {fijo: true});
     await descargarDatos(cache, meta);
     aviso && aviso.remove();
-    if (manual) location.reload(); else datosListos();
+    if (manual) recargarApp(); else datosListos();
   } catch (e) { if (manual) toast('No se pudo descargar: ' + (e.message || e), {tipo: 'mal'}); }
 }
-async function cargarHistorico() {
-  if (HIST) return HIST;
-  const cache = await dataCache();
-  HIST = await leerCache(cache, HIST_URL);
-  if (!HIST) {
-    try { const r = await fetchJson(HIST_URL, 45000); HIST = r.json; if (cache) await cache.put(HIST_URL, r.resp); }
-    catch (_) { HIST = null; throw new Error('Histórico no disponible sin señal'); }
-  }
-  return HIST;
+/* Una sola descarga aunque la pidan a la vez el arranque, la tarjeta y el gráfico. Al tenerlo, completa los lotes. */
+let _histProm = null;
+function cargarHistorico() {
+  if (HIST) return Promise.resolve(HIST);
+  if (_histProm) return _histProm;
+  _histProm = (async () => {
+    const cache = await dataCache();
+    let h = await leerCache(cache, HIST_URL);
+    if (!h) {
+      try { const r = await fetchJson(HIST_URL, 45000); h = r.json; if (cache) await cache.put(HIST_URL, r.resp); }
+      catch (_) { throw new Error('Histórico no disponible sin señal'); }
+    }
+    HIST = h; completarDesdeHist();
+    return HIST;
+  })().finally(() => { _histProm = null; });
+  return _histProm;
+}
+/* TCH por zafra de un lote en la producción histórica, de la más antigua a la más reciente (todas las zafras). */
+function histFilas(cod) {
+  const it = HIST && HIST.lotes && HIST.lotes[cod];
+  return it ? (it.historial || []).filter(r => Number(r.tch) > 0).sort((a, b) => a.zafra_code - b.zafra_code) : [];
+}
+/* Cuando a las métricas les falta el TCH de la zafra anterior o el promedio y el máximo históricos, se toman de la
+   producción histórica (la misma fuente del gráfico) y se anota la zafra de origen. Solo completa vacíos: nunca
+   reemplaza una cifra que ya trae la fuente. El TCH «de la zafra anterior» solo se toma si es de una de las dos
+   últimas zafras del histórico; si es más viejo, se guarda aparte como último TCH registrado. La fecha de corte no
+   está en el histórico, así que la edad sigue sin calcularse. */
+function completarDesdeHist() {
+  if (!HIST || !HIST.lotes) return;
+  const zs = (HIST.zafras || []).map(z => z.value).sort((a, b) => a - b), recientes = zs.slice(-2);
+  Object.values(LOTES).forEach(l => {
+    const v = histFilas(l.cod); if (!v.length) return;
+    const ult = v[v.length - 1];
+    if (l.tchAnt === null && !l.fCorte) {
+      if (recientes.includes(ult.zafra_code)) { l.tchAnt = Number(ult.tch); l.zafra = ult.zafra; l.tchAntHist = true; }
+      else l.ultHist = {tch: Number(ult.tch), zafra: ult.zafra};
+    }
+    if (l.histProm === null || l.histMax === null || !l.histN) {
+      const t = v.map(r => Number(r.tch));
+      l.histProm = t.reduce((a, b) => a + b, 0) / t.length; l.histMax = Math.max(...t); l.histN = t.length; l.histDeHist = true;
+    }
+  });
 }
 
 /* ── Modelo por lote: une métricas, aforo y cortes de la zafra en curso ── */
@@ -348,9 +512,11 @@ function claseCorte(l) {
   const k = l.semProg ? l.semProg.clave : '';
   return SEMANAS_PROX[0] && k === SEMANAS_PROX[0].clave ? 1 : SEMANAS_PROX[1] && k === SEMANAS_PROX[1].clave ? 2 : 3;
 }
-/* Número de corte en forma corta para etiquetas: 'C6', o 'PL' si es plantía. Viene del cronológico; no se calcula. */
+/* Número de corte en forma corta para etiquetas: 'C6', o 'PL' si es plantilla. Viene del cronológico; no se calcula. */
 const ncCorto = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'PL' : 'C' + l.nc;
-const ncLargo = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'plantía' : 'corte ' + l.nc;
+/* Ciclo en palabras: «plantilla» o «soca, corte 5» (mismos nombres que la capa Plantillas y socas). */
+const ncLargo = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'plantilla' : l.nc === '>5' ? 'soca, más de 5 cortes' : 'soca, corte ' + l.nc;
+const ncCiclo = l => { const t = ncLargo(l); return t ? t[0].toUpperCase() + t.slice(1) : ''; };
 /* ── Renovación: qué esperar ──
    Referencia realista: lo que rinden hoy las plantillas de molienda de la misma zona (TCH estimado, ponderado por área).
    Techo: el máximo histórico del propio lote. Ambos deltas se miden contra el TCH estimado del lote. */
@@ -378,21 +544,45 @@ function resumenRenovacion() {
   }).sort((a, b) => a.zona.localeCompare(b.zona, 'es', {numeric: true}));
   const area = filas.reduce((s, f) => s + f.area, 0), est = area ? filas.reduce((s, f) => s + f.est * f.area, 0) / area : 0;
   const tonEsp = filas.reduce((s, f) => s + f.tonEsp, 0), tonTecho = filas.reduce((s, f) => s + f.tonTecho, 0);
-  return {filas, n: filas.reduce((s, f) => s + f.n, 0), area, est, tonEsp, tonTecho, dEsp: area ? tonEsp / area : 0, dTecho: area ? tonTecho / area : 0};
+  // Lotes con TCH estimado a validar: se cuentan en los totales (no se excluyen) y se informa cuánto aportan.
+  const val = filas.flatMap(f => f.lotes).filter(estValidar), vArea = val.reduce((s, l) => s + (l.areaAforo || 0), 0);
+  const vTon = val.reduce((s, l) => s + (deltaEsperado(l) || 0) * (l.areaAforo || 0), 0);
+  const validar = {lotes: val, n: val.length, area: vArea, tonEsp: vTon, dEspSin: area - vArea > 0 ? (tonEsp - vTon) / (area - vArea) : null};
+  return {filas, n: filas.reduce((s, f) => s + f.n, 0), area, est, tonEsp, tonTecho, dEsp: area ? tonEsp / area : 0, dTecho: area ? tonTecho / area : 0, validar};
 }
 const esMolienda = l => String(l.clas || '').toLowerCase() === 'molienda';
+/* TCH estimado «a validar»: un valor de relleno o provisional (≤ 15 t/ha) en un lote de molienda cuyo histórico
+   (promedio, o el TCH de la zafra anterior si no hay promedio) pasa de 60 t/ha. No se excluye de ningún total:
+   se marca para que se confirme con el aforo. */
+const EST_VALIDAR_MAX = 15, EST_VALIDAR_REF = 60;
+const refHistorica = l => l.histProm !== null ? l.histProm : l.tchAnt;
+const estValidar = l => !!l && esMolienda(l) && l.tchEst > 0 && l.tchEst <= EST_VALIDAR_MAX && refHistorica(l) !== null && refHistorica(l) > EST_VALIDAR_REF;
+/* Por qué un lote no tiene una cifra, en texto corto para mostrar en lugar de «—». */
+function motivoSinEstimado(l) {
+  if (!l.conAforo) return {txt: 'Sin aforo', det: '26/27'};
+  if (l.clas && !esMolienda(l)) return {txt: 'No aplica', det: rotulo(l.clas)};
+  return {txt: 'Sin estimado', det: 'en el aforo'};
+}
+const esSinCana = l => /^sin ca/i.test(String(l.clas || ''));
+/* Rótulos para mostrar: corrige tildes y mayúsculas de valores que vienen así de la fuente (no cambia los datos). */
+const ROTULOS = {Aspersion: 'Aspersión', 'Mini-Aspersion': 'Miniaspersión', Investigacion: 'Investigación', 'Sin Caña': 'Sin caña',
+  VARIEDADES: 'Varias / sin definir', PLATANO: 'Plátano', 'Baja Prod': 'Baja producción'};
+const rotulo = v => ROTULOS[v] ?? v;
 
 /* Semáforo agronómico. Mismos umbrales de versiones anteriores; se agregan estados informativos. */
 function estadoLote(l) {
   if (!l) return {cls: 'neutro', txt: 'Sin dato'};
   if (l.cosechado) return {cls: 'info', txt: 'Cosechado ' + (l.zafra || ''), det: 'Corte ' + fechaCorta(l.fCorte)};
-  if (l.conAforo && l.clas && !esMolienda(l)) return {cls: 'neutro', txt: l.clas, det: 'Fuera del área de molienda'};
+  if (l.conAforo && l.clas && !esMolienda(l)) return {cls: 'neutro', txt: rotulo(l.clas), det: 'Fuera del área de molienda'};
   const edad = edadMeses(l);
-  if (l.tchAnt === null && edad === null) return {cls: 'neutro', txt: 'Sin histórico', det: 'Sin TCH ni fecha de corte'};
-  if (l.tchAnt !== null && l.tchAnt < 55) return {cls: 'mal', txt: 'Prioridad alta', det: 'TCH anterior bajo'};
+  if (l.tchAnt === null && edad === null) return l.ultHist
+    ? {cls: 'neutro', txt: 'Sin dato reciente', det: `Último TCH registrado: ${nfTch.format(l.ultHist.tch)} t/ha en la zafra ${l.ultHist.zafra}`}
+    : {cls: 'neutro', txt: 'Sin histórico', det: 'Sin TCH ni fecha de corte'};
+  const origen = l.tchAntHist ? ` (zafra ${l.zafra}, producción histórica)` : '';
+  if (l.tchAnt !== null && l.tchAnt < 55) return {cls: 'mal', txt: 'Prioridad alta', det: 'TCH zafra anterior bajo: menos de 55 t/ha' + origen};
   if (edad !== null && edad >= 12) return {cls: 'medio', txt: 'Edad alta', det: 'Validar programación de corte'};
-  if (l.tchAnt !== null && l.tchAnt < 70) return {cls: 'medio', txt: 'Revisar', det: 'TCH anterior bajo el rango esperado'};
-  return {cls: 'bien', txt: 'Normal', det: 'Sin alerta con los datos disponibles'};
+  if (l.tchAnt !== null && l.tchAnt < 70) return {cls: 'medio', txt: 'Revisar', det: 'TCH zafra anterior entre 55 y 70 t/ha, por debajo de lo esperado (70 o más)' + origen};
+  return {cls: 'bien', txt: 'Sin alertas', det: 'Sin alertas con los datos disponibles' + origen};
 }
 
 /* ── Geometría ── */

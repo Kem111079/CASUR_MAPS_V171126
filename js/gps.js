@@ -5,8 +5,13 @@ const PERFILES = {
   campo: {txt: 'Caminando', radio: 50, autoAcc: 22, empate: 12, estables: 3, rapido: 4.0},
   vehiculo: {txt: 'Vehículo', radio: 75, autoAcc: 30, empate: 18, estables: 3, rapido: 5.5}
 };
-const FIJADO_KEY = 'casur_maps_fijado_v2', LISTA_KEY = 'casur_maps_lista_v2';
-const GPS = {watch: null, fix: null, siguiendo: true, lote: '', autoSel: '', cands: [], fijado: leerLS(FIJADO_KEY, ''), marcador: null, circulo: null, rumbo: null, candKey: '', candN: 0, estado: 'apagado', detalle: ''};
+const FIJADO_KEY = 'casur_maps_fijado_v2', LISTA_KEY = 'casur_maps_lista_v2', LISTA_FECHA_KEY = 'casur_maps_lista_fecha_v2', AVISO_UBIC_KEY = 'casur_maps_aviso_ubicacion_v1';
+/* bloqueado: el navegador negó la ubicación · inicioT: cuándo se pidió el GPS · utilT: última lectura útil (±40 m)
+   fueraN / salio / descartado: salida del lote que abrió el GPS y tarjeta que el usuario cerró a mano. */
+const GPS = {watch: null, fix: null, siguiendo: true, lote: '', autoSel: '', cands: [], fijado: leerLS(FIJADO_KEY, ''), marcador: null, circulo: null, rumbo: null, candKey: '', candN: 0, estado: 'apagado', detalle: '',
+  bloqueado: false, inicioT: 0, utilT: 0, fueraN: 0, salio: '', descartado: ''};
+/* Límites de una lectura válida para la visita: más rápido o más impreciso que esto es un salto del GPS. */
+const VEL_MAX = 120 / 3.6, ACC_MAX = 40;
 let tileErrores = 0, capaRuta = null, rutaLinea = null;
 
 function gpsIcono() {
@@ -52,22 +57,87 @@ function pintarBrujula() {
 function iniciarGps(seguir = true, auto = false) {
   if (!navigator.geolocation) { toast('Este navegador no tiene GPS.', {tipo: 'mal'}); return; }
   if (GPS.watch !== null) return;
-  GPS.siguiendo = seguir; GPS.estado = 'buscando'; GPS.detalle = 'Buscando señal GPS…'; pintarGpsChip(); pintarGpsBtn();
+  GPS.siguiendo = seguir; GPS.estado = 'buscando'; GPS.detalle = 'Buscando señal GPS…'; GPS.inicioT = Date.now(); pintarGpsChip(); pintarGpsBtn();
   GPS.watch = navigator.geolocation.watchPosition(alPosicion, e => {
     GPS.estado = 'error'; GPS.detalle = e.code === 1 ? 'Permiso de ubicación denegado' : 'GPS sin señal'; pintarGpsChip();
-    if (e.code === 1) { detenerGps(); if (!auto) toast('Permita la ubicación en el navegador para usar el GPS.', {tipo: 'mal'}); }
+    if (e.code === 1) { GPS.bloqueado = true; const sinVisita = descartarVisitaNueva(); detenerGps(); ubicacionBloqueada(auto, sinVisita); }
   }, {enableHighAccuracy: true, maximumAge: 1000, timeout: 20000});
+  revisarGpsVisita(); if (VISITA) pintarProgreso(); // el chip de la visita deja de decir «GPS apagado»
 }
 function detenerGps() {
   if (GPS.watch !== null) navigator.geolocation.clearWatch(GPS.watch);
-  GPS.watch = null; GPS.fix = null; GPS.ancla = null; GPS.curso = null; GPS.movN = 0; GPS.centro = null; GPS.lote = ''; GPS.cands = []; GPS.estado = 'apagado';
+  GPS.watch = null; GPS.fix = null; GPS.ancla = null; GPS.curso = null; GPS.movN = 0; GPS.centro = null; GPS.lote = ''; GPS.cands = []; GPS.estado = 'apagado'; GPS.fueraN = 0;
   if (GPS.marcador) { GPS.marcador.remove(); GPS.circulo.remove(); GPS.marcador = GPS.circulo = null; }
-  girarMapa(0); pintarGpsChip(); pintarGpsBtn();
+  girarMapa(0); pintarGpsChip(); pintarGpsBtn(); revisarGpsVisita();
 }
+/* «Detener GPS» desde la hoja del GPS: con una visita en curso, pide confirmar porque la visita deja de grabar. */
+async function pedirDetenerGps() {
+  if (VISITA && !await preguntar('¿Detener el GPS?', 'La visita en curso dejará de grabar la ruta, la distancia y los lotes hasta que vuelva a activar el GPS.', 'Detener GPS', 'Seguir grabando')) return;
+  detenerGps();
+}
+async function permisoUbicacion() {
+  try { return (await navigator.permissions.query({name: 'geolocation'})).state; } catch (_) { return ''; }
+}
+
+/* ── Ubicación bloqueada por el navegador ──
+   Al tocar GPS o al iniciar una visita se abren los pasos para activarla. Al abrir la app (GPS automático) se avisa
+   una sola vez; después, el botón GPS queda tachado y al tocarlo se ven los mismos pasos. */
+let _visitaNueva = '', _reintento = false;
+/* Una visita recién iniciada que nunca tuvo GPS no se guarda: sin ubicación no hay ruta ni lotes visitados. */
+function descartarVisitaNueva() {
+  if (!VISITA || VISITA.id !== _visitaNueva || VISITA.pts.length) return false;
+  VISITA = null; _visitaNueva = ''; kvSet('visita_activa', null); soltarPantalla(); dibujarRuta(null); pintarProgreso();
+  if (document.body.dataset.tab === 'visita') renderVisita();
+  return true;
+}
+function ubicacionBloqueada(auto, sinVisita = false) {
+  let motivo = '';
+  if (sinVisita) motivo = 'La visita no se inició: hace falta la ubicación para grabar la ruta y los lotes visitados.';
+  else if (_reintento) motivo = 'La ubicación sigue bloqueada. Revise los pasos y vuelva a intentarlo.';
+  _reintento = false; pintarGpsBtn();
+  if (!auto || motivo) { abrirAyudaUbicacion(motivo); return; }
+  if (leerLS(AVISO_UBIC_KEY, false)) return;
+  escribirLS(AVISO_UBIC_KEY, true);
+  toast('Ubicación bloqueada: el GPS y las visitas no funcionan.', {tipo: 'mal', fijo: true, clave: 'ubicacion', accion: 'Cómo activarla', alAccion: () => abrirAyudaUbicacion()});
+}
+function abrirAyudaUbicacion(motivo = '') {
+  quitarAviso('ubicacion');
+  abrirHoja('Activar la ubicación', `
+    ${motivo ? `<div class="nota est-mal">${esc(motivo)}</div>` : ''}
+    <p class="pie">El navegador no le da la ubicación a CASUR Maps. Actívela así y luego toque <b>Reintentar</b>.</p>
+    <h4>Android (Chrome)</h4>
+    <ol class="pasos">
+      <li>Toque el icono a la izquierda de la dirección (candado o ajustes) › <b>Permisos</b> › <b>Ubicación</b> › <b>Permitir</b>.</li>
+      <li>Si abre CASUR Maps desde el icono instalado: en Chrome, <b>⋮</b> › <b>Configuración</b> › <b>Configuración de sitios</b> › <b>Ubicación</b>, y quite CASUR Maps de «Bloqueados».</li>
+      <li>Revise que la ubicación del teléfono esté encendida en el panel de accesos rápidos.</li>
+    </ol>
+    <h4>iPhone (Safari)</h4>
+    <ol class="pasos">
+      <li><b>Ajustes</b> › <b>Privacidad y seguridad</b> › <b>Localización</b>: encendida, y <b>Sitios web de Safari</b> en «Al usar la app».</li>
+      <li>En Safari, toque <b>aA</b> junto a la dirección › <b>Configuración del sitio web</b> › <b>Ubicación</b> › <b>Permitir</b>.</li>
+    </ol>
+    <div class="acciones"><button type="button" class="btn pri" onclick="cerrarHoja();reintentarUbicacion()">${ico('pin')} Reintentar</button><button type="button" class="btn ter" onclick="cerrarHoja()">Ahora no</button></div>`);
+}
+function reintentarUbicacion() { _reintento = true; quitarAviso('ubicacion'); if (GPS.watch === null) iniciarGps(); }
+function quitarAviso(clave) { const box = $('toasts'), t = box && [...box.children].find(x => x.dataset.clave === clave); if (t) t.remove(); }
+// Si el usuario permite la ubicación desde los ajustes del navegador, el GPS vuelve solo (con visita en curso o GPS automático).
+try {
+  navigator.permissions.query({name: 'geolocation'}).then(p => {
+    p.addEventListener('change', () => {
+      if (p.state !== 'granted' || !GPS.bloqueado) return;
+      GPS.bloqueado = false; quitarAviso('ubicacion'); pintarGpsBtn();
+      if (GPS.watch === null && (VISITA || S.gpsAuto)) iniciarGps(true, true);
+    });
+  }).catch(() => {});
+} catch (_) {}
 function alPosicion(pos) {
   const c = pos.coords, lat = c.latitude, lng = c.longitude, acc = Math.round(c.accuracy || 0), t = pos.timestamp || Date.now(), prev = GPS.fix;
   let v = Number.isFinite(c.speed) && c.speed !== null ? c.speed : null;
-  if (v === null && prev) v = haversineM(prev.lng, prev.lat, lng, lat) / Math.max((t - prev.t) / 1000, 0.5);
+  // Sin velocidad del equipo se estima con la lectura anterior, solo si ambas son precisas; un salto no se muestra como velocidad.
+  if (v === null && prev && acc <= ACC_MAX && prev.acc <= ACC_MAX) v = haversineM(prev.lng, prev.lat, lng, lat) / Math.max((t - prev.t) / 1000, 0.5);
+  if (v !== null && v > VEL_MAX) v = null;
+  if (acc <= ACC_MAX) GPS.utilT = Date.now();
+  GPS.bloqueado = false;
   let h = Number.isFinite(c.heading) && c.heading !== null && c.heading >= 0 ? c.heading : null;
   if (h === null && prev && haversineM(prev.lng, prev.lat, lng, lat) >= 3) {
     const r = Math.PI / 180, y = Math.sin((lng - prev.lng) * r) * Math.cos(lat * r), x = Math.cos(prev.lat * r) * Math.sin(lat * r) - Math.sin(prev.lat * r) * Math.cos(lat * r) * Math.cos((lng - prev.lng) * r);
@@ -94,8 +164,10 @@ function alPosicion(pos) {
   }
   orientar();
   const cands = detectarLote();
+  revisarSalidaLote(cands);
   visitaPunto(cands);
-  pintarGpsChip(); pintarGpsBtn();
+  if (typeof revisarDestino === 'function') revisarDestino(); // el lote elegido a mano en la Bitácora caduca al entrar a otro lote
+  pintarGpsChip(); pintarGpsBtn(); revisarGpsVisita();
 }
 
 /* Devuelve los lotes cercanos (uno por código). Confirma el lote solo con precisión suficiente y lecturas estables. */
@@ -121,12 +193,32 @@ function detectarLote() {
   return cands;
 }
 function confirmarLoteGps(c) {
-  if (GPS.lote !== c.cod) { GPS.lote = c.cod; vibrar(70); }
+  if (GPS.lote !== c.cod) { GPS.lote = c.cod; if (GPS.descartado !== c.cod) GPS.descartado = ''; vibrar(70); }
   if (GPS.fijado && GPS.fijado !== c.cod) { GPS.detalle = `Fijado ${GPS.fijado} · GPS en ${c.cod}`; return; }
   // No pisa una selección manual: solo actualiza la tarjeta si está vacía o si la puso el GPS.
-  if ((!selCod || selCod === GPS.autoSel) && selCod !== c.cod && document.body.dataset.tab === 'mapa' && !medir.modo && !$('hoja').classList.contains('abierta')) {
-    GPS.autoSel = c.cod; seleccionarLote(c.cod, {gps: true, feat: c.f, full: false});
+  // Si el usuario cerró la tarjeta de este lote, no se vuelve a abrir hasta que entre a otro.
+  if ((!selCod || selCod === GPS.autoSel) && selCod !== c.cod && GPS.descartado !== c.cod && document.body.dataset.tab === 'mapa' && !medir.modo && !$('hoja').classList.contains('abierta')) {
+    GPS.autoSel = c.cod; GPS.salio = ''; seleccionarLote(c.cod, {gps: true, feat: c.f, full: false});
   }
+}
+/* Salida del lote: tras 3 lecturas precisas fuera del lote del GPS, ese lote deja de ser «el lote donde está».
+   Si la tarjeta la abrió el GPS, se cierra; si el usuario la amplió para leerla (o está en otra pantalla), se queda
+   con el aviso «Ya no está en este lote». Una selección manual o un lote fijado no se tocan. */
+function revisarSalidaLote(cands) {
+  const cod = GPS.lote || GPS.autoSel;
+  if (!cod || GPS.fix.acc > ACC_MAX) return;
+  if (cands.some(c => c.inside && c.cod === cod)) {
+    GPS.fueraN = 0;
+    if (GPS.salio === cod) { GPS.salio = ''; if (selCod === cod) renderCard(); }
+    return;
+  }
+  if (++GPS.fueraN < 3 || GPS.estado === 'confirmando') return; // entrando a otro lote: esa tarjeta reemplazará a esta
+  GPS.fueraN = 0; GPS.descartado = '';
+  if (GPS.lote === cod) GPS.lote = '';
+  if (!selCod || selCod !== GPS.autoSel || selCod !== cod) { if (selCod !== GPS.autoSel) GPS.autoSel = ''; return; }
+  if (GPS.fijado === cod || GPS.salio === cod) return;
+  if (cardFull || document.body.dataset.tab !== 'mapa' || medir.modo || $('hoja').classList.contains('abierta')) { GPS.salio = cod; renderCard(); return; }
+  cerrarCard(); GPS.autoSel = ''; GPS.descartado = '';
 }
 function fijarLote(cod) {
   GPS.fijado = GPS.fijado === cod ? '' : cod; escribirLS(FIJADO_KEY, GPS.fijado);
@@ -134,8 +226,9 @@ function fijarLote(cod) {
 }
 function pintarGpsBtn() {
   const b = $('btnGps'); if (!b) return;
-  b.className = 'fab ' + (GPS.watch === null ? 'apagado' : GPS.siguiendo ? 'siguiendo' : 'activo');
-  b.setAttribute('aria-label', GPS.watch === null ? 'Activar GPS' : 'Centrar en mi posición');
+  const bloq = GPS.watch === null && GPS.bloqueado;
+  b.className = 'fab ' + (GPS.watch === null ? 'apagado' : GPS.siguiendo ? 'siguiendo' : 'activo') + (bloq ? ' bloqueado' : '');
+  b.setAttribute('aria-label', bloq ? 'Ubicación bloqueada. Tocar para ver cómo activarla' : GPS.watch === null ? 'Activar GPS' : 'Centrar en mi posición');
 }
 function pintarGpsChip() {
   const el = $('chipGps'); if (!el) return;
@@ -152,7 +245,7 @@ function abrirGps() {
     <div class="cifras c4">${cifra('Precisión', f ? '±' + f.acc + ' m' : '—')}${cifra('Velocidad', f && f.v !== null ? (f.v * 3.6).toFixed(0) + ' km/h' : '—')}${cifra('Rumbo', Number.isFinite(GPS.rumbo) ? Math.round(GPS.rumbo) + '°' : '—')}${cifra('Perfil', P.txt)}</div>
     ${f && f.acc > 30 ? '<div class="nota est-medio">Precisión baja: elija el lote de la lista o fíjelo desde la tarjeta.</div>' : ''}
     <h4>Lotes cercanos</h4><div class="lista-lotes">${lista}</div>
-    <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();detenerGps()">${ico('stop')} Detener GPS</button>${GPS.fijado ? `<button type="button" class="btn sec" onclick="fijarLote(GPS.fijado);cerrarHoja()">${ico('unlock')} Liberar ${esc(GPS.fijado)}</button>` : ''}</div>`);
+    <div class="acciones"><button type="button" class="btn ter" onclick="cerrarHoja();pedirDetenerGps()">${ico('stop')} Detener GPS</button>${GPS.fijado ? `<button type="button" class="btn sec" onclick="fijarLote(GPS.fijado);cerrarHoja()">${ico('unlock')} Liberar ${esc(GPS.fijado)}</button>` : ''}</div>`);
 }
 
 /* ── Visita de campo (une "visita" y "recorrido"): ruta, distancia y lotes realmente pisados ── */
@@ -167,28 +260,75 @@ async function cargarVisitas() {
   }
   VISITA = await kvGet('visita_activa', null);
   pintarProgreso();
-  if (VISITA) { dibujarRuta(VISITA); pedirPantalla(); toast('Hay una visita en curso.', {accion: 'Ver', alAccion: () => mostrarTab('visita')}); }
+  // La visita guardada se reanuda con el GPS encendido (iniciar() lo activa aunque el GPS automático esté apagado).
+  if (VISITA) { dibujarRuta(VISITA); pedirPantalla(); toast('Visita en curso: se sigue grabando.', {accion: 'Ver', alAccion: () => mostrarTab('visita')}); }
 }
-function iniciarVisita() {
+/* La visita exige GPS: con la ubicación bloqueada no se crea y se muestran los pasos para activarla. */
+async function iniciarVisita() {
   if (VISITA) return;
+  if (!navigator.geolocation) { toast('Este navegador no tiene GPS: no se puede grabar la visita.', {tipo: 'mal'}); return; }
+  if (await permisoUbicacion() === 'denied') { GPS.bloqueado = true; pintarGpsBtn(); abrirAyudaUbicacion('Para iniciar la visita hace falta la ubicación: con ella se graban la ruta y los lotes visitados.'); return; }
+  if (VISITA) return;
+  const reinicio = listaNuevoDia();
   VISITA = {id: 'VIS-' + Date.now(), inicio: new Date().toISOString(), fin: null, pts: [], lotes: {}, dist: 0, tecnico: S.tecnico || ''};
+  _visitaNueva = VISITA.id; _salto = null; _guardadoT = Date.now();
+  // Con el GPS ya encendido y una lectura reciente y precisa, esa lectura es el primer punto de la visita
+  // (quieto, algunos equipos no vuelven a enviar lecturas) y la cuenta de 30 s sin señal empieza ahora.
+  if (GPS.watch !== null) { GPS.inicioT = Date.now(); const f = GPS.fix; if (f && Date.now() - (f.reloj || 0) < 10000 && f.acc <= ACC_MAX) { GPS.utilT = Date.now(); visitaPunto(GPS.cands); } }
   kvSet('visita_activa', VISITA); iniciarGps(); pedirPantalla(); dibujarRuta(VISITA); renderVisita(); pintarProgreso(); confirmar('Visita iniciada');
+  if (reinicio) toast(`Lista del día reiniciada: ${LISTA.length} lote${LISTA.length === 1 ? '' : 's'} por visitar.`);
+}
+/* Finalizar pide confirmar con el resumen; después queda unos segundos «Deshacer» para seguir grabando la misma visita. */
+async function pedirFinalizarVisita() {
+  if (!VISITA) return;
+  const v = VISITA, total = LISTA.length, hechos = LISTA.filter(x => x.hecho).length, n = lotesVisitados(v).length;
+  const res = `${total ? `${hechos} de ${total} lotes de la lista` : `${n} lote${n === 1 ? '' : 's'} visitado${n === 1 ? '' : 's'}`} · ${fmtDur(Date.now() - new Date(v.inicio))} · ${fmtDist(v.dist)}.`;
+  if (!await preguntar('¿Finalizar la visita?', res + ' Se dejará de grabar la ruta.', 'Finalizar', 'Seguir grabando')) return;
+  if (VISITA === v) finalizarVisita();
 }
 async function finalizarVisita() {
   if (!VISITA) return;
-  VISITA.fin = new Date().toISOString(); VISITAS.push(VISITA);
+  VISITA.fin = new Date().toISOString(); VISITA.plan = LISTA.map(x => ({cod: x.cod, hecho: !!x.hecho})); VISITAS.push(VISITA);
   await kvSet('visitas', VISITAS); await kvSet('visita_activa', null);
-  const v = VISITA; VISITA = null; pintarProgreso(); soltarPantalla(); dibujarRuta(null); renderVisita(); if (selCod) renderCard();
+  const v = VISITA; VISITA = null; _visitaNueva = ''; pintarProgreso(); revisarGpsVisita(); soltarPantalla(); dibujarRuta(null); renderVisita(); if (selCod) renderCard();
   cierreVisita(v);
+  toast('Visita finalizada.', {tipo: 'bien', accion: 'Deshacer', ms: 8000, alAccion: () => reanudarVisita(v.id)});
+}
+async function reanudarVisita(id) {
+  const v = VISITAS.find(x => x.id === id); if (VISITA || !v) return;
+  VISITAS = VISITAS.filter(x => x !== v); v.fin = null; delete v.plan; VISITA = v; _salto = null; _guardadoT = Date.now();
+  await kvSet('visitas', VISITAS); await kvSet('visita_activa', VISITA);
+  if ($('hoja').classList.contains('abierta') && $('hojaTitulo').textContent === 'Visita finalizada') cerrarHoja();
+  iniciarGps(); pedirPantalla(); dibujarRuta(VISITA); pintarProgreso(); revisarGpsVisita(); if (document.body.dataset.tab === 'visita') renderVisita(); if (selCod) renderCard();
+  toast('Visita reanudada: se sigue grabando.', {tipo: 'bien'});
 }
 const lotesVisitados = v => Object.keys(v.lotes || {}).filter(c => v.lotes[c].visitado);
+/* Filtro de saltos: una lectura con precisión peor de 40 m, o que implique más de 120 km/h desde el último punto,
+   no suma distancia, ni tiempo en lotes, ni entra en la ruta. Si 3 lecturas seguidas coinciden en la nueva posición
+   (el punto malo era el anterior, o se recuperó la señal lejos), la ruta sigue desde ahí con un corte, sin sumar el tramo. */
+let _salto = null, _guardadoT = 0;
+const velEntre = (a, b) => haversineM(a.lng, a.lat, b.lng, b.lat) / Math.max((b.ms - a.ms) / 1000, 1);
 function visitaPunto(cands) {
   if (!VISITA) return;
   const f = GPS.fix, ult = VISITA.pts[VISITA.pts.length - 1], dt = ult ? (f.t - ult.ms) / 1000 : 3;
   if (ult && dt < 3) return;
+  if (f.acc > ACC_MAX) { VISITA.descartados = (VISITA.descartados || 0) + 1; return; }
+  const aqui = {lat: f.lat, lng: f.lng, ms: f.t};
+  let corte = false;
+  if (ult) {
+    if (velEntre(ult, aqui) > VEL_MAX) {
+      _salto = _salto && velEntre(_salto, aqui) <= VEL_MAX ? Object.assign(aqui, {n: _salto.n + 1}) : Object.assign(aqui, {n: 1});
+      VISITA.saltos = (VISITA.saltos || 0) + 1;
+      if (_salto.n < 3) return;
+      corte = true; _salto = null;
+    } else {
+      _salto = null;
+      const d = haversineM(ult.lng, ult.lat, f.lng, f.lat); if (d >= 2) VISITA.dist += d;
+    }
+  }
+  if (VISITA.id === _visitaNueva) _visitaNueva = '';
   const c0 = cands[0], cod = c0 && c0.inside ? c0.cod : '';
-  if (ult && f.acc <= 40) { const d = haversineM(ult.lng, ult.lat, f.lng, f.lat); if (d >= 2) VISITA.dist += d; }
-  VISITA.pts.push({t: new Date(f.t).toISOString(), ms: f.t, lat: +f.lat.toFixed(6), lng: +f.lng.toFixed(6), acc: f.acc, cod});
+  VISITA.pts.push(Object.assign({t: new Date(f.t).toISOString(), ms: f.t, lat: +f.lat.toFixed(6), lng: +f.lng.toFixed(6), acc: f.acc, cod}, corte ? {corte: true} : {}));
   // Un lote cuenta como visitado si se estuvo dentro al menos 8 s, o a menos de 15 m durante 20 s. Pasar por el camino no cuenta.
   const paso = Math.min(dt, 15);
   cands.filter(c => c.inside || c.d <= 15).slice(0, 3).forEach(c => {
@@ -196,8 +336,9 @@ function visitaPunto(cands) {
     if (c.inside) l.seg += paso; else l.cerca += paso;
     if (!l.visitado && (l.seg >= 8 || l.cerca >= 20)) { l.visitado = true; l.hora = new Date().toISOString(); listaMarcar(c.cod, true); }
   });
-  if (rutaLinea) rutaLinea.addLatLng([f.lat, f.lng]);
-  if (VISITA.pts.length % 5 === 0) kvSet('visita_activa', VISITA);
+  if (rutaLinea) { const segs = rutaLinea.getLatLngs(); if (corte && segs[segs.length - 1].length) { segs.push([L.latLng(f.lat, f.lng)]); rutaLinea.setLatLngs(segs); } else rutaLinea.addLatLng([f.lat, f.lng], segs[segs.length - 1]); }
+  // Se guarda al menos cada 10 s: una recarga o un cierre de la app pierde como mucho los últimos segundos.
+  if (Date.now() - _guardadoT >= 10000) { _guardadoT = Date.now(); kvSet('visita_activa', VISITA); }
   pintarProgreso();
   if (document.body.dataset.tab === 'visita') renderVisita();
 }
@@ -205,7 +346,13 @@ function dibujarRuta(v) {
   if (!capaRuta) capaRuta = L.layerGroup().addTo(map);
   capaRuta.clearLayers(); rutaLinea = null;
   if (!v) return;
-  rutaLinea = L.polyline(v.pts.map(p => [p.lat, p.lng]), {color: '#0a66ff', weight: 4, opacity: .85, interactive: false}).addTo(capaRuta);
+  rutaLinea = L.polyline(segmentosRuta(v.pts), {color: '#0a66ff', weight: 4, opacity: .85, interactive: false}).addTo(capaRuta);
+}
+/* Tramos de la ruta: un punto con «corte» (tras un salto descartado) empieza un tramo nuevo, sin unir el salto. */
+function segmentosRuta(pts) {
+  const segs = [[]];
+  (pts || []).forEach(p => { if (p.corte && segs[segs.length - 1].length) segs.push([]); segs[segs.length - 1].push([p.lat, p.lng]); });
+  return segs;
 }
 function verRuta(v) { mostrarTab('mapa'); dibujarRuta(v); if (v && v.pts.length > 1) soltarSeguimiento();
   if (v && v.pts.length > 1) map.fitBounds(L.latLngBounds(v.pts.map(p => [p.lat, p.lng])), margenes(90, 40)); }
@@ -213,20 +360,97 @@ function verRuta(v) { mostrarTab('mapa'); dibujarRuta(v); if (v && v.pts.length 
 /* Progreso de la visita sobre el mapa: lotes de la lista ya visitados y tiempo transcurrido. */
 function pintarProgreso() {
   const el = $('chipVisita'); if (!el) return;
-  if (!VISITA) { el.hidden = true; return; }
-  const total = LISTA.length, hechos = LISTA.filter(x => x.hecho).length, n = lotesVisitados(VISITA).length;
-  el.hidden = false;
+  if (!VISITA) { el.hidden = true; el.classList.remove('sin-gps'); return; }
+  const total = LISTA.length, hechos = LISTA.filter(x => x.hecho).length, n = lotesVisitados(VISITA).length, e = estadoGpsVisita(), sin = gpsVisitaMal(e) ? e : '';
+  el.hidden = false; el.classList.toggle('sin-gps', !!sin);
+  el.setAttribute('aria-label', sin ? 'Visita en curso sin GPS. Tocar para reactivar el GPS' : 'Visita en curso. Tocar para ver la visita');
+  if (sin) { el.innerHTML = `<b>${ico('alert')} Visita en curso sin GPS</b><small>${sin === 'apagado' ? 'GPS apagado' : 'Sin señal precisa'} · no se graba · Tocar para reactivar</small>`; return; }
   el.innerHTML = `<b>${ico('route')} Visita · ${total ? `${hechos} de ${total} lotes` : `${n} lote${n === 1 ? '' : 's'}`}</b><small>${fmtDur(Date.now() - new Date(VISITA.inicio))} · ${fmtDist(VISITA.dist)}</small>${total ? `<i><u style="width:${Math.round(hechos / total * 100)}%"></u></i>` : ''}`;
 }
 setInterval(() => { if (typeof VISITA !== 'undefined' && VISITA) pintarProgreso(); }, 30000);
+function chipVisitaToque() { if (gpsVisitaMal(estadoGpsVisita())) reactivarGpsVisita(); else mostrarTab('visita'); }
+
+/* ── Visita sin GPS ──
+   'apagado': el GPS se detuvo o el permiso se negó · 'senal': 30 s sin lecturas útiles (±40 m) ·
+   'buscando': recién (re)activado, aún sin lectura útil · '': graba bien.
+   Con 'apagado' o 'senal' el chip de la visita queda en rojo y un aviso fijo ofrece «Reactivar».
+   Antes de declarar 'senal' se pide una lectura (sondeo): un equipo quieto, sobre todo una tableta o un portátil con
+   ubicación por Wi-Fi, no envía lecturas si la posición no cambia. Si la lectura llega con ±40 m o mejor, no se avisa. */
+let _sinGps = '', _avisoRojo = false, _sondeo = null; // _sondeo: {ref: inicio del silencio sondeado, fallo}
+function estadoGpsVisita() {
+  if (!VISITA) return '';
+  if (GPS.watch === null) return 'apagado';
+  const util = GPS.utilT || 0, ref = Math.max(util, GPS.inicioT || 0), buscando = util < (GPS.inicioT || 0) ? 'buscando' : '';
+  if (Date.now() - ref > 30000) {
+    if (!_sondeo || _sondeo.ref !== ref) sondearGps(ref);
+    return _sondeo.fallo ? 'senal' : buscando;
+  }
+  return buscando;
+}
+function sondearGps(ref) {
+  const s = _sondeo = {ref, fallo: false}, falla = () => { if (_sondeo === s) { s.fallo = true; revisarGpsVisita(); } };
+  try {
+    navigator.geolocation.getCurrentPosition(pos => {
+      if (_sondeo !== s || GPS.watch === null) return;
+      alPosicion(pos); // lectura válida: se procesa como cualquier otra (punto de la visita incluido)
+      if (Math.round(pos.coords.accuracy || 0) > ACC_MAX) falla();
+    }, falla, {enableHighAccuracy: true, maximumAge: 0, timeout: 10000});
+  } catch (_) { falla(); }
+}
+const gpsVisitaMal = e => e === 'apagado' || e === 'senal';
+function revisarGpsVisita() {
+  const e = estadoGpsVisita(); if (e === _sinGps) return;
+  const antes = _sinGps; _sinGps = e; pintarProgreso();
+  if (gpsVisitaMal(e) !== gpsVisitaMal(antes) && document.body.dataset.tab === 'visita') renderVisita();
+  if (gpsVisitaMal(e)) {
+    _avisoRojo = true; vibrar(250);
+    toast(e === 'apagado' ? 'Visita sin GPS: no se graba la ruta.' : 'Visita sin señal GPS: no se graba la ruta.', {tipo: 'mal', fijo: true, clave: 'visitaGps', accion: 'Reactivar', alAccion: reactivarGpsVisita});
+    return;
+  }
+  if (gpsVisitaMal(antes) || !VISITA) quitarAviso('visitaGps');
+  if (!e && _avisoRojo) { _avisoRojo = false; if (VISITA) toast('GPS recuperado: la visita sigue grabando.', {tipo: 'bien'}); }
+  if (!VISITA) _avisoRojo = false;
+}
+function reactivarGpsVisita() {
+  if (GPS.watch !== null) { navigator.geolocation.clearWatch(GPS.watch); GPS.watch = null; }
+  quitarAviso('visitaGps'); iniciarGps(true, false); revisarGpsVisita();
+}
+setInterval(revisarGpsVisita, 5000);
 
 /* ── Lista de trabajo del día ── */
-let LISTA = leerLS(LISTA_KEY, []);
+/* La lista guarda el día en que se armó (fecha local). Al día siguiente la pestaña Visita ofrece pasar los pendientes,
+   reutilizarla o vaciarla; si se inicia una visita otro día, los lotes marcados como hechos vuelven a pendientes. */
+const diaClave = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+let LISTA = leerLS(LISTA_KEY, []), LISTA_FECHA = leerLS(LISTA_FECHA_KEY, '');
+if (LISTA.length && !LISTA_FECHA) { LISTA_FECHA = diaClave(); escribirLS(LISTA_FECHA_KEY, LISTA_FECHA); } // listas de versiones anteriores
 const listaTiene = cod => LISTA.some(x => x.cod === cod);
-function listaGuardar() { escribirLS(LISTA_KEY, LISTA); pintarLista(); pintarProgreso(); if (document.body.dataset.tab === 'visita') { const q = $('planQ') ? $('planQ').value : ''; renderVisita(); if (q) { $('planQ').value = q; planBuscar(q); } } if (selCod) renderCard(); }
+const listaVieja = () => LISTA.length > 0 && !!LISTA_FECHA && LISTA_FECHA < diaClave();
+function listaGuardar() {
+  if (!LISTA.length) LISTA_FECHA = ''; else if (!LISTA_FECHA) LISTA_FECHA = diaClave();
+  escribirLS(LISTA_FECHA_KEY, LISTA_FECHA); escribirLS(LISTA_KEY, LISTA); pintarLista(); pintarProgreso(); if (document.body.dataset.tab === 'visita') { const q = $('planQ') ? $('planQ').value : ''; renderVisita(); if (q) { $('planQ').value = q; planBuscar(q); } } if (selCod) renderCard(); }
 function listaToggle(cod) { if (listaTiene(cod)) LISTA = LISTA.filter(x => x.cod !== cod); else LISTA.push({cod, hecho: false}); listaGuardar(); toast(listaTiene(cod) ? `Lote ${cod} agregado a la lista del día.` : `Lote ${cod} quitado de la lista.`); }
 function listaMarcar(cod, hecho) { const x = LISTA.find(i => i.cod === cod); if (x && x.hecho !== hecho) { x.hecho = hecho; listaGuardar(); if (hecho) toast(`Lote ${cod} visitado.`, {tipo: 'bien'}); } }
-function listaVaciar() { LISTA = []; listaGuardar(); }
+function listaVaciar() {
+  if (!LISTA.length) return;
+  const antes = LISTA.map(x => Object.assign({}, x)), fecha = LISTA_FECHA;
+  LISTA = []; listaGuardar();
+  toast(`Lista vaciada (${antes.length} lote${antes.length === 1 ? '' : 's'}).`, {accion: 'Deshacer', ms: 7000, alAccion: () => { if (LISTA.length) return; LISTA = antes; LISTA_FECHA = fecha; listaGuardar(); toast('Lista recuperada.', {tipo: 'bien'}); }});
+}
+/* Lista de otro día: «pendientes» deja solo lo no hecho; «toda» la reutiliza con todo por visitar. */
+function listaUsarHoy(modo) {
+  if (modo === 'pendientes') LISTA = LISTA.filter(x => !x.hecho);
+  LISTA.forEach(x => { x.hecho = false; }); LISTA_FECHA = LISTA.length ? diaClave() : '';
+  listaGuardar(); toast(LISTA.length ? `Lista de hoy: ${LISTA.length} lote${LISTA.length === 1 ? '' : 's'} por visitar.` : 'Lista vacía.', {tipo: 'bien'});
+}
+/* Al iniciar una visita otro día, los hechos se reinician. Devuelve true si cambió algo. */
+function listaNuevoDia() {
+  if (!listaVieja()) return false;
+  LISTA.forEach(x => { x.hecho = false; }); LISTA_FECHA = diaClave(); listaGuardar(); return true;
+}
+function listaFechaTxt() {
+  const d = new Date(LISTA_FECHA + 'T12:00:00'), dias = Math.round((new Date(diaClave() + 'T12:00:00') - d) / 86400000);
+  return dias === 1 ? 'de ayer' : 'del ' + d.toLocaleDateString('es-NI', {weekday: 'long', day: 'numeric', month: 'short'});
+}
 function pintarLista() {
   if (!capaLista) return;
   capaLista.clearLayers();
@@ -237,12 +461,16 @@ function pintarLista() {
 let _wake = null;
 async function pedirPantalla() { if (!S.pantalla || !VISITA || !('wakeLock' in navigator) || _wake) return; try { _wake = await navigator.wakeLock.request('screen'); _wake.addEventListener('release', () => { _wake = null; }); } catch (_) {} }
 function soltarPantalla() { if (_wake) { _wake.release().catch(() => {}); _wake = null; } }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pedirPantalla(); else if (VISITA) kvSet('visita_activa', VISITA); });
+// Al volver a primer plano el GPS tarda unos segundos en dar lecturas: se da ese margen antes de avisar «sin señal».
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (GPS.watch !== null) GPS.inicioT = Date.now(); pedirPantalla(); } else if (VISITA) kvSet('visita_activa', VISITA); });
 
 /* ── Conectividad y mapas sin señal ── */
+/* Dos estados distintos: «Sin internet» (el teléfono no tiene conexión; los lotes y registros siguen funcionando con lo guardado)
+   y «Mapa de fondo no disponible» (hay conexión, pero los cuadros de Calles o Satélite no cargan). Un cuadro que carga reinicia la cuenta. */
 function actualizarRed() {
-  const off = !navigator.onLine || tileErrores > 8, el = $('chipRed');
-  if (el) el.hidden = !off;
+  const el = $('chipRed'); if (!el) return;
+  const txt = !navigator.onLine ? 'Sin internet' : tileErrores > 8 ? 'Mapa de fondo no disponible' : '';
+  el.hidden = !txt; if (txt && el.textContent !== txt) el.textContent = txt;
 }
 window.addEventListener('online', () => { tileErrores = 0; actualizarRed(); });
 window.addEventListener('offline', actualizarRed);

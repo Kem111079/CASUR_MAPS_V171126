@@ -23,12 +23,12 @@
     <div id="arriba">
       <div id="buscador">
         <svg class="lupa ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.3-4.3"/></svg>
-        <input id="q" type="search" placeholder="Buscar lote o productor" autocomplete="off" autocapitalize="characters" enterkeyhint="search" aria-label="Buscar lote, productor o finca" />
+        <input id="q" type="search" placeholder="Buscar lote o finca" autocomplete="off" autocapitalize="characters" enterkeyhint="search" aria-label="Buscar lote o finca (código o nombre)" />
         <button id="btnClearQ" type="button" hidden aria-label="Borrar búsqueda"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         <div id="sugerencias" role="listbox"></div>
       </div>
     </div>
-    <div id="chips"><button id="chipGps" type="button" class="chip-gps" hidden></button><button id="chipVisita" type="button" class="chip-visita" hidden onclick="mostrarTab('visita')"></button><span id="chipRed" class="chip-red" hidden>Sin señal · mapa guardado</span></div>
+    <div id="chips"><button id="chipGps" type="button" class="chip-gps" hidden></button><button id="chipVisita" type="button" class="chip-visita" hidden onclick="chipVisitaToque()"></button><span id="chipRed" class="chip-red" role="status" hidden>Sin internet</span></div>
     <div id="leyenda" class="leyenda oculta"></div>
     <button id="btnCapas" type="button" class="fab capas" aria-label="Capas y herramientas">
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8.5 12 14l10-5.5L12 3z"/><path d="m2 13 10 5.5L22 13"/></svg>
@@ -63,7 +63,7 @@
     <button type="button" data-tab="visita"><svg viewBox="0 0 24 24"><path d="M5 21V4m0 1h11l-2 4 2 4H5"/></svg><span>Visita</span></button>
     <button type="button" data-tab="bitacora"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg><span>Bitácora</span><em id="insigniaBit" class="insignia" hidden></em></button>
     <button type="button" data-tab="mas"><svg viewBox="0 0 24 24"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></svg><span>Resumen</span></button>
-    <button type="button" data-tab="ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg><span>Ajustes</span></button>
+    <button type="button" data-tab="ajustes"><svg viewBox="0 0 24 24"><path d="M18.9 9.9L21.4 10.1L21.4 13.9L18.9 14.1L18.4 15.4L20.0 17.3L17.3 20.0L15.4 18.4L14.1 18.9L13.9 21.4L10.1 21.4L9.9 18.9L8.6 18.4L6.7 20.0L4.0 17.3L5.6 15.4L5.1 14.1L2.6 13.9L2.6 10.1L5.1 9.9L5.6 8.6L4.0 6.7L6.7 4.0L8.6 5.6L9.9 5.1L10.1 2.6L13.9 2.6L14.1 5.1L15.4 5.6L17.3 4.0L20.0 6.7L18.4 8.6Z"/><circle cx="12" cy="12" r="3"/></svg><span>Ajustes</span></button>
   </nav>
   <div id="toasts" aria-live="polite"></div>
 
