@@ -88,21 +88,23 @@ function llegarHtml(cod, lat, lng) {
    Snackbar abajo, sobre la barra de navegación o la tarjeta, sin tapar chips, botones flotantes ni la X de las hojas.
    Se ve uno a la vez: un aviso nuevo reemplaza al pasajero que hubiera; los fijos (con acción pendiente o progreso)
    quedan en cola detrás, con un contador «+N», y se cierran con ✕ o deslizándolos de lado.
-   opts: tipo ('bien' | 'mal'), accion + alAccion, ms, fijo, clave (un fijo con la misma clave no se repite: se actualiza). */
+   opts: tipo ('bien' | 'mal'), accion + alAccion, accion2 + alAccion2 (segundo botón), ms, fijo, clave (un aviso con la misma clave no se repite: se actualiza). */
 function toast(msg, opts = {}) {
   const box = $('toasts'); if (!box) return;
   colaAvisos(box);
   if (opts.clave) { const ya = [...box.children].find(t => t.dataset.clave === opts.clave); if (ya) ya.remove(); }
   box.querySelectorAll('.toast:not(.fijo)').forEach(t => t.remove()); // un aviso a la vez: no tapar la pantalla
   const el = document.createElement('div');
-  el.className = 'toast ' + (opts.tipo || '') + (opts.fijo ? ' fijo' : '');
+  el.className = 'toast ' + (opts.tipo || '') + (opts.fijo ? ' fijo' : '') + (opts.accion && opts.accion2 ? ' dos-acc' : '');
   el.setAttribute('role', opts.tipo === 'mal' ? 'alert' : 'status');
   if (opts.clave) el.dataset.clave = opts.clave;
   el.innerHTML = `<span>${esc(msg)}</span>` + (opts.accion ? `<button type="button" class="t-acc">${esc(opts.accion)}</button>` : '') +
+    (opts.accion && opts.accion2 ? `<button type="button" class="t-acc2">${esc(opts.accion2)}</button>` : '') +
     (opts.fijo ? `<button type="button" class="t-x" aria-label="Cerrar aviso">${ico('x')}</button>` : '');
   box.appendChild(el);
   const cerrar = () => el.remove();
   if (opts.accion) el.querySelector('.t-acc').addEventListener('click', () => { cerrar(); opts.alAccion && opts.alAccion(); });
+  if (opts.accion && opts.accion2) el.querySelector('.t-acc2').addEventListener('click', () => { cerrar(); opts.alAccion2 && opts.alAccion2(); });
   if (opts.fijo) el.querySelector('.t-x').addEventListener('click', cerrar);
   deslizarAviso(el, cerrar);
   if (!opts.fijo) setTimeout(cerrar, opts.ms || (opts.accion ? 7000 : 3200));
@@ -246,13 +248,18 @@ function crc32(u8) {
   let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = _crcT[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
   return (c ^ 0xFFFFFFFF) >>> 0;
 }
-function crearZip(archivos) { // [{nombre, datos: Uint8Array}]
+/* Fecha y hora locales en formato DOS (el que guarda el ZIP); sin fecha válida se usa la de ahora. */
+function fechaDos(f) {
+  const d = f instanceof Date && !isNaN(f) ? f : new Date(), y = Math.min(Math.max(d.getFullYear(), 1980), 2107);
+  return {hora: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dia: ((y - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()};
+}
+function crearZip(archivos) { // [{nombre, datos: Uint8Array, fecha?: Date}]
   const enc = new TextEncoder(), partes = [], central = []; let off = 0;
   const u16 = v => new Uint8Array([v & 255, v >>> 8 & 255]), u32 = v => new Uint8Array([v & 255, v >>> 8 & 255, v >>> 16 & 255, v >>> 24 & 255]);
   const cat = arr => { const t = new Uint8Array(arr.reduce((s, a) => s + a.length, 0)); let o = 0; arr.forEach(a => { t.set(a, o); o += a.length; }); return t; };
   archivos.forEach(f => {
-    const nom = enc.encode(f.nombre), crc = crc32(f.datos), n = f.datos.length;
-    const comun = [u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(n), u32(n), u16(nom.length), u16(0)];
+    const nom = enc.encode(f.nombre), crc = crc32(f.datos), n = f.datos.length, fd = fechaDos(f.fecha);
+    const comun = [u16(20), u16(0x0800), u16(0), u16(fd.hora), u16(fd.dia), u32(crc), u32(n), u32(n), u16(nom.length), u16(0)];
     const local = cat([u32(0x04034b50), ...comun, nom, f.datos]);
     central.push(cat([u32(0x02014b50), u16(20), ...comun, u16(0), u16(0), u16(0), u32(0), u32(off), nom]));
     partes.push(local); off += local.length;

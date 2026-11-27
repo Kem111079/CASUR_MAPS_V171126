@@ -166,6 +166,7 @@ function alPosicion(pos) {
   const cands = detectarLote();
   revisarSalidaLote(cands);
   visitaPunto(cands);
+  if (typeof revisarDestino === 'function') revisarDestino(); // el lote elegido a mano en la Bitácora caduca al entrar a otro lote
   pintarGpsChip(); pintarGpsBtn(); revisarGpsVisita();
 }
 
