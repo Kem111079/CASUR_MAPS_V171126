@@ -1327,7 +1327,7 @@ function claveAna(l, dim) {
   if (dim === 'riego') return rotulo(l.riego) || 'Sin dato';
   if (dim === 'tenencia') return rotulo(l.tenencia) || 'Sin dato';
   if (dim === 'admin') return esDirecta(l) ? 'Administración directa' : 'Productores';
-  if (dim === 'corte') { const n = /^planta/i.test(l.nc) ? 1 : Number(l.nc); return !n ? 'Sin dato' : n === 1 ? '01 Plantilla' : n >= 11 ? '11 Corte 11 o más' : String(n).padStart(2, '0') + ' Corte ' + n; }
+  if (dim === 'corte') { const n = /^planta/i.test(l.nc) ? 1 : Number(l.nc); return !n ? 'Sin dato' : n === 1 ? '01 Plantilla' : n > 5 ? '06 +5 cortes' : String(n).padStart(2, '0') + ' Corte ' + n; } // del 6.º corte en adelante, un solo grupo
   const d = parseISO(l.fProg); return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : 'Sin fecha';
 }
 const rotuloAna = (k, dim) => dim === 'mes' && /^\d{4}-\d{2}$/.test(k) ? `${MES_CORTO[Number(k.slice(5)) - 1]} ${k.slice(2, 4)}` : dim === 'corte' && /^\d{2} /.test(k) ? k.slice(3) : k;
