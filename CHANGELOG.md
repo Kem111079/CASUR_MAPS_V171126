@@ -1,5 +1,8 @@
 # Cambios
 
+## V271126Q · 27-nov-2026 · N.º de corte agrupado
+- En Análisis y su Excel, los cortes del 6.º en adelante se agrupan en **«+5 cortes»** (como en la capa Plantillas y socas): Plantilla, Corte 2, 3, 4, 5 y +5 cortes.
+
 ## V271126P · 27-nov-2026 · Análisis: tenencia, n.º de corte y administración
 - Nuevas agrupaciones en Análisis: **Tenencia** (Propio, Arrendamiento, Productores), **N.º de corte** (Plantilla, corte 2 a 10 y 11 o más) y **Administración** (Administración directa frente a Productores).
 - Nueva opción de zona **«Administración directa (sin Productores)»**: todo el análisis solo con 1-Sur, 2-Centro y 3-Norte.
