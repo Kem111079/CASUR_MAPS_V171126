@@ -335,14 +335,14 @@ function corteInfo(l) {
   if (d < 0) return {txt: '', alerta: `<div class="corte est-mal">${ico('alert')} Fecha de corte vencida: ${fechaCorta(l.fProg)} (hace ${-d} día${d === -1 ? '' : 's'}). Actualice el programa o cargue el corte.</div>`};
   return {txt: `<span class="${d <= 14 ? 'pronto' : ''}">${ico('calendar')} Corte ${fechaCorta(l.fProg)} · ${d === 0 ? '<b>hoy</b>' : `faltan <b>${d}</b> d`}${w ? ' · sem. ' + w.sem : ''}</span>`, alerta: ''};
 }
-/* Mini gráfico del TCH de las últimas zafras, dentro de la casilla "TCH anterior". */
+/* Mini gráfico del TCH de todas las zafras del histórico (la misma ventana que el gráfico y el promedio de la ficha),
+   dentro de la casilla «TCH zafra anterior». */
 function chispa(cod) {
-  const it = HIST && HIST.lotes && HIST.lotes[cod]; if (!it) return '';
-  const v = (it.historial || []).filter(r => Number(r.tch) > 0).sort((a, b) => a.zafra_code - b.zafra_code).slice(-8).map(r => Number(r.tch));
+  const filas = histFilas(cod), v = filas.map(r => Number(r.tch));
   if (v.length < 3) return '';
   const mn = Math.min(...v), mx = Math.max(...v), W = 76, H = 18, y = t => (H - 3 - (mx === mn ? .5 : (t - mn) / (mx - mn)) * (H - 6)).toFixed(1), x = i => (2 + i * (W - 4) / (v.length - 1)).toFixed(1);
   const sube = v[v.length - 1] >= v[0];
-  return `<svg class="chispa ${sube ? 'sube' : 'baja'}" viewBox="0 0 ${W} ${H}" aria-label="TCH de las últimas ${v.length} zafras"><polyline points="${v.map((t, i) => x(i) + ',' + y(t)).join(' ')}"/><circle cx="${x(v.length - 1)}" cy="${y(v[v.length - 1])}" r="2.4"/></svg><small class="chispa-txt" title="Primera y última zafra del gráfico">${nf0.format(v[0])} → ${nf0.format(v[v.length - 1])}</small>`;
+  return `<svg class="chispa ${sube ? 'sube' : 'baja'}" viewBox="0 0 ${W} ${H}" role="img" aria-label="TCH de ${v.length} zafras, de ${esc(filas[0].zafra)} a ${esc(filas[filas.length - 1].zafra)}"><polyline points="${v.map((t, i) => x(i) + ',' + y(t)).join(' ')}"/><circle cx="${x(v.length - 1)}" cy="${y(v[v.length - 1])}" r="2.4"/></svg><small class="chispa-txt" title="TCH de la primera y la última zafra del histórico (${esc(filas[0].zafra)} → ${esc(filas[filas.length - 1].zafra)})">${nf0.format(v[0])} → ${nf0.format(v[v.length - 1])}</small>`;
 }
 
 /* ── Búsqueda por código, productor o finca (sin tildes), con recientes y favoritos ── */
@@ -373,7 +373,7 @@ function sugerir(q) {
     items = [...ini, ...cont].slice(0, 9);
     if (!items.length) { box.innerHTML = '<div class="sug-vacio">Sin coincidencias. Pruebe con el código o parte del nombre.</div>'; box.classList.add('abierta'); return; }
   }
-  box.innerHTML = items.map(it => `<div class="sug-fila"><button type="button" data-tipo="${it.tipo}" data-cod="${esc(it.cod)}"><i>${ico(it.tipo === 'finca' ? 'home' : (it.ico || 'lot'))}</i><span><b>${esc(it.cod)}</b><small>${esc(it.txt)}${it.sinMapa ? ' · sin polígono' : ''}</small></span></button>${it.tipo === 'lote' ? llegarHtml(it.cod) : ''}</div>`).join('');
+  box.innerHTML = items.map(it => `<div class="sug-fila"><button type="button" data-tipo="${it.tipo}" data-cod="${esc(it.cod)}"><i>${ico(it.tipo === 'finca' ? 'home' : (it.ico || 'lot'))}</i><span><b>${esc(it.cod)}</b><small>${esc(it.txt)}${it.sinMapa ? ' · sin polígono en el mapa' : ''}</small></span></button>${it.tipo === 'lote' ? llegarHtml(it.cod) : ''}</div>`).join('');
   box.classList.add('abierta');
 }
 function cerrarSugerencias() { $('sugerencias').classList.remove('abierta'); }
@@ -406,7 +406,7 @@ function seleccionarLote(cod, o = {}) {
   if (!o.gps) { const r = [cod, ...recientes().filter(c => c !== cod)].slice(0, 10); escribirLS(REC_KEY, r); }
   if (o.full !== undefined) cardFull = o.full;
   if (o.zoom && l.bbox) soltarSeguimiento();
-  if (!l.nPoly) toast('Este lote no tiene polígono en el shape.');
+  if (!l.nPoly) toast('Este lote no tiene polígono en el mapa.');
   mostrarTab('mapa'); renderCard();
   // Se encuadra después de pintar la tarjeta, con su altura real (cambia con el tamaño de letra y la pantalla).
   if (o.zoom && l.bbox) map.fitBounds(boundsDe(porTablon() ? selFeat.bbox : l.bbox), Object.assign(margenes(90, margenCard()), {maxZoom: 18}));
@@ -467,6 +467,25 @@ function margenCard() {
 }
 const nbsp = t => String(t).replace(/ /g, '&nbsp;'); // «15.8 ha» y «corte 11» no se parten al bajar de línea
 function cifra(rot, val, cls = '', extra = '') { return `<div class="${cls}"><span>${rot}</span><b>${val}</b>${extra}</div>`; }
+/* Casilla sin cifra: en lugar de un «—» suelto, dice por qué (p. ej. «No aplica · Semilla», «Sin fecha · de corte»). */
+function cifraNd(rot, txt, det = '', cls = '', extra = '') { return `<div class="${cls}"><span>${rot}</span><b class="nd">${esc(txt)}${det ? `<small>${esc(det)}</small>` : ''}</b>${extra}</div>`; }
+/* Las cuatro cifras de la tarjeta, con los nombres únicos de la app y el motivo cuando falta el dato. */
+function cifrasLote(l, edad) {
+  const sinCana = esSinCana(l), sinEst = motivoSinEstimado(l), validar = estValidar(l);
+  const ant = l.tchAnt > 0
+    ? cifra('TCH zafra anterior', nfTch.format(l.tchAnt), '', chispa(l.cod) + (l.tchAntHist ? `<small class="cifra-origen">zafra ${esc(l.zafra)}</small>` : ''))
+    : l.ultHist ? cifraNd('TCH zafra anterior', 'Sin dato reciente', 'último: ' + l.ultHist.zafra, '', chispa(l.cod))
+    : cifraNd('TCH zafra anterior', 'Sin dato', HIST ? 'sin cosecha registrada' : 'histórico sin cargar', '', chispa(l.cod));
+  const est = sinCana ? cifraNd('TCH estimado 26/27', 'No aplica', 'Sin caña', 'c-est')
+    : l.tchEst > 0 ? cifra('TCH estimado 26/27', nfTch.format(l.tchEst), 'c-est' + (validar ? ' c-validar' : ''), validar ? '<small class="cifra-origen">a validar</small>' : '')
+    : cifraNd('TCH estimado 26/27', sinEst.txt, sinEst.det, 'c-est');
+  const opt = sinCana ? cifraNd('TCH optimista', 'No aplica', 'Sin caña')
+    : l.tchOpt > 0 ? cifra('TCH optimista', nfTch.format(l.tchOpt))
+    : l.conAforo && esMolienda(l) ? cifraNd('TCH optimista', 'Sin dato', 'en el aforo') : cifraNd('TCH optimista', sinEst.txt, sinEst.det);
+  const ed = sinCana ? cifraNd('Edad (meses)', 'No aplica', 'Sin caña')
+    : edad === null ? cifraNd('Edad (meses)', 'Sin fecha', 'de corte') : cifra('Edad (meses)', nfTch.format(edad));
+  return ant + est + opt + ed;
+}
 function kv(k, v) { return v === '' || v === null || v === undefined || v === '—' ? '' : `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`; }
 function renderCard() {
   const el = $('card'), l = LOTES[selCod];
@@ -474,8 +493,8 @@ function renderCard() {
   const st = estadoLote(l), edad = edadMeses(l), c = centroideFeat(selFeat) || centroideLote(l);
   const fav = favoritos().includes(l.cod), enLista = typeof listaTiene === 'function' && listaTiene(l.cod), fijado = typeof GPS !== 'undefined' && GPS.fijado === l.cod;
   const llegar = c ? `https://www.google.com/maps/dir/?api=1&destination=${c[0].toFixed(6)},${c[1].toFixed(6)}&travelmode=driving` : '';
-  const brecha = l.tchOpt > 0 && l.tchEst > 0 ? l.tchOpt - l.tchEst : null;
-  const estim = l.conAforo ? (esMolienda(l) || l.tchEst > 0 ? fmtTch(l.tchEst) : '—') : '—';
+  const brecha = l.tchOpt > 0 && l.tchEst > 0 ? l.tchOpt - l.tchEst : null, validar = estValidar(l);
+  const hf = histFilas(l.cod), hMax = hf.length ? hf.reduce((a, r) => Number(r.tch) > Number(a.tch) ? r : a) : null, nz = n => n === 1 ? '1 zafra' : n + ' zafras';
   const obs = typeof obsDeLote === 'function' ? obsDeLote(l.cod) : [];
   const tab = porTablon(), pt = selFeat ? selFeat.properties : {}, aT = Number(pt.Area_Ha) || 0, corte = corteInfo(l);
   if (!HIST && !_histPedido) { _histPedido = true; cargarHistorico().then(() => { if (selCod) renderCard(); }).catch(() => {}); }
@@ -491,11 +510,11 @@ function renderCard() {
       ${selFeat && l.nPoly > 1 ? `<div class="mini-seg" role="group" aria-label="Ver lote o tablón"><button type="button" class="${tab ? '' : 'activo'}" aria-pressed="${!tab}" onclick="verComo('lote')">Lote</button><button type="button" class="${tab ? 'activo' : ''}" aria-pressed="${tab}" onclick="verComo('tablon')">Tablón</button></div>` : ''}
       <button type="button" class="card-x" onclick="cerrarCard()" aria-label="Cerrar">${ico('x')}</button>
     </div>
-    <div class="fila-estado"><span class="chip est-${st.cls}">${esc(st.txt)}</span>${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
+    <div class="fila-estado">${st.cls === 'bien' && l.renovar ? '' : `<span class="chip est-${st.cls}">${esc(st.txt)}</span>`}${l.renovar ? '<span class="chip est-mal">Renovar</span>' : ''}${validar ? '<span class="chip est-medio" title="TCH estimado 26/27 posiblemente provisional: confírmelo con el aforo">Dato a validar</span>' : ''}${corte.txt ? `<span class="linea-estado">${corte.txt}</span>` : ''}</div>
     ${corte.alerta}
     ${typeof GPS !== 'undefined' && GPS.salio && GPS.salio === l.cod ? `<div class="nota est-medio card-salio">${ico('pin')} Ya no está en este lote según el GPS.</div>` : ''}
     <div class="cifras">
-      ${cifra('TCH anterior', l.tchAnt > 0 ? nfTch.format(l.tchAnt) : '—', '', chispa(l.cod))}${cifra('Estimado', estim, 'c-est')}${cifra('Optimista', l.tchOpt > 0 ? fmtTch(l.tchOpt) : '—')}${cifra('Edad', edad === null ? '—' : conUnidad(nfTch.format(edad), ' m'))}
+      ${cifrasLote(l, edad)}
     </div>
     <div class="acciones">
       <button type="button" class="btn pri" onclick="abrirRegistro(selCod)">${ico('plus')} Registrar hallazgo</button>
@@ -503,19 +522,21 @@ function renderCard() {
     </div>
     <div class="solo-full">
       ${st.det ? `<div class="nota est-${st.cls}">${esc(st.det)}</div>` : ''}
+      ${validar ? `<div class="nota est-medio">${ico('alert')} Dato a validar: el TCH estimado 26/27 es ${nfTch.format(l.tchEst)} t/ha y su ${l.histProm !== null ? 'promedio histórico' : 'TCH de la zafra anterior'} es ${nfTch.format(refHistorica(l))} t/ha. Parece un valor provisional: confírmelo con el aforo antes de usarlo. Se mantiene en todos los totales.</div>` : ''}
       <div class="kvs">
         ${tab ? kv('Tablón', pt.Tablon) + kv('Área del tablón', `${nfHaLote.format(aT)} ha · ${nfHaLote.format(aT / 0.704225)} mz`) + kv('Parte del lote', l.areaShape ? nf0.format(aT / l.areaShape * 100) + ' % de ' + nfHaLote.format(l.areaShape) + ' ha' : '') + kv('Centro del tablón', c ? `${c[0].toFixed(5)}, ${c[1].toFixed(5)}` : '') : selToque ? kv('Tablón tocado', pt.Tablon) : ''}
-        ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nfHaLote.format(l.areaShape)} ha en shape` : 'Sin polígono')}
+        ${kv('Área del lote', l.areaAforo > 0 ? `${fmtHaLote(l.areaAforo)} · ${l.conAforo ? 'aforo 26/27' : 'área registrada (sin aforo 26/27)'}` : l.areaShape > 0 ? `${fmtHaLote(l.areaShape)} · medida en el mapa (sin área de aforo)` : '')}
+        ${kv('Tablones del lote', l.nPoly ? `${l.nPoly} · ${nfHaLote.format(l.areaShape)} ha según el mapa` : 'Sin polígono en el mapa')}
         ${kv('Variedad', rotulo(l.variedad))}${kv('Zona', l.zona)}${kv('Riego', rotulo(l.riego))}${kv('Tenencia', l.tenencia)}
-        ${kv('Clasificación', rotulo(l.clas) || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('N.º de corte', l.nc)}
-        ${kv('Grupo de corte', l.grCorte ? (l.grCorte === 'Planta' ? 'Plantilla' : 'Soca · ' + l.grCorte.toLowerCase()) : '')}${kv('Propuesta de renovación', l.renovar === true ? 'Sí, renovar' : l.renovar === false ? 'No' : '')}
-        ${kv('Promedio histórico', l.histProm !== null ? `${nfTch.format(l.histProm)} t/ha · ${l.histN} zafras` : '')}${kv('Máximo histórico', l.histMax !== null ? nfTch.format(l.histMax) + ' t/ha' : '')}
-        ${l.renovar && deltaEsperado(l) !== null ? kv('Al renovar, esperado', `${signo(deltaEsperado(l))} t/ha (plantillas de la zona: ${nfTch.format(PLANT_ZONA[l.zona])})`) + kv('Al renovar, techo', deltaTecho(l) === null ? '' : `${signo(deltaTecho(l))} t/ha (su máximo)`) : ''}
-        ${kv('Corte programado', l.fProg ? `${fechaCorta(l.fProg)}${l.semProg ? ' · semana ' + l.semProg.sem : ''}` : '')}${kv('Último corte', l.fCorte ? `${fechaCorta(l.fCorte)}${l.zafra ? ' · zafra ' + l.zafra : ''}` : '')}${kv('Días desde el corte', diasDesde(l.fCorte) === null ? '' : nf0.format(diasDesde(l.fCorte)))}
-        ${kv('Toneladas estimadas', l.tonEst > 0 ? nfT.format(l.tonEst) + ' t' : '')}${kv('Toneladas optimistas', l.tonOpt > 0 ? nfT.format(l.tonOpt) + ' t' : '')}
-        ${kv('Brecha vs. optimista', brecha === null ? '' : signo(brecha) + ' t/ha')}
+        ${kv('Clasificación', rotulo(l.clas) || (l.conAforo ? '' : 'Sin aforo 26/27'))}${kv('Ciclo', ncCiclo(l))}${kv('Propuesta de renovación', l.renovar === true ? 'Sí, renovar' : l.renovar === false ? 'No' : '')}
+        ${l.tchAntHist ? kv('TCH zafra anterior', `${nfTch.format(l.tchAnt)} t/ha · zafra ${l.zafra} (producción histórica)`) : ''}${l.ultHist ? kv('Último TCH registrado', `${nfTch.format(l.ultHist.tch)} t/ha · zafra ${l.ultHist.zafra}`) : ''}
+        ${kv(`Promedio histórico (${nz(l.histN || hf.length)})`, l.histProm !== null ? `${nfTch.format(l.histProm)} t/ha${hf.length && hf.length === l.histN ? (hf.length === 1 ? ` · zafra ${hf[0].zafra}` : ` · ${hf[0].zafra} a ${hf[hf.length - 1].zafra}`) : ''}` : '')}${kv('Máximo histórico', l.histMax !== null ? nfTch.format(l.histMax) + ' t/ha' + (hMax && Math.abs(Number(hMax.tch) - l.histMax) < .05 ? ' · zafra ' + hMax.zafra : '') : '')}
+        ${l.renovar && deltaEsperado(l) !== null ? kv('Al renovar, esperado', `${signo(deltaEsperado(l))} t/ha (plantillas de la zona: ${nfTch.format(PLANT_ZONA[l.zona])} t/ha)`) + kv('Al renovar, máximo', deltaTecho(l) === null ? '' : `${signo(deltaTecho(l))} t/ha (hasta su máximo histórico)`) : ''}
+        ${kv('Corte programado', l.fProg ? `${fechaCorta(l.fProg)}${l.semProg ? ' · semana ' + l.semProg.sem : ''}` : '')}${kv('Último corte', l.fCorte ? `${fechaCorta(l.fCorte)}${l.zafra ? ' · zafra ' + l.zafra : ''}` : l.tchAntHist ? `Zafra ${l.zafra} · sin fecha registrada` : '')}${kv('Días desde el corte', diasDesde(l.fCorte) === null ? '' : nf0.format(diasDesde(l.fCorte)))}
+        ${kv('Toneladas estimadas 26/27', l.tonEst > 0 ? nfT.format(l.tonEst) + ' t' : '')}${kv('Toneladas optimistas', l.tonOpt > 0 ? nfT.format(l.tonOpt) + ' t' : '')}
+        ${kv('Diferencia con el TCH optimista', brecha === null ? '' : Math.abs(brecha) < .05 ? 'Ninguna: TCH estimado = TCH optimista' : signo(brecha) + ' t/ha')}
       </div>
-      ${tab ? '<p class="pie">TCH, edad, variedad y aforo son datos del lote completo; el shape no los trae por tablón.</p>' : ''}
+      ${tab ? '<p class="pie">TCH, edad, variedad y aforo son datos del lote completo; los polígonos del mapa no los traen por tablón.</p>' : ''}
       ${tablones.length > 1 ? `<h4>Tablones del lote (${tablones.length})</h4><div class="tablones">${tablones.map(f => `<button type="button" class="${f === selFeat ? 'activo' : ''}" onclick="seleccionarTablon(${f._i})"><b>${esc(f.properties.Tablon || '—')}</b><span>${fmtHaLote(f.properties.Area_Ha)}</span></button>`).join('')}</div>` : ''}
       <div class="mini-acc">
         ${llegar ? `<a href="${llegar}" target="_blank" rel="noopener">${ico('nav')} Llegar</a>` : ''}
@@ -553,18 +574,24 @@ async function alternarHistorico() {
   const box = $('histBox'); if (!box) return;
   if (!box.hidden) { box.hidden = true; return; }
   box.hidden = false; box.innerHTML = '<p class="vacio">Cargando histórico…</p>';
-  try { const h = await cargarHistorico(); box.innerHTML = histSvg(((h || {}).lotes || {})[selCod]); }
+  try { await cargarHistorico(); box.innerHTML = histSvg(selCod); }
   catch (e) { box.innerHTML = `<p class="vacio">${esc(e.message)}. Se guardará la próxima vez que abra con señal.</p>`; }
   box.scrollIntoView({block: 'nearest', behavior: 'smooth'});
 }
-function histSvg(item) {
-  const rows = (item && item.historial || []).filter(r => Number(r.tch) > 0).sort((a, b) => a.zafra_code - b.zafra_code).slice(-8);
+/* Gráfico con TODAS las zafras del histórico: la misma ventana que el mini gráfico y que el promedio y el máximo
+   de la ficha, para que las tres cifras coincidan. Marca el promedio (línea) y el máximo. */
+function histSvg(cod) {
+  const rows = histFilas(cod);
   if (!rows.length) return '<p class="vacio">Sin histórico de TCH para este lote.</p>';
-  const v = rows.map(r => Number(r.tch)), avg = v.reduce((a, b) => a + b, 0) / v.length, W = 640, H = 260, ml = 16, mr = 16, mt = 34, mb = 38;
+  const v = rows.map(r => Number(r.tch)), avg = v.reduce((a, b) => a + b, 0) / v.length, iMax = v.indexOf(Math.max(...v)), W = 640, H = 280, ml = 16, mr = 16, mt = 62, mb = 38;
   const max = Math.ceil((Math.max(...v, avg) + 10) / 10) * 10, pw = W - ml - mr, ph = H - mt - mb, bw = Math.min(46, pw / rows.length * .62);
   const x = i => ml + (i + .5) * pw / rows.length, y = t => mt + (max - t) * ph / max;
-  const bars = rows.map((r, i) => `<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${y(r.tch).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - mb - y(r.tch)).toFixed(1)}" rx="5" class="${r.tch >= avg ? 'hb-ok' : (r.tch < 55 ? 'hb-mal' : 'hb-med')}"/><text x="${x(i).toFixed(1)}" y="${(y(r.tch) - 7).toFixed(1)}" class="hv">${nf0.format(r.tch)}</text><text x="${x(i).toFixed(1)}" y="${H - 14}" class="hz">${esc(r.zafra || '')}</text>`).join('');
-  return `<svg class="hist" viewBox="0 0 ${W} ${H}" role="img" aria-label="TCH por zafra">${bars}<line x1="${ml}" x2="${W - mr}" y1="${y(avg).toFixed(1)}" y2="${y(avg).toFixed(1)}" class="hprom"/><text x="${W - mr}" y="${(y(avg) - 6).toFixed(1)}" class="hpt">Prom. ${nfTch.format(avg)}</text></svg>`;
+  const bars = rows.map((r, i) => `<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${y(r.tch).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - mb - y(r.tch)).toFixed(1)}" rx="5" class="${r.tch >= avg ? 'hb-ok' : (r.tch < 55 ? 'hb-mal' : 'hb-med')}"/><text x="${x(i).toFixed(1)}" y="${(y(r.tch) - 7).toFixed(1)}" class="hv">${nf0.format(r.tch)}</text>${i === iMax && v.length > 1 ? `<text x="${x(i).toFixed(1)}" y="${(y(r.tch) - 29).toFixed(1)}" class="hmx">máx.</text>` : ''}<text x="${x(i).toFixed(1)}" y="${H - 14}" class="hz">${esc(r.zafra || '')}</text>`).join('');
+  const n = rows.length, nz = n === 1 ? '1 zafra' : n + ' zafras';
+  return `<svg class="hist" viewBox="0 0 ${W} ${H}" role="img" aria-label="TCH por zafra, ${nz}; promedio ${nfTch.format(avg)} t/ha; máximo ${nfTch.format(v[iMax])} t/ha en ${esc(rows[iMax].zafra)}">` +
+    `<line x1="${ml}" x2="${ml + 30}" y1="18" y2="18" class="hprom"/><text x="${ml + 38}" y="23" class="hpt">Prom. ${nz}: ${nfTch.format(avg)} t/ha</text>${bars}` +
+    `<line x1="${ml}" x2="${W - mr}" y1="${y(avg).toFixed(1)}" y2="${y(avg).toFixed(1)}" class="hprom"/></svg>` +
+    `<p class="pie">TCH (t/ha) de todas las zafras del histórico, de ${esc(rows[0].zafra)} a ${esc(rows[n - 1].zafra)}. La línea es el promedio de esas ${nz}, el mismo de la ficha.</p>`;
 }
 
 /* ── Resumen de finca / productor ── */
@@ -576,11 +603,18 @@ function abrirFinca(nombre, zoom = false) {
   const rojos = ls.filter(l => estadoLote(l).cls === 'mal');
   const orden = ls.slice().sort((a, b) => ({mal: 0, medio: 1}[estadoLote(a).cls] ?? 2) - ({mal: 0, medio: 1}[estadoLote(b).cls] ?? 2) || a.cod.localeCompare(b.cod, 'es', {numeric: true}));
   abrirHoja(nombre, `
-    <div class="cifras c4">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área molienda', conUnidad(nfHa.format(area), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(ton), ' t'))}${cifra('TCH pond.', area ? nfTch.format(ton / area) : '—', 'c-est')}</div>
-    <p class="pie">Área total ${nfHa.format(areaTot)} ha · optimista ${area ? nfTch.format(tonOpt / area) : '—'} t/ha · ${rojos.length} lote(s) en prioridad alta${ls.some(l => l.renovar) ? ` · ${ls.filter(l => l.renovar).length} a renovar (${nfHa.format(ls.filter(l => l.renovar).reduce((s, l) => s + (l.area || 0), 0))} ha)` : ''}</p>
+    <div class="cifras c4">${cifra('Lotes', nf0.format(ls.length))}${cifra('Área molienda', conUnidad(nfHa.format(area), ' ha'))}${cifra('Toneladas', conUnidad(nfT.format(ton), ' t'))}${area ? cifra('TCH estimado 26/27', nfTch.format(ton / area), 'c-est') : cifraNd('TCH estimado 26/27', 'Sin dato', 'sin área de molienda', 'c-est')}</div>
+    <p class="pie">TCH en t/ha, ponderado por área de molienda. Área total ${nfHa.format(areaTot)} ha · TCH optimista ${area ? nfTch.format(tonOpt / area) + ' t/ha' : 'sin dato'} · ${rojos.length} lote(s) en prioridad alta${ls.some(estValidar) ? ` · ${ls.filter(estValidar).length} con TCH estimado a validar` : ''}${ls.some(l => l.renovar) ? ` · ${ls.filter(l => l.renovar).length} a renovar (${nfHa.format(ls.filter(l => l.renovar).reduce((s, l) => s + (l.area || 0), 0))} ha)` : ''}</p>
     <div class="acciones"><button type="button" class="btn sec" onclick="verFincaEnMapa('${esc(nombre).replace(/'/g, '&#39;')}')">${ico('zoomIn')} Ver en mapa</button></div>
-    <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${fmtHaLote(l.area)} · ant. ${fmtTch(l.tchAnt)} · est. ${l.tchEst > 0 ? nfTch.format(l.tchEst) : '—'}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`);
+    <div class="lista-lotes">${orden.map(l => { const s = estadoLote(l); return `<div class="fila-ir"><button type="button" onclick="cerrarHoja();seleccionarLote('${esc(l.cod)}',{zoom:true})"><b>${esc(l.cod)}</b><span>${resumenTchLote(l)}</span><i class="chip est-${s.cls}">${esc(s.txt)}</i></button>${llegarHtml(l.cod)}</div>`; }).join('')}</div>`);
   if (zoom) verFincaEnMapa(nombre, false);
+}
+/* Línea corta de un lote en listas: área, TCH zafra anterior y TCH estimado, con el motivo cuando falta. */
+function resumenTchLote(l) {
+  const m = motivoSinEstimado(l);
+  const ant = l.tchAnt > 0 ? `zafra anterior ${nfTch.format(l.tchAnt)}` : 'zafra anterior sin dato';
+  const est = esSinCana(l) ? 'sin caña' : l.tchEst > 0 ? `TCH estimado ${nfTch.format(l.tchEst)}${estValidar(l) ? ' (a validar)' : ''}` : (m.txt === 'No aplica' ? `no aplica: ${m.det}` : m.txt === 'Sin aforo' ? 'sin aforo 26/27' : 'sin estimado').toLowerCase();
+  return `${fmtHaLote(l.area)} · TCH ${ant} · ${est}`;
 }
 function verFincaEnMapa(nombre, cerrar = true) { const f = FINCAS[nombre]; if (cerrar) cerrarHoja(); mostrarTab('mapa'); if (f && f.bbox) { soltarSeguimiento(); map.fitBounds(boundsDe(f.bbox), margenes(90, 40)); } }
 
@@ -597,7 +631,7 @@ function abrirCapas() {
     <h4>Al tocar el mapa, seleccionar</h4><div class="opciones col" id="opSel">${op('sel', 'lote', 'Lote completo', S.selModo !== 'tablon')}${op('sel', 'tablon', 'Tablón', S.selModo === 'tablon')}</div>
     <h4>Colorear lotes por</h4><div class="opciones col" id="opColor">${Object.entries(TEMAS).map(([k, t]) => op('color', k, t.t, S.colorear === k)).join('')}</div>
     <label class="interruptor"><input type="checkbox" id="opEtq" ${S.etiquetas ? 'checked' : ''}><span>Mostrar etiquetas (finca · lote · tablón según acercamiento)</span></label>
-    <label class="interruptor"><input type="checkbox" id="opNc" ${S.etqNc ? 'checked' : ''}><span>Número de corte en las etiquetas (C6 = corte 6 · PL = plantía)</span></label>
+    <label class="interruptor"><input type="checkbox" id="opNc" ${S.etqNc ? 'checked' : ''}><span>Número de corte en las etiquetas (C6 = corte 6 · PL = plantilla)</span></label>
     <label class="interruptor"><input type="checkbox" id="opReg" ${S.verRegistros ? 'checked' : ''}><span>Mostrar en el mapa los hallazgos pendientes</span></label>
     <h4>Herramientas</h4>
     <div class="acciones"><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('dist')">${ico('ruler')} Medir distancia</button><button type="button" class="btn sec" onclick="cerrarHoja();medirIniciar('area')">${ico('hexagon')} Medir área</button></div>

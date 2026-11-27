@@ -353,15 +353,48 @@ async function buscarActualizacion(cache, metaLocal, manual = false, faltan = []
     if (manual) recargarApp(); else datosListos();
   } catch (e) { if (manual) toast('No se pudo descargar: ' + (e.message || e), {tipo: 'mal'}); }
 }
-async function cargarHistorico() {
-  if (HIST) return HIST;
-  const cache = await dataCache();
-  HIST = await leerCache(cache, HIST_URL);
-  if (!HIST) {
-    try { const r = await fetchJson(HIST_URL, 45000); HIST = r.json; if (cache) await cache.put(HIST_URL, r.resp); }
-    catch (_) { HIST = null; throw new Error('Histórico no disponible sin señal'); }
-  }
-  return HIST;
+/* Una sola descarga aunque la pidan a la vez el arranque, la tarjeta y el gráfico. Al tenerlo, completa los lotes. */
+let _histProm = null;
+function cargarHistorico() {
+  if (HIST) return Promise.resolve(HIST);
+  if (_histProm) return _histProm;
+  _histProm = (async () => {
+    const cache = await dataCache();
+    let h = await leerCache(cache, HIST_URL);
+    if (!h) {
+      try { const r = await fetchJson(HIST_URL, 45000); h = r.json; if (cache) await cache.put(HIST_URL, r.resp); }
+      catch (_) { throw new Error('Histórico no disponible sin señal'); }
+    }
+    HIST = h; completarDesdeHist();
+    return HIST;
+  })().finally(() => { _histProm = null; });
+  return _histProm;
+}
+/* TCH por zafra de un lote en la producción histórica, de la más antigua a la más reciente (todas las zafras). */
+function histFilas(cod) {
+  const it = HIST && HIST.lotes && HIST.lotes[cod];
+  return it ? (it.historial || []).filter(r => Number(r.tch) > 0).sort((a, b) => a.zafra_code - b.zafra_code) : [];
+}
+/* Cuando a las métricas les falta el TCH de la zafra anterior o el promedio y el máximo históricos, se toman de la
+   producción histórica (la misma fuente del gráfico) y se anota la zafra de origen. Solo completa vacíos: nunca
+   reemplaza una cifra que ya trae la fuente. El TCH «de la zafra anterior» solo se toma si es de una de las dos
+   últimas zafras del histórico; si es más viejo, se guarda aparte como último TCH registrado. La fecha de corte no
+   está en el histórico, así que la edad sigue sin calcularse. */
+function completarDesdeHist() {
+  if (!HIST || !HIST.lotes) return;
+  const zs = (HIST.zafras || []).map(z => z.value).sort((a, b) => a - b), recientes = zs.slice(-2);
+  Object.values(LOTES).forEach(l => {
+    const v = histFilas(l.cod); if (!v.length) return;
+    const ult = v[v.length - 1];
+    if (l.tchAnt === null && !l.fCorte) {
+      if (recientes.includes(ult.zafra_code)) { l.tchAnt = Number(ult.tch); l.zafra = ult.zafra; l.tchAntHist = true; }
+      else l.ultHist = {tch: Number(ult.tch), zafra: ult.zafra};
+    }
+    if (l.histProm === null || l.histMax === null || !l.histN) {
+      const t = v.map(r => Number(r.tch));
+      l.histProm = t.reduce((a, b) => a + b, 0) / t.length; l.histMax = Math.max(...t); l.histN = t.length; l.histDeHist = true;
+    }
+  });
 }
 
 /* ── Modelo por lote: une métricas, aforo y cortes de la zafra en curso ── */
@@ -442,9 +475,11 @@ function claseCorte(l) {
   const k = l.semProg ? l.semProg.clave : '';
   return SEMANAS_PROX[0] && k === SEMANAS_PROX[0].clave ? 1 : SEMANAS_PROX[1] && k === SEMANAS_PROX[1].clave ? 2 : 3;
 }
-/* Número de corte en forma corta para etiquetas: 'C6', o 'PL' si es plantía. Viene del cronológico; no se calcula. */
+/* Número de corte en forma corta para etiquetas: 'C6', o 'PL' si es plantilla. Viene del cronológico; no se calcula. */
 const ncCorto = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'PL' : 'C' + l.nc;
-const ncLargo = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'plantía' : 'corte ' + l.nc;
+/* Ciclo en palabras: «plantilla» o «soca, corte 5» (mismos nombres que la capa Plantillas y socas). */
+const ncLargo = l => !l || !l.nc ? '' : /^planta/i.test(l.nc) ? 'plantilla' : l.nc === '>5' ? 'soca, más de 5 cortes' : 'soca, corte ' + l.nc;
+const ncCiclo = l => { const t = ncLargo(l); return t ? t[0].toUpperCase() + t.slice(1) : ''; };
 /* ── Renovación: qué esperar ──
    Referencia realista: lo que rinden hoy las plantillas de molienda de la misma zona (TCH estimado, ponderado por área).
    Techo: el máximo histórico del propio lote. Ambos deltas se miden contra el TCH estimado del lote. */
@@ -472,9 +507,26 @@ function resumenRenovacion() {
   }).sort((a, b) => a.zona.localeCompare(b.zona, 'es', {numeric: true}));
   const area = filas.reduce((s, f) => s + f.area, 0), est = area ? filas.reduce((s, f) => s + f.est * f.area, 0) / area : 0;
   const tonEsp = filas.reduce((s, f) => s + f.tonEsp, 0), tonTecho = filas.reduce((s, f) => s + f.tonTecho, 0);
-  return {filas, n: filas.reduce((s, f) => s + f.n, 0), area, est, tonEsp, tonTecho, dEsp: area ? tonEsp / area : 0, dTecho: area ? tonTecho / area : 0};
+  // Lotes con TCH estimado a validar: se cuentan en los totales (no se excluyen) y se informa cuánto aportan.
+  const val = filas.flatMap(f => f.lotes).filter(estValidar), vArea = val.reduce((s, l) => s + (l.areaAforo || 0), 0);
+  const vTon = val.reduce((s, l) => s + (deltaEsperado(l) || 0) * (l.areaAforo || 0), 0);
+  const validar = {lotes: val, n: val.length, area: vArea, tonEsp: vTon, dEspSin: area - vArea > 0 ? (tonEsp - vTon) / (area - vArea) : null};
+  return {filas, n: filas.reduce((s, f) => s + f.n, 0), area, est, tonEsp, tonTecho, dEsp: area ? tonEsp / area : 0, dTecho: area ? tonTecho / area : 0, validar};
 }
 const esMolienda = l => String(l.clas || '').toLowerCase() === 'molienda';
+/* TCH estimado «a validar»: un valor de relleno o provisional (≤ 15 t/ha) en un lote de molienda cuyo histórico
+   (promedio, o el TCH de la zafra anterior si no hay promedio) pasa de 60 t/ha. No se excluye de ningún total:
+   se marca para que se confirme con el aforo. */
+const EST_VALIDAR_MAX = 15, EST_VALIDAR_REF = 60;
+const refHistorica = l => l.histProm !== null ? l.histProm : l.tchAnt;
+const estValidar = l => !!l && esMolienda(l) && l.tchEst > 0 && l.tchEst <= EST_VALIDAR_MAX && refHistorica(l) !== null && refHistorica(l) > EST_VALIDAR_REF;
+/* Por qué un lote no tiene una cifra, en texto corto para mostrar en lugar de «—». */
+function motivoSinEstimado(l) {
+  if (!l.conAforo) return {txt: 'Sin aforo', det: '26/27'};
+  if (l.clas && !esMolienda(l)) return {txt: 'No aplica', det: rotulo(l.clas)};
+  return {txt: 'Sin estimado', det: 'en el aforo'};
+}
+const esSinCana = l => /^sin ca/i.test(String(l.clas || ''));
 /* Rótulos para mostrar: corrige tildes y mayúsculas de valores que vienen así de la fuente (no cambia los datos). */
 const ROTULOS = {Aspersion: 'Aspersión', 'Mini-Aspersion': 'Miniaspersión', Investigacion: 'Investigación', 'Sin Caña': 'Sin caña',
   VARIEDADES: 'Varias / sin definir', PLATANO: 'Plátano', 'Baja Prod': 'Baja producción'};
@@ -486,11 +538,14 @@ function estadoLote(l) {
   if (l.cosechado) return {cls: 'info', txt: 'Cosechado ' + (l.zafra || ''), det: 'Corte ' + fechaCorta(l.fCorte)};
   if (l.conAforo && l.clas && !esMolienda(l)) return {cls: 'neutro', txt: rotulo(l.clas), det: 'Fuera del área de molienda'};
   const edad = edadMeses(l);
-  if (l.tchAnt === null && edad === null) return {cls: 'neutro', txt: 'Sin histórico', det: 'Sin TCH ni fecha de corte'};
-  if (l.tchAnt !== null && l.tchAnt < 55) return {cls: 'mal', txt: 'Prioridad alta', det: 'TCH anterior bajo'};
+  if (l.tchAnt === null && edad === null) return l.ultHist
+    ? {cls: 'neutro', txt: 'Sin dato reciente', det: `Último TCH registrado: ${nfTch.format(l.ultHist.tch)} t/ha en la zafra ${l.ultHist.zafra}`}
+    : {cls: 'neutro', txt: 'Sin histórico', det: 'Sin TCH ni fecha de corte'};
+  const origen = l.tchAntHist ? ` (zafra ${l.zafra}, producción histórica)` : '';
+  if (l.tchAnt !== null && l.tchAnt < 55) return {cls: 'mal', txt: 'Prioridad alta', det: 'TCH zafra anterior bajo: menos de 55 t/ha' + origen};
   if (edad !== null && edad >= 12) return {cls: 'medio', txt: 'Edad alta', det: 'Validar programación de corte'};
-  if (l.tchAnt !== null && l.tchAnt < 70) return {cls: 'medio', txt: 'Revisar', det: 'TCH anterior bajo el rango esperado'};
-  return {cls: 'bien', txt: 'Normal', det: 'Sin alerta con los datos disponibles'};
+  if (l.tchAnt !== null && l.tchAnt < 70) return {cls: 'medio', txt: 'Revisar', det: 'TCH zafra anterior bajo el rango esperado (55 a 70 t/ha)' + origen};
+  return {cls: 'bien', txt: 'Sin alertas', det: 'Sin alertas con los datos disponibles' + origen};
 }
 
 /* ── Geometría ── */
