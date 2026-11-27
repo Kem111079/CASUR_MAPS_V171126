@@ -1,6 +1,6 @@
 /* CASUR Maps · núcleo: utilidades, ajustes, almacenamiento local y carga de datos con caché. */
 'use strict';
-const APP_VERSION = 'V271126N';
+const APP_VERSION = 'V271126O';
 const DATA_FILES = {
   geo: './data/poligonos_casur.geojson',
   metricas: './data/metricas_lote.json',
@@ -321,7 +321,7 @@ function crearXlsx(hojas) {
     filas.push(`<row r="1" ht="22" customHeight="1">${celda('A1', h.titulo || h.nombre, 1)}</row>`);
     filas.push(`<row r="2">${celda('A2', h.sub || '', 2)}</row>`);
     filas.push(`<row r="4" ht="32" customHeight="1">${h.cols.map((c, i) => celda(xlCol(i) + 4, c.t, 3)).join('')}</row>`);
-    h.filas.forEach((f, j) => { const r = 5 + j; filas.push(`<row r="${r}">${h.cols.map((c, i) => celda(xlCol(i) + r, f[i], estilo(c.f, j % 2), c.f)).join('')}</row>`); });
+    h.filas.forEach((f, j) => { const r = 5 + j, v = Array.isArray(f) ? f : f.v, tot = !Array.isArray(f) && f.tot; filas.push(`<row r="${r}">${h.cols.map((c, i) => celda(xlCol(i) + r, v[i], tot ? estiloTot(c.f) : estilo(c.f, j % 2), c.f)).join('')}</row>`); });
     const fin = 4 + h.filas.length;
     if (h.total) {
       const r = fin + 1;

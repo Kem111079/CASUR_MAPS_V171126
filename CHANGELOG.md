@@ -1,5 +1,11 @@
 # Cambios
 
+## V271126O · 27-nov-2026 · Análisis del aforo
+- Nueva pestaña **Análisis** en Resumen: aforo ponderado por **variedad, riego o mes de cosecha**, para el **global o cada zona**. Por grupo: lotes, ha, toneladas, TCH 26/27 (barra), marca de 25/26 y Δ en los mismos lotes.
+- Tocar un grupo abre sus lotes, con «Ver en el mapa» (resaltados) y Excel.
+- **Excel del análisis:** una hoja por dimensión con el global y cada zona en bloques, subtotales, % del área y Δ.
+- Los totales cuadran exactamente con el aforo oficial (toneladas de molienda / ha de molienda, incluido el lote de molienda sin estimado). El ranking por zona de Fincas ahora usa la misma regla (1-Sur 71.1).
+
 ## V271126N · 27-nov-2026 · Exportaciones en Excel
 - Las exportaciones pasan de CSV a **Excel (.xlsx)** con formato: título y fecha de generación, encabezado en azul CASUR, filas alternas, filtros, encabezado fijo al desplazar, anchos de columna, números con miles y decimales, fechas reales y fila de totales.
 - **Bitácora:** hoja «Registros» (con enlace al mapa) y hoja «Por finca» (pendientes, alta, media, informativos, resueltos, días abiertos). El ZIP con fotos incluye el Excel.
